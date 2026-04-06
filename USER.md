@@ -1,96 +1,96 @@
 # USER - Leo's Preferences
 
-> 此檔案記錄 Leo 的工作偏好、習慣與期望，讓 Agent 能更符合他的使用方式。
+> This file records Leo's work preferences, habits, and expectations so the Agent can better match his workflow.
 
 ---
 
-## 工作習慣
+## Work Habits
 
-### 分支命名
-- **必須**使用前綴: `feature/leo/` 或 `bugfix/leo/`
-- Ticket ID 後面可以加簡短描述，例如: `bugfix/leo/LIS-123/fix-hl7-parser`
+### Branch Naming
+- **Must** use prefix: `feature/leo/` or `bugfix/leo/`
+- Can add brief description after ticket ID, e.g.: `bugfix/leo/LIS-123/fix-hl7-parser`
 
-### Commit Message 風格
-- 喜歡**簡潔**但**清楚 why** 的 message
-- 格式: `[LIS-123] 修復 HL7 parser 在特殊字元的處理`
-- 不需要過於詳細的 body，除非是複雜的 refactoring
+### Commit Message Style
+- Prefers **concise** but **clear why** messages
+- Format: `[LIS-123] Fix HL7 parser handling of special characters`
+- No need for overly detailed body unless it's a complex refactoring
 
-### PR 標題
-- 格式: `[{ticket_id}] {簡短標題}`
-- 例如: `[LIS-456] 新增 CBC 檢驗項目對應`
+### PR Title
+- Format: `[{ticket_id}] {brief title}`
+- Example: `[LIS-456] Add CBC test item mapping`
 
-### Code 風格偏好
-- Python: 遵循 PEP 8，使用 type hints
-- Java: 遵循現有專案的風格
-- TypeScript: 使用 ES modules，避免 any
+### Code Style Preferences
+- Python: Follow PEP 8, use type hints
+- Java: Follow existing project style
+- TypeScript: Use ES modules, avoid any
 
 ---
 
-## 溝通偏好
+## Communication Preferences
 
-### 報告格式
-完成 ticket 處理後，提供：
+### Report Format
+After completing ticket processing, provide:
 ```markdown
-## Ticket: LIS-123 - {標題}
+## Ticket: LIS-123 - {title}
 
-### 修改摘要
-- 修改檔案: src/hl7_parser.py (新增錯誤處理)
-- 影響範圍: HL7 OBR segment 解析
+### Summary of Changes
+- Modified files: src/hl7_parser.py (added error handling)
+- Impact scope: HL7 OBR segment parsing
 
-### 分支
+### Branch
 bugfix/leo/LIS-123
 
-### 待檢查項目
-- [ ] 測試資料是否完整
-- [ ] 需要更新 API 文檔嗎？
+### Items to Check
+- [ ] Is test data complete?
+- [ ] Does API documentation need updating?
 
-### Diff 摘要
-+ 新增 try-except 處理特殊字元
-+ 修正 regex pattern
+### Diff Summary
++ Added try-except for special character handling
++ Fixed regex pattern
 ```
 
-### 何時該問我
-- 不確定哪個 repo 需要修改
-- Ticket 描述模糊或矛盾
-- 涉及資料庫 schema 變更
-- 需要修改多個 repo 且有依賴關係
-- 現有代碼看起來有問題但不確定要不要動
+### When to Ask Me
+- Uncertain which repo needs modification
+- Ticket description is vague or contradictory
+- Involves database schema changes
+- Need to modify multiple repos with dependencies
+- Existing code looks problematic but uncertain whether to touch it
 
-### 何時可以自己決定
-- 明顯的 bug 修復
-- 簡單的功能新增
-- 測試程式的更新
-- 文檔修正
-
----
-
-## 重要禁忌
-
-### 不要做的事
-- ❌ 不要重複問我已經回答過的問題（記在 MEMORY.md）
-- ❌ 不要在 message 中加 emoji
-- ❌ 不要自己 merge 任何東西
-- ❌ 不要修改 production config
-- ❌ 不要在沒有測試的情況下改核心邏輯
+### When to Decide Independently
+- Obvious bug fixes
+- Simple feature additions
+- Test updates
+- Documentation fixes
 
 ---
 
-## 工作流程偏好
+## Important Taboos
 
-1. **Scan tickets** → 產生待辦清單
-2. **逐一處理** → 不要同時處理多個
-3. **每完成一個** → 產生報告，等我檢查
-4. **我檢查通過** → 繼續下一個
-5. **我有問題** → 先修正再繼續
+### Don't Do
+- ❌ Don't repeatedly ask questions I've already answered (store in MEMORY.md)
+- ❌ Don't add emojis in messages
+- ❌ Don't merge anything yourself
+- ❌ Don't modify production config
+- ❌ Don't change core logic without tests
 
 ---
 
-## 迭代方式
+## Workflow Preferences
 
-當你學到新東西時：
-1. 更新對應的 memory 檔案
-2. 在報告末尾簡單說明學到了什麼
-3. 我會定期 review MEMORY.md 的內容
+1. **Scan tickets** → Generate todo list
+2. **Process one by one** → Don't handle multiple simultaneously
+3. **After each completion** → Generate report, wait for my review
+4. **I approve** → Continue to next
+5. **I have issues** → Fix first then continue
+
+---
+
+## Iteration Method
+
+When you learn something new:
+1. Update corresponding memory file
+2. Briefly explain what you learned at the end of the report
+3. I will periodically review MEMORY.md content
 
 ---
 
