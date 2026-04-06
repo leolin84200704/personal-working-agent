@@ -150,7 +150,7 @@ class JiraClient:
         expanded_issue = self._expand_issue(data)
         return self._parse_issue(expanded_issue)
 
-    def download_attachment(self, attachment_url: str, save_path: Path | None = None) -> Path:
+    def download_attachment(self, attachment_url: str, save_path: str | None = None) -> str:
         """
         Download an attachment from Jira.
 
@@ -159,26 +159,28 @@ class JiraClient:
             save_path: Where to save (default: current directory with original filename)
 
         Returns:
-            Path to downloaded file
+            Path to downloaded file as string
         """
         import requests
-        from urllib.parse import urlparse
 
         # Parse filename from URL if not provided
         if save_path is None:
             # URL looks like: .../attachment/content/12345
-            # We need to get the filename from the attachment metadata first
-            save_path = Path(attachment_url.split("/")[-1])
+            # Extract the ID from URL
+            parts = attachment_url.split("/")
+            filename = parts[-1] if parts else "attachment"
+            save_path = filename
 
         # Make request with auth
         response = requests.get(attachment_url, auth=(self.email, self.api_token))
         response.raise_for_status()
 
         # Save file
+        from pathlib import Path
         save_path = Path(save_path)
         save_path.write_bytes(response.content)
 
-        return save_path
+        return str(save_path)
 
     def get_assigned_tickets(
         self,
