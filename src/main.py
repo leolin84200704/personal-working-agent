@@ -289,7 +289,14 @@ def main() -> int:
     )
 
     # Interactive command
-    subparsers.add_parser("interactive", help="Start interactive chat mode")
+    interactive_parser = subparsers.add_parser("interactive", help="Start interactive chat mode")
+    interactive_parser.add_argument(
+        "--simple",
+        action="store_true",
+        help="Use simple I/O (no rich library) to avoid terminal issues"
+    )
+
+    args = parser.parse_args()
 
     args = parser.parse_args()
 
@@ -330,7 +337,12 @@ def main() -> int:
 
     # Handle interactive command
     if args.command == "interactive":
-        agent = InteractiveAgent()
+        if hasattr(args, "simple") and args.simple:
+            from src.simple_interactive import SimpleInteractiveAgent
+            agent = SimpleInteractiveAgent()
+        else:
+            from src.interactive import InteractiveAgent
+            agent = InteractiveAgent()
         agent.run()
         return 0
 
