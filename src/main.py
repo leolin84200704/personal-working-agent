@@ -17,6 +17,7 @@ from src.integrations.git_operator import find_git_repos
 from src.core.ticket_processor import TicketProcessor
 from src.memory.manager import MemoryManager
 from src.daily_pipeline import DailyPipelineService
+from src.interactive import InteractiveAgent
 
 load_dotenv()
 
@@ -287,6 +288,9 @@ def main() -> int:
         help="Don't make actual code changes",
     )
 
+    # Interactive command
+    subparsers.add_parser("interactive", help="Start interactive chat mode")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -322,6 +326,12 @@ def main() -> int:
                 print(f"\n{ticket.key}: {ticket.summary}")
                 analysis = service.analyze_ticket(ticket)
                 print(f"Solution: {analysis.get('solution', 'N/A')}")
+        return 0
+
+    # Handle interactive command
+    if args.command == "interactive":
+        agent = InteractiveAgent()
+        agent.run()
         return 0
 
     return 1
