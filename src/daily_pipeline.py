@@ -108,13 +108,33 @@ class DailyPipelineService:
         # Try to generate code updates
         code_updates = self._generate_code_updates(ticket, analysis) if analysis.get("repos") else []
 
+        # Convert ticket object to dict to avoid JSON serialization issues
+        ticket_dict = {
+            "key": ticket.key,
+            "summary": ticket.summary,
+            "status": ticket.status,
+            "issue_type": ticket.issue_type,
+            "priority": ticket.priority,
+        }
+
+        # Clean analysis dict - remove any JiraTicket objects
+        clean_analysis = {}
+        for k, v in analysis.items():
+            if k == "ticket":
+                clean_analysis[k] = ticket_dict
+            elif isinstance(v, list) and v and hasattr(v[0], "key"):
+                # List of JiraTicket objects
+                clean_analysis[k] = [{"key": t.key, "summary": t.summary} for t in v]
+            else:
+                clean_analysis[k] = v
+
         return {
             "ticket": ticket.key,
             "summary": ticket.summary,
             "status": ticket.status,
             "type": ticket.issue_type,
             "priority": ticket.priority or "None",
-            "analysis": analysis,
+            "analysis": clean_analysis,
             "solution": solution,
             "code_updates": code_updates,
         }
