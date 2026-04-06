@@ -71,12 +71,14 @@ class InteractiveAgent:
                     "role": "user",
                     "content": f"""You are LIS Code Agent, a helpful assistant for Leo.
 
+IMPORTANT: Always answer in **Traditional Chinese (繁體中文)** unless explicitly asked to use English.
+
 Context about the repos and patterns:
 {memory}
 
 User's question: {question}
 
-Provide a helpful answer. If you're uncertain, say so explicitly and suggest what information would help."""
+Provide a helpful answer in Chinese. If you're uncertain, say so explicitly and suggest what information would help."""
                 }
             ]
         )

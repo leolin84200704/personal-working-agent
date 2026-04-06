@@ -134,6 +134,11 @@ class TicketProcessor:
 
         prompt = f"""You are analyzing a Jira ticket to determine which repositories need to be modified.
 
+IMPORTANT:
+- Respond in **Traditional Chinese (繁體中文)** for the "reasoning" field
+- Repository names and file paths should remain in English
+- Code snippets should remain in English
+
 ## Ticket Information
 {ticket.get_context()}
 
@@ -162,7 +167,7 @@ Respond in JSON format:
     }},
     "change_type": "feature|bugfix|config|docs",
     "confidence": "high|medium|low",
-    "reasoning": "Brief explanation of your analysis"
+    "reasoning": "Brief explanation of your analysis in Chinese"
 }}
 """
 
