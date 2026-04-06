@@ -187,6 +187,23 @@ These repos appear to be empty or minimal:
 
 ## Questions
 
+### Q: 1. 回答的時候請用中文 2. 這個pdf檔案是attatch 在ticket裡面的
+> **A**: Q: 1. 回答的時候請用中文 2. 這個pdf檔案是attatch 在ticket裡面的
+A: 我已經了解您的指示：
+
+1.  **語言設定**：之後的回答將會使用**繁體中文**。
+2.  **PDF 檔案確認**：我知道這個 PDF 檔案是附在 Ticket 中的附件。
+
+不過，目前的對話訊息中似乎**沒有包含這個 PDF 檔案的實際內容**（系統可能沒有成功上傳，或者我需要您提供檔案）。
+
+**請問您現在需要我對這個 PDF 做什麼？**
+
+如果是要我根據 PDF 內容進行程式開發或分析，請您：
+1.  **重新上傳或提供 PDF 內容**。
+2.  告訴我**這張 Ticket 的具體需求**是什麼（例如：是要實作新功能、修復 Bug，還是分析文件？）。
+
+一旦您提供 PDF，我可以根據上述 Knowledge Index 中的架構，幫您找出需要修改的 Repo 和檔案。
+
 ### Q: How to determine which repo to modify for a ticket?
 > **A**:
 > 1. Check ticket project key (LIS, EMR, etc.)

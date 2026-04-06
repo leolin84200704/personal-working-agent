@@ -31,6 +31,7 @@ class JiraTicket:
     reporter: str | None
     labels: list[str]
     components: list[str]
+    attachments: list[dict[str, Any]]  # List of attachment metadata
 
     @property
     def is_bug(self) -> bool:
@@ -138,7 +139,8 @@ class JiraClient:
         """
         import requests
 
-        url = f"{self.server}/rest/api/3/issue/{key}"
+        # Request attachment field
+        url = f"{self.server}/rest/api/3/issue/{key}?fields=summary,description,status,issuetype,priority,assignee,reporter,labels,components,attachment"
         auth = (self.email, self.api_token)
 
         response = requests.get(url, auth=auth)
@@ -147,6 +149,36 @@ class JiraClient:
 
         expanded_issue = self._expand_issue(data)
         return self._parse_issue(expanded_issue)
+
+    def download_attachment(self, attachment_url: str, save_path: Path | None = None) -> Path:
+        """
+        Download an attachment from Jira.
+
+        Args:
+            attachment_url: URL to the attachment content
+            save_path: Where to save (default: current directory with original filename)
+
+        Returns:
+            Path to downloaded file
+        """
+        import requests
+        from urllib.parse import urlparse
+
+        # Parse filename from URL if not provided
+        if save_path is None:
+            # URL looks like: .../attachment/content/12345
+            # We need to get the filename from the attachment metadata first
+            save_path = Path(attachment_url.split("/")[-1])
+
+        # Make request with auth
+        response = requests.get(attachment_url, auth=(self.email, self.api_token))
+        response.raise_for_status()
+
+        # Save file
+        save_path = Path(save_path)
+        save_path.write_bytes(response.content)
+
+        return save_path
 
     def get_assigned_tickets(
         self,
@@ -300,12 +332,37 @@ class JiraClient:
                         components_data = f.get("components", [])
                         self.components = [type('Component', (), {'name': c.get('name')})() for c in components_data]
 
+                        # Attachments
+                        attachments_data = f.get("attachment", [])
+                        self.attachment = [
+                            type('Attachment', (), {
+                                'id': a.get('id'),
+                                'filename': a.get('filename'),
+                                'content': a.get('content'),
+                                'size': a.get('size'),
+                                'mimeType': a.get('mimeType'),
+                            })()
+                            for a in attachments_data
+                        ]
+
                 return Fields(fields, extract_fn)
 
         return ExpandedIssue(issue_data)
 
     def _parse_issue(self, issue: Issue) -> JiraTicket:
         """Parse a JIRA Issue into JiraTicket."""
+        # Handle attachments
+        attachments = []
+        if hasattr(issue.fields, "attachment") and issue.fields.attachment:
+            for att in issue.fields.attachment:
+                attachments.append({
+                    "id": att.id,
+                    "filename": att.filename,
+                    "content": att.content,  # URL to download
+                    "size": att.size,
+                    "mimeType": att.mimeType,
+                })
+
         return JiraTicket(
             key=issue.key,
             summary=issue.fields.summary or "",
@@ -317,6 +374,7 @@ class JiraClient:
             reporter=issue.fields.reporter.displayName if hasattr(issue.fields, "reporter") else None,
             labels=issue.fields.labels if hasattr(issue.fields, "labels") else [],
             components=[c.name for c in issue.fields.components] if hasattr(issue.fields, "components") else [],
+            attachments=attachments,
         )
 
     def search_tickets(

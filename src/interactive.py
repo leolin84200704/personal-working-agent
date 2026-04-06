@@ -98,22 +98,41 @@ Provide a helpful answer. If you're uncertain, say so explicitly and suggest wha
             ticket = self.jira.get_ticket(ticket_id)
             analysis = self.processor.analyze_ticket(ticket)
 
-            # Show analysis
-            console.print(Panel(
-                f"""[bold]Ticket:[/bold] {ticket.key}
+            # Build the display content
+            content = f"""[bold]Ticket:[/bold] {ticket.key}
 [bold]Summary:[/bold] {ticket.summary}
-[bold]Status:[/bold] {ticket.status}
-[bold]Type:[/bold] {ticket.issue_type}
+
+[bold]Status:[/bold] {ticket.status} | [bold]Type:[/bold] {ticket.issue_type} | [bold]Priority:[/bold] {ticket.priority or 'N/A'}
+
+[bold]Description:[/bold]
+{ticket.description[:500]}{'...' if len(ticket.description) > 500 else ''}
 
 [bold]Analysis:[/bold]
   Confidence: {analysis['confidence']}
   Repos: {', '.join(analysis['repos']) or 'None found'}
 
 [bold]Reasoning:[/bold]
-  {analysis.get('reasoning', 'N/A')}""",
-                title="[bold cyan]Ticket Analysis[/bold cyan]",
-                border_style="cyan"
-            ))
+  {analysis.get('reasoning', 'N/A')}"""
+
+            # Show attachments if any
+            if ticket.attachments:
+                content += f"\n\n[bold]Attachments ({len(ticket.attachments)}):[/bold]"
+                for att in ticket.attachments:
+                    content += f"\n  • {att.get('filename')} ({att.get('mimeType', 'unknown')})"
+                    content += f"\n    URL: {att.get('content')}"
+
+            console.print(Panel(content, title="[bold cyan]Ticket Analysis[/bold cyan]", border_style="cyan"))
+
+            # Ask if user wants to download attachments
+            if ticket.attachments:
+                download = console.input("\n[yellow]Download attachment?[/yellow] (y/N): ")
+                if download.lower() == "y":
+                    for att in ticket.attachments:
+                        try:
+                            path = self.jira.download_attachment(att.get('content'))
+                            console.print(f"[green]✓ Downloaded to:[/green] {path}")
+                        except Exception as e:
+                            console.print(f"[red]✗ Download failed:[/red] {e}")
 
             # Ask for feedback
             feedback = console.input("\n[yellow]Is this correct? Any feedback?[/yellow] (or press Enter to continue): ")
