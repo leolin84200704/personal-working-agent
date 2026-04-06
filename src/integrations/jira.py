@@ -118,9 +118,11 @@ class JiraClient:
         """Get or create JIRA client instance."""
         if self._client is None:
             # Jira Cloud uses email + API token as basic auth
+            # Use API v3 to avoid deprecation warnings
             self._client = JIRA(
                 server=self.server,
                 basic_auth=(self.email, self.api_token),
+                options={"rest_api_version": "3"}
             )
         return self._client
 
@@ -134,8 +136,17 @@ class JiraClient:
         Returns:
             JiraTicket object
         """
-        issue = self.client.issue(key)
-        return self._parse_issue(issue)
+        import requests
+
+        url = f"{self.server}/rest/api/3/issue/{key}"
+        auth = (self.email, self.api_token)
+
+        response = requests.get(url, auth=auth)
+        response.raise_for_status()
+        data = response.json()
+
+        expanded_issue = self._expand_issue(data)
+        return self._parse_issue(expanded_issue)
 
     def get_assigned_tickets(
         self,
@@ -156,6 +167,8 @@ class JiraClient:
         Returns:
             List of JiraTicket objects
         """
+        import requests
+
         jql = "assignee is not EMPTY"
 
         if assignee:
@@ -176,16 +189,120 @@ class JiraClient:
         # Add ordering
         jql += " ORDER BY priority DESC, created DESC"
 
-        issues = self.client.search_issues(jql, maxResults=limit)
+        # Use REST API v3 search/jql endpoint directly
+        url = f"{self.server}/rest/api/3/search/jql"
 
-        # Fetch full details for each issue
+        auth = (self.email, self.api_token)
+        params = {
+            "jql": jql,
+            "maxResults": limit,
+            "fields": "*all"
+        }
+
+        response = requests.get(url, params=params, auth=auth)
+        response.raise_for_status()
+        data = response.json()
+
+        # Parse issues
         tickets = []
-        for issue in issues:
-            # Get full issue details
-            full_issue = self.client.issue(issue.key)
-            tickets.append(self._parse_issue(full_issue))
+        for issue in data.get("issues", []):
+            # Expand the issue data to match JIRA library format
+            expanded_issue = self._expand_issue(issue)
+            tickets.append(self._parse_issue(expanded_issue))
 
         return tickets
+
+    def _expand_issue(self, issue_data: dict) -> Any:
+        """Expand issue data from REST API response to match JIRA library format."""
+        # Helper to extract text from Atlassian Document Format (ADF)
+        def extract_adf_text(adf_obj):
+            """Extract plain text from ADF content object."""
+            if not adf_obj:
+                return ""
+            if isinstance(adf_obj, str):
+                return adf_obj
+            if isinstance(adf_obj, dict):
+                # ADF format: {type: "doc", content: [...]}
+                if adf_obj.get("type") == "doc":
+                    content = adf_obj.get("content", [])
+                    return extract_adf_text(content)
+                # Text node: {type: "text", text: "..."}
+                elif adf_obj.get("type") == "text":
+                    return adf_obj.get("text", "")
+                # Paragraph with content
+                elif "content" in adf_obj:
+                    return extract_adf_text(adf_obj["content"])
+            elif isinstance(adf_obj, list):
+                return " ".join(extract_adf_text(item) for item in adf_obj)
+            return ""
+
+        # Create a simple object to match the expected structure
+        class ExpandedIssue:
+            def __init__(self, data):
+                self.key = data.get("key", "")
+                self.id = data.get("id", "")
+                self.fields = self._expand_fields(data.get("fields", {}), extract_adf_text)
+
+            def _expand_fields(self, fields, extract_fn):
+                class Fields:
+                    def __init__(self, f, extract):
+                        self.summary = f.get("summary", "")
+
+                        # Description - handle ADF format
+                        desc_data = f.get("description")
+                        if desc_data:
+                            if isinstance(desc_data, dict):
+                                self.description = extract(desc_data)
+                            else:
+                                self.description = str(desc_data) if desc_data else ""
+                        else:
+                            self.description = ""
+
+                        # Status
+                        status_data = f.get("status")
+                        if status_data:
+                            self.status = type('Status', (), {'name': status_data.get('name')})()
+                        else:
+                            self.status = None
+
+                        # Issue type
+                        issuetype_data = f.get("issuetype")
+                        if issuetype_data:
+                            self.issuetype = type('Issuetype', (), {'name': issuetype_data.get('name')})()
+                        else:
+                            self.issuetype = None
+
+                        # Priority
+                        priority_data = f.get("priority")
+                        if priority_data:
+                            self.priority = type('Priority', (), {'name': priority_data.get('name')})()
+                        else:
+                            self.priority = None
+
+                        # Assignee
+                        assignee_data = f.get("assignee")
+                        if assignee_data:
+                            self.assignee = type('Assignee', (), {'displayName': assignee_data.get('displayName')})()
+                        else:
+                            self.assignee = None
+
+                        # Reporter
+                        reporter_data = f.get("reporter")
+                        if reporter_data:
+                            self.reporter = type('Reporter', (), {'displayName': reporter_data.get('displayName')})()
+                        else:
+                            self.reporter = None
+
+                        # Labels
+                        self.labels = f.get("labels", [])
+
+                        # Components
+                        components_data = f.get("components", [])
+                        self.components = [type('Component', (), {'name': c.get('name')})() for c in components_data]
+
+                return Fields(fields, extract_fn)
+
+        return ExpandedIssue(issue_data)
 
     def _parse_issue(self, issue: Issue) -> JiraTicket:
         """Parse a JIRA Issue into JiraTicket."""
@@ -219,6 +336,8 @@ class JiraClient:
         Returns:
             List of JiraTicket objects
         """
+        import requests
+
         jql = f'text ~ "{query}"'
 
         if project:
@@ -227,12 +346,24 @@ class JiraClient:
         # Only open tickets
         jql += ' AND status NOT IN (Closed, Done, Resolved)'
 
-        issues = self.client.search_issues(jql, maxResults=limit)
+        # Use REST API v3 search/jql endpoint
+        url = f"{self.server}/rest/api/3/search/jql"
+
+        auth = (self.email, self.api_token)
+        params = {
+            "jql": jql,
+            "maxResults": limit,
+            "fields": "*all"
+        }
+
+        response = requests.get(url, params=params, auth=auth)
+        response.raise_for_status()
+        data = response.json()
 
         tickets = []
-        for issue in issues:
-            full_issue = self.client.issue(issue.key)
-            tickets.append(self._parse_issue(full_issue))
+        for issue in data.get("issues", []):
+            expanded_issue = self._expand_issue(issue)
+            tickets.append(self._parse_issue(expanded_issue))
 
         return tickets
 
@@ -310,6 +441,10 @@ class JiraClient:
             "EHR": [
                 "EHR-backend",
             ],
+            "VP": [  # Vibrant Phlebotomy
+                "LIS-transformer-v2",
+                "LIS-setting-consumer",
+            ],
         }
 
         repos.extend(project_repo_map.get(project, []))
@@ -326,8 +461,8 @@ class JiraClient:
             "setting": "LIS-setting-consumer",
         }
 
-        description_lower = ticket.description.lower()
-        summary_lower = ticket.summary.lower()
+        description_lower = (ticket.description or "").lower()
+        summary_lower = (ticket.summary or "").lower()
 
         for keyword, repo in component_keywords.items():
             if keyword in description_lower or keyword in summary_lower:

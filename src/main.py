@@ -3,6 +3,8 @@ LIS Code Agent - Main Entry Point
 
 CLI for scanning and processing Jira tickets.
 """
+from __future__ import annotations
+
 import sys
 import argparse
 from pathlib import Path
@@ -10,10 +12,11 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from integrations.jira import JiraClient
-from integrations.git_operator import find_git_repos
-from core.ticket_processor import TicketProcessor
-from memory.manager import MemoryManager
+from src.integrations.jira import JiraClient
+from src.integrations.git_operator import find_git_repos
+from src.core.ticket_processor import TicketProcessor
+from src.memory.manager import MemoryManager
+from src.daily_pipeline import DailyPipelineService
 
 load_dotenv()
 
@@ -271,6 +274,19 @@ def main() -> int:
     # Config command
     subparsers.add_parser("config", help="Show current configuration")
 
+    # Pipeline command
+    pipeline_parser = subparsers.add_parser("pipeline", help="Daily pipeline service")
+    pipeline_parser.add_argument(
+        "action",
+        choices=["run", "start", "test"],
+        help="Pipeline action: run once, start scheduler, or test",
+    )
+    pipeline_parser.add_argument(
+        "-n", "--dry-run",
+        action="store_true",
+        help="Don't make actual code changes",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -289,6 +305,24 @@ def main() -> int:
     handler = handlers.get(args.command)
     if handler:
         return handler(args)
+
+    # Handle pipeline command separately (no args function)
+    if args.command == "pipeline":
+        service = DailyPipelineService()
+        if args.action == "run":
+            service.run_once()
+        elif args.action == "start":
+            service.start()
+        elif args.action == "test":
+            # Test mode
+            print("\n🧪 Test Mode - Showing analysis preview\n")
+            new_tickets = service.get_new_tickets(since_hours=24)
+            print(f"New tickets: {len(new_tickets)}")
+            for ticket in new_tickets[:3]:
+                print(f"\n{ticket.key}: {ticket.summary}")
+                analysis = service.analyze_ticket(ticket)
+                print(f"Solution: {analysis.get('solution', 'N/A')}")
+        return 0
 
     return 1
 
