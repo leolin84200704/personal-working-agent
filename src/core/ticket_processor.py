@@ -9,6 +9,8 @@ Orchestrates:
 5. Committing and pushing
 6. Generating reports
 """
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from datetime import datetime
@@ -46,11 +48,17 @@ class TicketProcessor:
         self.dry_run = dry_run
         self.memory = MemoryManager()
 
-        # Initialize Claude for analysis
+        # Initialize Claude for analysis (supports z.ai proxy)
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set")
-        self.claude = Anthropic(api_key=api_key)
+
+        # Support for z.ai proxy or other custom base URLs
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+        if base_url:
+            self.claude = Anthropic(api_key=api_key, base_url=base_url)
+        else:
+            self.claude = Anthropic(api_key=api_key)
 
         # Discover repos
         self.repos = {r.name: r for r in find_git_repos(self.repos_base_path)}

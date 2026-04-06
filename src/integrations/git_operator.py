@@ -7,6 +7,8 @@ Enforces security rules:
 - No direct push to main/master
 - No destructive operations
 """
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal
 import subprocess

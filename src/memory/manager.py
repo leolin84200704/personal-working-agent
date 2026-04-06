@@ -3,6 +3,8 @@ Memory Manager - Handles reading and writing memory files.
 
 The memory system is the core learning mechanism for the agent.
 """
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 import re

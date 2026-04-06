@@ -6,9 +6,11 @@ Supports:
 - Parsing ticket descriptions
 - Determining ticket type (feature vs bugfix)
 """
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 from jira import JIRA, Issue
 from dotenv import load_dotenv
 
