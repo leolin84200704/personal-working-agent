@@ -1,0 +1,1260 @@
+"""
+Interactive Mode - Chat with the agent and teach it.
+
+This allows you to:
+1. Ask questions about tickets
+2. Request analysis
+3. Teach the agent new patterns
+4. Give feedback on its decisions
+
+Uses prompt_toolkit for input + rich for output (best of both worlds).
+"""
+from __future__ import annotations
+
+# Suppress urllib3 OpenSSL warning on macOS (must be before imports)
+import warnings
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
+
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+from prompt_toolkit import PromptSession
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+
+from src.integrations.jira import JiraClient
+from src.core.ticket_processor import TicketProcessor
+from src.memory.manager import MemoryManager
+
+load_dotenv()
+
+console = Console()
+
+
+class PromptToolkitInteractiveAgent:
+    """Interactive agent using prompt_toolkit for proper terminal handling."""
+
+    def __init__(self):
+        """Initialize the interactive agent."""
+        self.jira = JiraClient()
+        self.processor = TicketProcessor(dry_run=False)
+        self.memory = MemoryManager()
+        self.running = True
+
+        # Create prompt session
+        self.prompt_session = PromptSession()
+
+        # Conversation history for context
+        self.conversation_history: list[dict] = []
+
+    def show_welcome(self):
+        """Show welcome message."""
+        console.print(Panel.fit(
+            "[bold cyan]LIS Code Agent[/bold cyan]\n\n"
+            "直接輸入問題即可對話\n\n"
+            "指令:\n"
+            "  [yellow]analyze[/yellow] <ticket>  - 分析票\n"
+            "  [yellow]scan[/yellow]              - 掃描新票\n"
+            "  [yellow]report[/yellow]            - 報告\n"
+            "  [yellow]clear[/yellow]             - 清空對話\n"
+            "  [yellow]exit[/yellow]              - 離開",
+            border_style="cyan"
+        ))
+
+    def get_prompt_text(self):
+        """Get the prompt text."""
+        return [("class:prompt", ">>> ")]
+
+    def get_prompt_style(self):
+        """Get the prompt style."""
+        from prompt_toolkit.styles import Style
+        return Style.from_dict({
+            "prompt": "cyan bold",
+        })
+
+    def handle_ask(self, question: str):
+        """Handle a question from the user."""
+        console.print(f"\n[bold]Question:[/bold] {question}")
+
+        # Get memory context
+        memory = self.memory.read_memory()
+
+        # System prompt
+        system_prompt = f"""You are LIS Code Agent, a helpful assistant for Leo.
+
+IMPORTANT: Always answer in **Traditional Chinese (繁體中文)** unless explicitly asked to use English.
+
+Context about the repos and patterns:
+{memory}
+
+Maintain conversation context and reference previous messages when relevant."""
+
+        # Build messages with conversation history (only user/assistant roles)
+        messages = list(self.conversation_history)
+        messages.append({"role": "user", "content": question})
+
+        response = self.processor.claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1000,
+            system=system_prompt,
+            messages=messages
+        )
+
+        answer = response.content[0].text
+        console.print(Panel(answer, title="[bold green]Answer[/bold green]", border_style="green"))
+
+        # Add to conversation history
+        self.conversation_history.append({"role": "user", "content": question})
+        self.conversation_history.append({"role": "assistant", "content": answer})
+
+        # Limit history to last 20 messages (10 turns)
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
+
+    def handle_analyze(self, ticket_id: str):
+        """Analyze a ticket and enter conversation mode."""
+        console.print(f"\n[bold]Analyzing ticket:[/bold] {ticket_id}")
+
+        try:
+            ticket = self.jira.get_ticket(ticket_id)
+            analysis = self.processor.analyze_ticket(ticket)
+
+            # Build the display content
+            content = f"""[bold]Ticket:[/bold] {ticket.key}
+[bold]Summary:[/bold] {ticket.summary}
+
+[bold]Status:[/bold] {ticket.status} | [bold]Type:[/bold] {ticket.issue_type} | [bold]Priority:[/bold] {ticket.priority or 'N/A'}
+
+[bold]Description:[/bold]
+{ticket.description[:500] + '...' if len(ticket.description) > 500 else ticket.description}
+
+[bold]Analysis:[/bold]
+  Confidence: {analysis['confidence']}
+  Repos: {', '.join(analysis['repos']) or 'None found'}
+
+[bold]Reasoning:[/bold]
+  {analysis.get('reasoning', 'N/A')}"""
+
+            # Show attachments if any
+            if ticket.attachments:
+                content += f"\n\n[bold]Attachments ({len(ticket.attachments)}):[/bold]"
+                for att in ticket.attachments:
+                    content += f"\n  • {att.get('filename')} ({att.get('mimeType', 'unknown')})"
+                    content += f"\n    URL: {att.get('content')}"
+
+            console.print(Panel(content, title="[bold cyan]Ticket Analysis[/bold cyan]", border_style="cyan"))
+
+            # Ask if user wants to download attachments
+            if ticket.attachments:
+                download = self.prompt_session.prompt(
+                    "\nDownload attachment? (y/N): ",
+                    style=self.get_prompt_style()
+                )
+                if download and download.lower() == "y":
+                    for att in ticket.attachments:
+                        try:
+                            path = self.jira.download_attachment(att.get('content'))
+                            console.print(f"[green]✓ Downloaded to:[/green] {path}")
+                        except Exception as e:
+                            console.print(f"[red]✗ Download failed:[/red] {e}")
+
+            # Enter conversation mode for this ticket
+            self._ticket_conversation_mode(ticket_id, ticket, analysis)
+
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _ticket_conversation_mode(self, ticket_id: str, ticket, analysis: dict):
+        """Conversation mode for discussing a specific ticket."""
+        console.print("\n[yellow]Entering ticket conversation mode.[/yellow]")
+        console.print("[dim]Ask follow-up questions, give feedback, or type 'done' to exit.[/dim]")
+        console.print("[dim]Commands: '執行', 'update', 'insert' - will ACTUALLY execute DB operations[/dim]\n")
+
+        # Create ticket-specific conversation context
+        ticket_context = f"""Current ticket context:
+- Ticket: {ticket.key} - {ticket.summary}
+- Status: {ticket.status}
+- Analysis: {analysis.get('reasoning', 'N/A')}
+- Repos: {', '.join(analysis.get('repos', []))}
+"""
+
+        while True:
+            try:
+                user_input = self.prompt_session.prompt(
+                    f"[{ticket.key}] >>> ",
+                    style=self.get_prompt_style()
+                )
+
+                if not user_input:
+                    continue
+
+                if user_input.lower() in ["done", "exit", "quit"]:
+                    console.print(f"[yellow]Exiting {ticket_id} conversation mode.[/yellow]")
+                    break
+
+                # Check for execution commands
+                exec_keywords = ["執行", "執行看看", "直接執行", "update", "insert", "請執行", "execute"]
+                if any(kw in user_input.lower() for kw in exec_keywords):
+                    result = self._execute_db_operations(ticket, analysis)
+                    console.print(Panel(result, title="[bold cyan]Execution Result[/bold cyan]", border_style="cyan"))
+                    # Don't add to conversation history - this is actual execution
+                    continue
+
+                # Add to conversation history
+                self.conversation_history.append({"role": "user", "content": f"[{ticket_id}] {user_input}"})
+
+                # Get response with ticket context
+                system_prompt = f"""You are discussing ticket {ticket.key} with Leo.
+
+{ticket_context}
+
+Answer in Traditional Chinese (繁體中文). Be specific about this ticket."""
+
+                messages = list(self.conversation_history)
+                response = self.processor.claude.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1000,
+                    system=system_prompt,
+                    messages=messages
+                )
+
+                answer = response.content[0].text
+                console.print(Panel(answer, title="[bold green]Response[/bold green]", border_style="green"))
+
+                # Add to conversation history
+                self.conversation_history.append({"role": "assistant", "content": answer})
+
+                # Keep conversation history manageable
+                if len(self.conversation_history) > 20:
+                    self.conversation_history = self.conversation_history[-20:]
+
+            except KeyboardInterrupt:
+                console.print(f"\n[yellow]Use 'done' to exit {ticket_id} mode.[/yellow]")
+            except EOFError:
+                break
+
+        # Save learnings when exiting ticket mode
+        save = self.prompt_session.prompt(
+            f"\n[yellow]Save learnings from {ticket_id} to memory?[/yellow] (y/N): ",
+            style=self.get_prompt_style()
+        )
+        if save and save.lower() == "y":
+            # Save the conversation as learning
+            self.memory.learn_qa(
+                f"Ticket {ticket_id} conversation",
+                f"Ticket: {ticket.key}\nSummary: {ticket.summary}\nAnalysis: {analysis}"
+            )
+            console.print("[green]✓ Saved to memory![/green]")
+
+    def _execute_db_operations(self, ticket, analysis: dict) -> str:
+        """Execute database operations with LLM-driven analysis and self-correction loop."""
+        import subprocess
+        import re
+        import json
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+
+        # === STEP 1: LLM Analysis Phase (Think before Act) ===
+        thinking_result = self._llm_analyze_ticket(ticket)
+        results = [f"🧠 LLM Analysis:\n{thinking_result['analysis']}"]
+        results.append(f"📋 Extracted Data:\n{thinking_result['extracted_data']}")
+
+        # Extract information using LLM insights
+        provider_id = thinking_result.get('provider_id')
+        practice_id = thinking_result.get('practice_id')
+        customer_id = provider_id or practice_id
+        customer_firstname = thinking_result.get('customer_firstname')
+        customer_lastname = thinking_result.get('customer_lastname')
+        clinic_name = thinking_result.get('clinic_name')
+        npi = thinking_result.get('npi')
+        emr_name = thinking_result.get('emr_name')
+        folder = thinking_result.get('folder')
+
+        # === STEP 2: Check database state ===
+        db_state = self._check_db_state(customer_id)
+        results.append(f"\n📊 Database State:\n{db_state}")
+
+        # Extract existing NPI from db_state
+        for line in db_state.split('\n'):
+            if 'ehr_integrations' in line.lower() and 'npi=' in line.lower():
+                match = re.search(r'npi=(\d{10})', line)
+                if match and match.group(1) != '0000000000':
+                    npi = match.group(1)
+                    results.append(f"✅ Found existing NPI: {npi}")
+                    break
+
+        # === STEP 3: Execution with Verification Loop ===
+        max_retries = 3
+        execution_success = False
+
+        for attempt in range(max_retries):
+            if attempt > 0:
+                results.append(f"\n🔄 Retry {attempt + 1}/{max_retries}...")
+
+            # Execute EHR Integration
+            if not self._verify_ehr_integration(customer_id):
+                result = self._execute_ehr_integration(
+                    ticket, provider_id, practice_id, customer_id,
+                    customer_firstname, customer_lastname, npi, clinic_name,
+                    emr_name, folder
+                )
+                results.append(result['output'])
+                if result['success']:
+                    results.append("✅ ehr_integrations: Inserted and verified")
+                else:
+                    results.append(f"⚠️ ehr_integrations: {result['error']}")
+                    # Ask LLM to diagnose and fix
+                    diagnosis = self._llm_diagnose_failure(ticket, result, 'ehr_integrations')
+                    results.append(f"🧠 LLM Diagnosis: {diagnosis}")
+                    continue
+
+            # Execute Order Client
+            if not self._verify_order_client(provider_id):
+                result = self._execute_order_client(
+                    ticket, provider_id, customer_firstname, customer_lastname,
+                    npi, clinic_name, emr_name, folder
+                )
+                results.append(result['output'])
+                if result['success']:
+                    results.append("✅ order_clients: Inserted and verified")
+                else:
+                    results.append(f"⚠️ order_clients: {result['error']}")
+                    diagnosis = self._llm_diagnose_failure(ticket, result, 'order_clients')
+                    results.append(f"🧠 LLM Diagnosis: {diagnosis}")
+                    continue
+
+            execution_success = True
+            break
+
+        if not execution_success:
+            results.append("\n❌ Failed after max retries. Please review.")
+        else:
+            results.append("\n✅ All operations completed successfully!")
+
+        return "\n".join(results)
+
+    def _llm_analyze_ticket(self, ticket) -> dict:
+        """Use LLM to analyze ticket and extract correct information."""
+        description = ticket.description or ""
+
+        system_prompt = """You are a data extraction specialist. Extract information from ticket descriptions.
+
+Rules:
+1. Full clinic name - do NOT truncate or shorten
+2. For names like "Holistic Health Code" use the FULL name, not "Holistic Code"
+3. Provider ID and Practice ID are different numbers
+4. EMR vendor needs to be mapped to database codes
+
+Return ONLY valid JSON."""
+
+        user_prompt = f"""Extract from this ticket description:
+
+{description}
+
+Return JSON:
+{{
+    "provider_id": string or null,
+    "practice_id": string or null,
+    "clinic_name": string (FULL NAME, not truncated),
+    "emr_vendor": string,
+    "folder_path": string or null
+}}"""
+
+        try:
+            response = self.processor.claude.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}]
+            )
+
+            import json
+            text = response.content[0].text
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+
+                # Map EMR vendor
+                emr_mapping = {
+                    "cerbo": "MDHQ", "mdhq": "MDHQ", "charm": "CHARMEHR",
+                    "drchrono": "MDHQ", "eclinical": "ECW", "athena": "ATHENA"
+                }
+                emr_name = emr_mapping.get(data.get('emr_vendor', '').lower(), "MDHQ")
+
+                return {
+                    'analysis': f"Processed {ticket.key}",
+                    'extracted_data': f"Name: {data.get('clinic_name')}, Provider: {data.get('provider_id')}, Practice: {data.get('practice_id')}, EMR: {emr_name}",
+                    'provider_id': data.get('provider_id'),
+                    'practice_id': data.get('practice_id'),
+                    'customer_firstname': '',  # Will be derived from clinic_name if needed
+                    'customer_lastname': '',
+                    'clinic_name': data.get('clinic_name'),
+                    'npi': None,  # Will get from DB
+                    'emr_name': emr_name,
+                    'folder': data.get('folder_path')
+                }
+        except Exception as e:
+            # Fallback to regex parsing
+            return self._fallback_parse(ticket)
+
+    def _llm_diagnose_failure(self, ticket, result: dict, table: str) -> str:
+        """Use LLM to diagnose failure and suggest fix."""
+        error_info = result.get('error', 'Unknown error')[:500]
+
+        system_prompt = """You are a database specialist. Analyze errors and suggest fixes.
+        Be concise and actionable."""
+
+        user_prompt = f"""Ticket: {ticket.key}
+Table: {table}
+Error: {error_info}
+
+What went wrong and how to fix it? Be concise."""
+
+        try:
+            response = self.processor.claude.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=300,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}]
+            )
+            return response.content[0].text.strip()
+        except Exception:
+            return "Unable to diagnose"
+
+    def _fallback_parse(self, ticket) -> dict:
+        """Fallback regex parsing if LLM fails."""
+        import re
+        description = ticket.description or ""
+
+        # Provider ID
+        match = re.search(r"provider id[:\s]+(\d+)", description, re.IGNORECASE)
+        provider_id = match.group(1) if match else None
+
+        # Practice ID
+        match = re.search(r"practice id[:\s]+(\d+)", description, re.IGNORECASE)
+        practice_id = match.group(1) if match else None
+
+        # Clinic name - extract everything from "Name:" until "Provider ID" or "Practice ID"
+        # Pattern: "Name: [text] Provider ID: [number]" or "Name: [text] Practice ID: [number]"
+        match = re.search(r"name:\s*(.+?)\s*(?:provider|practice)\s+id", description, re.IGNORECASE)
+        clinic_name = match.group(1).strip() if match else "Unknown"
+
+        # EMR Vendor
+        emr_mapping = {"cerbo": "MDHQ", "mdhq": "MDHQ", "charm": "CHARMEHR", "eclinical": "ECW", "athena": "ATHENA"}
+        emr_name = "MDHQ"
+        for key, val in emr_mapping.items():
+            if key in description.lower():
+                emr_name = val
+                break
+
+        # Folder path
+        match = re.search(r"folder path[:\s]+(\S+)", description, re.IGNORECASE)
+        folder = match.group(1).strip() if match else None
+
+        return {
+            'analysis': f"Regex parsed {ticket.key}",
+            'extracted_data': f"Name: {clinic_name}, Provider: {provider_id}, Practice: {practice_id}",
+            'provider_id': provider_id,
+            'practice_id': practice_id,
+            'customer_firstname': '',
+            'customer_lastname': '',
+            'clinic_name': clinic_name,
+            'npi': None,
+            'emr_name': emr_name,
+            'folder': folder
+        }
+
+    def _execute_ehr_integration(self, ticket, provider_id, practice_id, customer_id,
+                                customer_firstname, customer_lastname, npi, clinic_name,
+                                emr_name, folder) -> dict:
+        """Execute EHR integration script with verification."""
+        import subprocess
+        from pathlib import Path
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        script = repo_path / "scripts/insert-ehr-integration.ts"
+
+        if not script.exists():
+            return {"success": False, "error": "Script not found", "output": ""}
+
+        # Use clinic_name directly (no first/last split)
+        if not customer_firstname:
+            parts = clinic_name.split()
+            customer_firstname = parts[0] if parts else ""
+            customer_lastname = " ".join(parts[1:]) if len(parts) > 1 else ""
+
+        args = [
+            "--customer-firstname", customer_firstname,
+            "--customer-lastname", customer_lastname,
+            "--npi", npi or "0000000000",
+            "--clinic-name", clinic_name,  # FULL NAME here
+            "--clinic-id", str(practice_id or customer_id),
+            "--customer-id", str(customer_id),
+            "--emr-name", emr_name,
+            "--folder", folder or "default_folder",
+            "--ticket-number", ticket.key,
+            "--integration-type", "FULL_INTEGRATION",
+            "--msh06", str(practice_id or customer_id),
+        ]
+
+        cmd = ["npx", "ts-node", "scripts/insert-ehr-integration.ts"] + args
+        result = self._run_with_autoheal(cmd, repo_path)
+
+        # Verify after execution
+        if "successfully" in result["output"].lower():
+            if self._verify_ehr_integration(customer_id):
+                return {"success": True, "error": "", "output": result["output"]}
+            else:
+                return {"success": False, "error": "Verification failed - record not in DB", "output": result["output"]}
+
+        return {"success": False, "error": "Script execution failed", "output": result["output"]}
+
+    def _execute_order_client(self, ticket, provider_id, customer_firstname, customer_lastname,
+                             npi, clinic_name, emr_name, folder) -> dict:
+        """Execute Order Client script with verification."""
+        import subprocess
+        from pathlib import Path
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        script = repo_path / "scripts/insert-order-client.ts"
+
+        if not script.exists():
+            return {"success": False, "error": "Script not found", "output": ""}
+
+        args = [
+            "--customer-firstname", customer_firstname,
+            "--customer-lastname", customer_lastname,
+            "--npi", npi or "0000000000",
+            "--clinic-name", clinic_name,  # FULL NAME
+            "--clinic-id", str(provider_id),  # Use provider_id
+            "--emr-name", emr_name,
+            "--folder", folder or "default_folder",
+        ]
+
+        cmd = ["npx", "ts-node", "scripts/insert-order-client.ts"] + args
+        result = self._run_with_autoheal(cmd, repo_path)
+
+        # Verify after execution
+        if "successfully" in result["output"].lower():
+            if self._verify_order_client(provider_id):
+                return {"success": True, "error": "", "output": result["output"]}
+            else:
+                return {"success": False, "error": "Verification failed - record not in DB", "output": result["output"]}
+
+        return {"success": False, "error": "Script execution failed", "output": result["output"]}
+        """Execute database operations with auto-healing and smart decision making."""
+        import subprocess
+        import re
+        import json
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+
+        # Extract information from ticket description
+        description = ticket.description.lower()
+        original_description = ticket.description
+        provider_id = None
+        practice_id = None
+        customer_id = None
+        customer_firstname = None
+        customer_lastname = None
+        clinic_name = None
+        npi = None
+        emr_name = None
+        folder = None
+
+        # Provider ID
+        match = re.search(r"provider id[:\s]+(\d+)", description)
+        if match:
+            provider_id = match.group(1)
+
+        # Practice ID
+        match = re.search(r"practice id[:\s]+(\d+)", description)
+        if match:
+            practice_id = match.group(1)
+
+        # Clinic name (before "Provider ID")
+        match = re.search(r"name:\s*([^\n]+?)(?=\s*provider id)", original_description, re.IGNORECASE)
+        if match:
+            clinic_name = match.group(1).strip()
+
+        # EMR Vendor - Map common names to actual vendor codes in database
+        # Vendor mapping based on ehr_vendors table
+        vendor_mapping = {
+            "cerbo": "MDHQ",
+            "mdhq": "MDHQ",
+            "charm": "CHARMEHR",
+            "drchrono": "MDHQ",  # MDHQ also handles DrChrono
+            "eclinical": "ECW",
+            "athena": "ATHENA",
+            "epic": "ATHENA",  # Closest match
+            "elation": "ElationEMR",
+            "practice fusion": "PF",
+            "power2practice": "POWER2PRACTICE",
+            "zymebalanz": "ZYMEBALANZ",
+        }
+
+        for common_name, vendor_code in vendor_mapping.items():
+            if common_name in description.lower():
+                emr_name = vendor_code
+                break
+
+        # Folder path
+        match = re.search(r"folder path:\s*(\S+)", description, re.IGNORECASE)
+        if match:
+            folder = match.group(1).strip()
+
+        # Customer ID fallback
+        if not customer_id:
+            customer_id = provider_id or practice_id
+
+        # Check if scripts exist and what needs to be done
+        results = []
+        actions_taken = []
+
+        # === Step 1: Check database state first ===
+        db_state = self._check_db_state(customer_id)
+        results.append(f"📊 Database State:\n{db_state}")
+
+        # Extract existing NPI from db_state if available
+        existing_npi = None
+        for line in db_state.split('\n'):
+            if 'ehr_integrations' in line.lower() and 'npi=' in line.lower():
+                match = re.search(r'npi=(\d{10})', line)
+                if match:
+                    existing_npi = match.group(1)
+                    break
+
+        # Try to get real customer data from RPC via gRPC
+        customer_data = self._get_customer_from_rpc(customer_id, practice_id)
+        if customer_data:
+            customer_firstname = customer_data.get("firstName", customer_firstname)
+            customer_lastname = customer_data.get("lastName", customer_lastname)
+            npi = customer_data.get("npi", npi)
+            clinic_name = customer_data.get("clinicName", clinic_name)
+        else:
+            # Use NPI from existing ehr_integrations record if available
+            if existing_npi:
+                npi = existing_npi
+            # Fallback to parsing from description
+            if not customer_firstname and clinic_name:
+                parts = clinic_name.split() if clinic_name else ["Unknown", "Clinic"]
+                customer_firstname = parts[0]
+                customer_lastname = parts[-1] if len(parts) > 1 else "Clinic"
+            if not npi or npi == "0000000000":
+                # Try to find NPI in description
+                match = re.search(r"\bnpi[:\s]+(\d{10})\b", description)
+                npi = match.group(1) if match else existing_npi or "0000000000"
+
+
+    def _get_customer_from_rpc(self, customer_id: str, practice_id: str) -> dict:
+        """Get customer data from gRPC call."""
+        import subprocess
+        import json
+        import re
+
+        try:
+            # Try to find and run the getCustomer RPC script
+            repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+
+            # Look for RPC test scripts or tools
+            grpc_scripts = [
+                repo_path / "scripts" / "get-customer.ts",
+                repo_path / "scripts" / "getCustomer.ts",
+                repo_path / "tmp_get_customer.js",  # Temporary script pattern
+            ]
+
+            for script in grpc_scripts:
+                if script.exists():
+                    # Run the script with customer_id
+                    cmd = ["node", str(script), customer_id] if script.suffix == ".js" else ["npx", "ts-node", str(script), customer_id]
+
+                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path, timeout=30)
+
+                    if result.returncode == 0:
+                        # Try to parse JSON output
+                        try:
+                            data = json.loads(result.stdout)
+                            return data
+                        except json.JSONDecodeError:
+                            # Try to extract JSON from output
+                            match = re.search(r'\{[^}]*"firstName"[^}]*\}', result.stdout)
+                            if match:
+                                return json.loads(match.group(0))
+        except Exception as e:
+            pass  # Silent fail, use fallback
+
+        return {}
+
+    def _check_db_state(self, customer_id: str) -> str:
+        """Check current database state for this customer."""
+        import subprocess
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        check_script = repo_path / "scripts" / "check-db-state.ts"
+
+        if check_script.exists():
+            cmd = ["npx", "ts-node", str(check_script), f"--customer-id={customer_id}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path)
+            if result.returncode == 0:
+                return result.stdout
+
+        # Fallback: check using tmp script if exists
+        tmp_script = repo_path / f"tmp_check_{customer_id}.js"
+        if tmp_script.exists():
+            result = subprocess.run(["node", str(tmp_script)], capture_output=True, text=True, cwd=repo_path)
+            if result.returncode == 0:
+                return result.stdout
+
+        return "  Unable to check DB state (no check script found)"
+
+    def _needs_emr_update(self, db_state: str) -> bool:
+        """Determine if ehr_integrations table needs update."""
+        # Check if record is missing, PENDING status, or has no records
+        db_lower = db_state.lower()
+        # "❌ ehr_integrations: No record found" - needs insert
+        if "❌ ehr_integrations" in db_state:
+            return True
+        # Check specifically in ehr_integrations line for "no record found"
+        for line in db_state.split('\n'):
+            if 'ehr_integrations' in line.lower() and 'no record found' in line.lower():
+                return True
+        # "✅ ehr_integrations: ... status=PENDING" - needs update to LIVE
+        for line in db_state.split('\n'):
+            if 'ehr_integrations' in line.lower() and 'status=pending' in line.lower():
+                return True
+        # If status=LIVE, no update needed
+        return False
+
+    def _needs_order_client_update(self, db_state: str) -> bool:
+        """Determine if order_clients table needs update."""
+        db_lower = db_state.lower()
+        # "❌ order_clients: No record found" - needs insert
+        if "❌ order_clients" in db_state or "order_clients: no record found" in db_lower:
+            return True
+        # Also check if table doesn't exist
+        if "table may not exist" in db_lower:
+            return True
+        return False
+
+    def _run_with_autoheal(self, cmd: list, cwd: Path) -> dict:
+        """Run command with auto-healing for common errors."""
+        import subprocess
+
+        output = ""
+        actions = []
+
+        # First attempt
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+        output = result.stdout + result.stderr
+        output_lower = output.lower()
+
+        # Check for success indicators (must check before error handling)
+        if result.returncode == 0 and (
+            "successfully inserted" in output_lower or
+            "successfully updated" in output_lower or
+            "✅" in output
+        ):
+            actions.append("Executed script successfully")
+            return {"output": output, "actions": actions}
+
+        # === Error Handling ===
+
+        # Error 1: ts-node not found -> install it
+        if "ts-node" in output_lower and ("not found" in output_lower or "command not found" in output_lower):
+            actions.append("Installed ts-node")
+            subprocess.run(["npm", "install", "--save-dev", "ts-node"], capture_output=True, cwd=cwd)
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            output = result.stdout + result.stderr
+            output_lower = output.lower()
+            if result.returncode == 0 and ("✅" in output or "successfully" in output_lower):
+                actions.append("Executed script successfully after installing ts-node")
+                return {"output": output, "actions": actions}
+
+        # Error 2: Missing dependencies -> npm install
+        if "cannot find module" in output_lower or "missing dependencies" in output_lower:
+            actions.append("Installed dependencies")
+            subprocess.run(["npm", "install"], capture_output=True, cwd=cwd)
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            output = result.stdout + result.stderr
+            output_lower = output.lower()
+            if result.returncode == 0 and ("✅" in output or "successfully" in output_lower):
+                actions.append("Executed script successfully after installing dependencies")
+                return {"output": output, "actions": actions}
+
+        # Error 3: TypeScript compile errors -> try with --transpile-only
+        if "error ts" in output_lower and "transpile-only" not in " ".join(cmd):
+            actions.append("Used transpile-only mode")
+            cmd.insert(1, "--transpile-only")
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            output = result.stdout + result.stderr
+            output_lower = output.lower()
+            if result.returncode == 0 and ("✅" in output or "successfully" in output_lower):
+                actions.append("Executed script successfully with transpile-only mode")
+                return {"output": output, "actions": actions}
+
+        # === NEW: Intelligent Script Fixing ===
+        # Check for database/column errors that can be auto-fixed
+        if ("unknown column" in output_lower or "prismaclientknownrequesterror" in output_lower or
+            "fatal error" in output_lower) and cmd:
+            # Try to fix the script intelligently
+            fix_result = self._intelligent_fix_script(cmd, cwd, output)
+            if fix_result["fixed"]:
+                actions.append(f"Auto-fixed script: {fix_result['description']}")
+                # Retry after fix
+                result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+                output = result.stdout + result.stderr
+                output_lower = output.lower()
+                if result.returncode == 0 and ("✅" in output or "successfully" in output_lower):
+                    actions.append("Executed script successfully after auto-fix")
+                    return {"output": output, "actions": actions}
+
+        # Also check for duplicate error (not a failure, just info)
+        if "duplicate" in output_lower and "❌" in output:
+            actions.append("Duplicate record detected (skipped)")
+
+        # Check for fatal errors and report them
+        if "fatal error" in output_lower or "prismaclientknownrequesterror" in output_lower:
+            actions.append("Script execution failed (see error above)")
+
+        return {"output": output, "actions": actions}
+
+    def _intelligent_fix_script(self, cmd: list, cwd: Path, error_output: str) -> dict:
+        """Intelligently analyze and fix script errors."""
+        import subprocess
+        import re
+
+        # Extract script path from command
+        script_path = None
+        for part in cmd:
+            if "scripts/" in part and (part.endswith(".ts") or part.endswith(".js")):
+                script_path = cwd / part
+                break
+
+        if not script_path or not script_path.exists():
+            return {"fixed": False, "description": "Script not found"}
+
+        # Read the script content
+        try:
+            with open(script_path, 'r') as f:
+                content = f.read()
+        except Exception:
+            return {"fixed": False, "description": "Cannot read script"}
+
+        original_content = content
+        error_lower = error_output.lower()
+
+        # === Fix Pattern 1: Unknown column 'legacy_emr_service' ===
+        if "unknown column 'legacy_emr_service'" in error_lower:
+            # Remove legacy_emr_service from SELECT query
+            content = re.sub(
+                r'SELECT id, code, sftp_host, sftp_port, legacy_emr_service\s+FROM ehr_vendors',
+                'SELECT id, code, sftp_host, sftp_port FROM ehr_vendors',
+                content
+            )
+            # Update the return type annotation
+            content = re.sub(
+                r': Promise<\{ id: number; code: string; sftp_host: string \| null; sftp_port: number \| null; legacy_emr_service: string \| null \}>',
+                ': Promise<{ id: number; code: string; sftp_host: string | null; sftp_port: number | null }>',
+                content
+            )
+            # Update usage: vendorInfo.legacy_emr_service -> input.emr_name.toUpperCase()
+            content = re.sub(
+                r'vendorInfo\.legacy_emr_service\s*\?\?\s*',
+                'input.emr_name.toUpperCase()',
+                content
+            )
+
+            if content != original_content:
+                with open(script_path, 'w') as f:
+                    f.write(content)
+                return {"fixed": True, "description": "Removed non-existent 'legacy_emr_service' column"}
+
+        # === Fix Pattern 2: Unknown column in general ===
+        match = re.search(r"unknown column '([^']+)' in 'field list'", error_output, re.IGNORECASE)
+        if match:
+            column_name = match.group(1)
+            # Try to remove this column from SELECT statements
+            content = re.sub(
+                rf',\s*{re.escape(column_name)}\s*(?=[,\s]+FROM)',
+                '',
+                content,
+                flags=re.IGNORECASE
+            )
+            if content != original_content:
+                with open(script_path, 'w') as f:
+                    f.write(content)
+                return {"fixed": True, "description": f"Removed non-existent column '{column_name}'"}
+
+        # === Fix Pattern 3: EMR vendor not found (try common name mapping) ===
+        if "emr vendor '" in error_lower and "' not found in ehr_vendors" in error_lower:
+            # Extract the vendor name from error
+            vendor_match = re.search(r"emr vendor '([^']+)' not found", error_output, re.IGNORECASE)
+            if vendor_match:
+                vendor_name = vendor_match.group(1).lower()
+                # Check if we need to map "cerbo" to "MDHQ"
+                if vendor_name == "cerbo":
+                    # This is already handled by the prompt_interactive vendor mapping
+                    # But if the error still occurs, the script needs updating
+                    return {"fixed": False, "description": "Vendor 'cerbo' should map to 'MDHQ' (handled by caller)"}
+
+        return {"fixed": False, "description": "No auto-fix available for this error"}
+
+    def _needs_order_client_update_for_provider(self, provider_id: str) -> bool:
+        """Check if order_client exists for this provider_id."""
+        if not provider_id:
+            return False
+        # Check database directly
+        import subprocess
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        try:
+            cmd = [
+                "npx", "ts-node", "--transpile-only", "-e",
+                "import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); "
+                f"prisma.$queryRaw`SELECT COUNT(*) as count FROM order_clients WHERE customer_id = {provider_id}`"
+                ".then(r => console.log('COUNT:' + r[0].count)).finally(() => prisma.$disconnect());"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path, timeout=30)
+            output = result.stdout + result.stderr
+            if "COUNT:0" in output:
+                return True  # Need to create
+            elif "COUNT:" in output:
+                return False  # Already exists
+        except Exception:
+            pass
+        # Default to True if we can't check
+        return True
+
+    def _verify_ehr_integration(self, customer_id: str) -> bool:
+        """Verify ehr_integrations record exists."""
+        import subprocess
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        try:
+            # Use shell=True to properly handle the command
+            cmd = [
+                "npx", "ts-node", "--transpile-only", "-e",
+                "import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); "
+                f"prisma.$queryRaw`SELECT COUNT(*) as count FROM ehr_integrations WHERE customer_id = '{customer_id}'`"
+                ".then(r => console.log('VERIFIED:' + r[0].count)).finally(() => prisma.$disconnect());"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path, timeout=30)
+            output = result.stdout + result.stderr
+            return "VERIFIED:1" in output or "VERIFIED:2" in output or "VERIFIED:3" in output
+        except Exception as e:
+            self._learn_from_verification_error("ehr_integrations", customer_id, str(e))
+            return False
+
+    def _verify_order_client(self, provider_id: str) -> bool:
+        """Verify order_clients record exists."""
+        import subprocess
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+        try:
+            cmd = [
+                "npx", "ts-node", "--transpile-only", "-e",
+                "import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); "
+                f"prisma.$queryRaw`SELECT COUNT(*) as count FROM order_clients WHERE customer_id = {provider_id}`"
+                ".then(r => console.log('VERIFIED:' + r[0].count)).finally(() => prisma.$disconnect());"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path, timeout=30)
+            output = result.stdout + result.stderr
+            return "VERIFIED:1" in output or "VERIFIED:2" in output or "VERIFIED:3" in output
+        except Exception as e:
+            self._learn_from_verification_error("order_clients", provider_id, str(e))
+            return False
+
+    def _learn_from_verification_error(self, table: str, id_value: str, error: str):
+        """Learn from verification errors to improve future attempts."""
+        import os
+        from datetime import datetime
+
+        learning_entry = f"""
+## Verification Error - {datetime.now().isoformat()}
+
+Table: {table}
+ID: {id_value}
+Error: {error}
+
+This verification failed. Possible causes:
+1. Race condition - record not yet committed
+2. Wrong ID type (string vs number)
+3. Connection issue
+
+Action: Consider adding retry logic or delay before verification.
+"""
+        # Write to learning log
+        log_path = Path("/Users/hung.l/src/lis-code-agent/memory/verification_errors.md")
+        os.makedirs(log_path.parent, exist_ok=True)
+        with open(log_path, 'a') as f:
+            f.write(learning_entry + "\n")
+
+    def _self_heal_ehr_integration(self, ticket, provider_id: str, practice_id: str,
+                                  customer_id: str, customer_firstname: str,
+                                  customer_lastname: str, npi: str,
+                                  clinic_name: str, emr_name: str, folder: str) -> dict:
+        """Self-heal ehr_integrations by direct database insertion."""
+        import subprocess
+        from pathlib import Path
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+
+        try:
+            # Direct database insertion using npx ts-node
+            safe_clinic_name = clinic_name.replace("'", "''") if clinic_name else "Unknown"
+            safe_npi = npi or "0000000000"
+            safe_folder = folder or "default"
+
+            cmd = f"""import {{ PrismaClient }} from '@prisma/client'; const {{ createId }} = require('@paralleldrive/cuid2');
+const prisma = new PrismaClient();
+async function fix() {{
+  const id = createId();
+  const npiVal = '{safe_npi}';
+  await prisma.\\$executeRaw\\`
+    INSERT INTO ehr_integrations (
+      id, customer_id, clinic_id, ehr_vendor_id, integration_type, integration_origin,
+      priority, status, clinic_name, customer_npi, effective_npi,
+      contact_name, contact_email, ordering_enabled, result_enabled, sftp_enabled,
+      api_enabled, hl7_version, msh06_receiving_facility,
+      use_vendor_sftp_config, sftp_result_path, sftp_archive_path,
+      kit_delivery_option, legacy_emr_service, legacy_result_send_type,
+      created_at, updated_at, requested_by, last_modified_by
+    ) VALUES (
+      \\${{id}}, '{customer_id}', '{practice_id}',
+      (SELECT id FROM ehr_vendors WHERE LOWER(code) = '{emr_name.lower()}' LIMIT 1),
+      'FULL_INTEGRATION', 'NEW_INTEGRATION', 'NORMAL', 'LIVE',
+      '{safe_clinic_name}', npiVal, npiVal,
+      'Leo', 'hung.l@zymebalanz.com', 1, 1, 1, 0, '2.3', '{practice_id}',
+      1, '/{safe_folder}/results/', '/{safe_folder}/results/archive',
+      'NO_DELIVERY', '{emr_name.upper()}', 'SFTP',
+      NOW(), NOW(), '{ticket.key}', 'Leo'
+    )
+  \\`;
+  console.log('Self-healed ehr_integrations for customer_id:', '{customer_id}');
+  await prisma.\\$disconnect();
+}}
+fix().catch(console.error);
+"""
+
+            result = subprocess.run([
+                "npx", "ts-node", "--transpile-only", "-e", cmd
+            ], capture_output=True, text=True, cwd=repo_path, timeout=60)
+
+            if "Self-healed" in result.stdout or "Self-healed" in result.stderr:
+                return {"success": True, "message": "Direct database insertion successful"}
+            else:
+                return {"success": False, "message": f"Direct insertion failed: {result.stderr[:200]}"}
+        except Exception as e:
+            return {"success": False, "message": f"Self-heal error: {str(e)}"}
+
+    def _self_heal_order_client(self, ticket, provider_id: str,
+                                customer_firstname: str, customer_lastname: str,
+                                npi: str, clinic_name: str,
+                                emr_name: str, folder: str) -> dict:
+        """Self-heal order_clients by direct database insertion."""
+        import subprocess
+        from pathlib import Path
+
+        repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
+
+        try:
+            customer_name = f"{customer_firstname} {customer_lastname}"
+            remote_folder = f"/{folder}/orders/" if folder else "/orders/"
+
+            cmd = f"""import {{ PrismaClient }} from '@prisma/client';
+const prisma = new PrismaClient();
+async function fix() {{
+  await prisma.\\$executeRaw\\`
+    INSERT INTO order_clients (
+      customer_name, customer_id, customer_provider_NPI, customer_practice_name,
+      clinic_id, kits_options, emr_name, remote_folder_path
+    ) VALUES (
+      '{customer_name.replace("'", "''")}', {provider_id}, '{npi}', '{clinic_name.replace("'", "''")}',
+      {provider_id}, 0, '{emr_name}', '{remote_folder}'
+    )
+  \\`;
+  console.log('Self-healed order_clients for provider_id:', provider_id);
+  await prisma.\\$disconnect();
+}}
+fix().catch(console.error);
+"""
+
+            result = subprocess.run([
+                "npx", "ts-node", "--transpile-only", "-e", cmd
+            ], capture_output=True, text=True, cwd=repo_path, timeout=60)
+
+            if "Self-healed" in result.stdout or "Self-healed" in result.stderr:
+                return {"success": True, "message": "Direct database insertion successful"}
+            else:
+                return {"success": False, "message": f"Direct insertion failed: {result.stderr[:200]}"}
+        except Exception as e:
+            return {"success": False, "message": f"Self-heal error: {str(e)}"}
+
+    def handle_scan(self):
+        """Scan for new tickets."""
+        console.print("\n[bold]Scanning for new tickets...[/bold]")
+
+        tickets = self.processor.scan_tickets(limit=10)
+
+        if not tickets:
+            console.print("[yellow]No new tickets found.[/yellow]")
+            return
+
+        from rich.table import Table
+        table = Table(title="New Tickets")
+        table.add_column("Key", style="cyan")
+        table.add_column("Summary")
+        table.add_column("Status")
+        table.add_column("Type")
+
+        for ticket in tickets[:5]:
+            table.add_row(ticket.key, ticket.summary[:50], ticket.status, ticket.issue_type)
+
+        console.print(table)
+
+        # Ask which to analyze
+        choice = self.prompt_session.prompt(
+            "\nEnter ticket ID to analyze, or press Enter: ",
+            style=self.get_prompt_style()
+        )
+        if choice:
+            self.handle_analyze(choice)
+
+    def handle_teach(self):
+        """Teach the agent something new."""
+        console.print("\n[bold]Teach the Agent[/bold]\n")
+
+        console.print("What do you want to teach?")
+        console.print("  1. A pattern for a specific repo")
+        console.print("  2. A gotcha (common pitfall)")
+        console.print("  3. General Q&A")
+
+        choices = [
+            {"name": "pattern", "message": "A pattern for a specific repo"},
+            {"name": "gotcha", "message": "A gotcha (common pitfall)"},
+            {"name": "qa", "message": "General Q&A"},
+        ]
+
+        choice_name = self.prompt_session.prompt(
+            "Choose (pattern/gotcha/qa): ",
+            style=self.get_prompt_style()
+        )
+
+        if choice_name == "pattern":
+            repo = self.prompt_session.prompt("Repo name: ", style=self.get_prompt_style())
+            pattern = self.prompt_session.prompt("Pattern name: ", style=self.get_prompt_style())
+            description = self.prompt_session.prompt("Description: ", style=self.get_prompt_style())
+            self.memory.learn_repo_pattern(repo, pattern, description)
+
+        elif choice_name == "gotcha":
+            repo = self.prompt_session.prompt(
+                "Repo name (optional): ",
+                default="general",
+                style=self.get_prompt_style()
+            )
+            gotcha = self.prompt_session.prompt("What's the pitfall? ", style=self.get_prompt_style())
+            solution = self.prompt_session.prompt("What's the solution? ", style=self.get_prompt_style())
+            self.memory.learn_gotcha(repo, gotcha, solution)
+
+        elif choice_name == "qa":
+            question = self.prompt_session.prompt("Question: ", style=self.get_prompt_style())
+            answer = self.prompt_session.prompt("Answer: ", style=self.get_prompt_style())
+            self.memory.learn_qa(question, answer)
+
+        console.print("\n[green]✓ Learned![/green]")
+
+    def handle_report(self):
+        """Generate a quick report."""
+        console.print("\n[bold]Generating quick report...[/bold]")
+
+        tickets = self.jira.get_assigned_tickets(limit=10)
+
+        # Count by status
+        from collections import Counter
+        status_counts = Counter(t.status for t in tickets)
+        type_counts = Counter(t.issue_type for t in tickets)
+
+        console.print(Panel(
+            f"""[bold]Assigned Tickets:[/bold] {len(tickets)}
+
+[bold]By Status:[/bold]
+{chr(10).join(f'  • {k}: {v}' for k, v in status_counts.most_common())}
+
+[bold]By Type:[/bold]
+{chr(10).join(f'  • {k}: {v}' for k, v in type_counts.most_common())}""",
+            title="[bold cyan]Quick Report[/bold cyan]",
+            border_style="cyan"
+        ))
+
+    def handle_memory(self):
+        """Show memory."""
+        console.print("\n[bold]Agent Memory:[/bold]\n")
+
+        memory = self.memory.read_memory()
+
+        # Show recent learnings
+        if "## Questions" in memory:
+            console.print("[cyan]Q&A (Recent learnings):[/cyan]")
+            lines = memory.split("## Questions\n")[1].split("\n")
+            for line in lines[:10]:
+                if line.strip():
+                    console.print(f"  {line}")
+
+    def run(self):
+        """Run the interactive loop."""
+        self.show_welcome()
+
+        while self.running:
+            try:
+                user_input = self.prompt_session.prompt(
+                    self.get_prompt_text(),
+                    style=self.get_prompt_style()
+                )
+
+                if not user_input:
+                    continue
+
+                # Parse command
+                parts = user_input.split(maxsplit=1)
+                command = parts[0].lower().strip()
+                arg = parts[1].strip() if len(parts) > 1 else ""
+
+                if command in ["exit", "quit", "q"]:
+                    console.print("[yellow]Goodbye![/yellow]")
+                    self.running = False
+
+                elif command == "analyze":
+                    if arg:
+                        self.handle_analyze(arg)
+                    else:
+                        console.print("[yellow]Usage: analyze <ticket-id>[/yellow]")
+
+                elif command == "scan":
+                    self.handle_scan()
+
+                elif command == "report":
+                    self.handle_report()
+
+                elif command == "clear":
+                    self.conversation_history = []
+                    console.print("[yellow]對話已清空[/yellow]")
+
+                else:
+                    # Treat everything else as a question (no "ask" prefix needed)
+                    self.handle_ask(user_input)
+
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Use 'exit' to quit.[/yellow]")
+            except EOFError:
+                self.running = False
+
+
+def main():
+    """Entry point for prompt_toolkit interactive mode."""
+    agent = PromptToolkitInteractiveAgent()
+    agent.run()
+
+
+if __name__ == "__main__":
+    main()

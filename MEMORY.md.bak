@@ -1,0 +1,487 @@
+# MEMORY - Knowledge Index
+
+> Agent's accumulated knowledge index. Every memory is learned from actual operations.
+
+---
+
+## Index
+
+- [Repos](#repos) - Understanding of each repo's function and architecture
+- [Patterns](#patterns) - Common modification patterns and practices
+- [Gotchas](#gotchas) - Pitfalls and things to watch out for
+- [Questions](#questions) - Questions asked and answers received
+- [Jira](#jira) - Jira-related knowledge
+- [Agent Thinking](#agent-thinking) - How the agent analyzes and reasons
+
+---
+
+## Repos
+
+### Active Repos (with content)
+
+#### LIS-transformer-v2
+- **Purpose**: LIS frontend GraphQL API gateway integrating multiple backend microservices
+- **Tech Stack**: NestJS 11, TypeScript, Node.js 20, Prisma (dual databases)
+- **Port**: 3390 (GraphQL + REST at `/api`)
+- **Key Files**:
+  - `src/main.ts` - Bootstrap (port, middleware, Sentry)
+  - `src/app.module.ts` - Root module with GraphQL, modules
+  - `src/trans/` - Core LIS: orders, patients, settings, merchandise (~4000 lines)
+  - `src/calendar/` - Scheduling: Google, Outlook, Zoom integrations
+  - `src/questionnaire/` - Surveys and forms
+  - `src/setting/` - Provider/clinic settings, 2FA, Twilio phones
+  - `src/patientvariable/` - Patient variables for encounter notes
+  - `src/role/` - RBAC role management
+  - `src/vitals/` - Patient vital signs
+  - `prisma/schema.prisma` - Calendar DB (PostgreSQL)
+  - `prisma2/schema2.prisma` - Main LIS DB (MySQL)
+  - `protos/` - gRPC definitions (25 files)
+  - `protos2/` - gRPC definitions v2 (24 files)
+- **Databases**:
+  - PostgreSQL via `@prisma/client` (Calendar)
+  - MySQL via `@prisma/client2` (Main LIS)
+- **gRPC Services**: Core LIS, Core Samples V2, Test Results, Shipping, Dashboard, Issue System, Audit Log
+- **Infrastructure**: Redis (Azure with Managed Identity), Consul, Kafka, Sentry
+- **GraphQL**: Code-first with Apollo Server, JWT context
+- **Command**: `npm run start:dev` (run `npx prisma generate` for both schemas first)
+
+#### LIS-transformer
+- **Purpose**: NestJS backend service for LIS, REST (port 3190) + gRPC (port 3191)
+- **Tech Stack**: NestJS 10, TypeScript, Node.js 16, Prisma
+- **Key Files**:
+  - `src/main.ts` - Bootstrap (Express on :3190, gRPC on :3191, Swagger at `/api`)
+  - `src/trans/` - Core patient data transformation, timelines, tube mapping
+  - `src/setting/` - Clinic settings (account, billing, test ordering, PNS)
+  - `src/auth/` - JWT + Passport authentication
+  - `src/utility/` - CSV processing, Kafka consumers
+  - `prisma/schema.prisma` - Primary MySQL DB
+  - `prisma/calendar.prisma` - Calendar DB
+- **Services**: ~20 downstream microservices via gRPC
+- **Kafka**: Dual setup (local/cloud SASL, Azure connection string)
+- **PDF**: IronPDF with platform-specific engines
+- **Command**: `npm run start:dev`
+
+#### EMR-Backend
+- **Purpose**: Java-based EMR order parsing and processing
+- **Tech Stack**: Java 8, Maven 3.6.0, MyBatis ORM, gRPC
+- **Build**: `mvn package` generates `emr-0.0.1-SNAPSHOT-jar-with-dependencies.jar`
+- **Entry Point**: `com.vibrant.emr.EmrOrderTask.ParseOrder`
+- **Plugins**:
+  - `mybatis-generator` - Generates Mybatis ORM code (`com.vibrant.emr.entity`, `com.vibrant.emr.mapper`)
+  - `protobuf` - Generates gRPC code
+- **Key**: Run plugins manually before `mvn package`
+
+#### lis-backend-emr-v2
+- **Purpose**: Healthcare EMR System Backend with AutoIntegrate functionality
+- **Tech Stack**: NestJS, TypeScript, MySQL 8.0, Prisma, Apache Kafka, JWT
+- **Port**: 3000, Swagger at `/api/docs`
+- **Key Modules**:
+  - `ordering/` - Order management
+  - `result/` - Lab result management
+  - `hl7/` - HL7 encoding/decoding/validation
+  - `sftp/` - SFTP connections and file transfers
+  - `kafka/` - Event-driven messaging
+  - `integration-management/` - AutoIntegrate + Admin Portal
+  - `customer-portal/` - Independent customer portal (retransmission, dashboard)
+- **Database**: Prisma with MySQL 8.0
+- **Command**: `npm run start:dev` (run `npx prisma:generate` first)
+- **Approach**: TDD (Test-Driven Development)
+
+#### LIS-setting-consumer
+- **Purpose**: Kafka consumer microservice for LIS events, dispatches notifications via Bull/Redis
+- **Tech Stack**: NestJS 9.3, TypeScript 4.7, Node.js 16, Prisma (dual schemas)
+- **Port**: 6457
+- **Architecture**:
+  1. Kafka consumers (20+ topics) → Validate & enrich via gRPC
+  2. Bull queues (Redis Sentinel) → Async notification jobs
+  3. Bull processors → Email, SMS, push notifications
+- **Key Files**:
+  - `src/setting-consumer/setting-consumer.controller.ts` - Main Kafka consumer (~16K lines!)
+  - `src/setting-consumer/bull.consumer.ts` - 20+ Bull processors
+  - `prisma/schema.prisma` - Primary MySQL DB
+  - `prisma2/schema2.prisma` - Secondary MySQL (transactions/audit)
+  - `protos/` - gRPC definitions (23 proto files)
+- **Bull Queues**: notify_patient_pay, notify_customer_when_lab_issue, remindScheduleConcierge, pediatric_consent_notification_queue, etc.
+- **gRPC Services**: Core LIS, Issue Service, Audit Service
+- **Health**: `/health` endpoint + Kafka consumer monitoring cron (every 2 hours)
+- **Command**: `npx prisma generate` && `npx prisma generate --schema=prisma2/schema2.prisma` then `npm run start:dev`
+
+#### LIS-backend-v2-coreSamples
+- **Purpose**: Core laboratory samples, orders, customers, clinics management
+- **Tech Stack**: Go 1.19+, go-micro v4, Ent ORM, MySQL, Redis, Kafka
+- **Ports**: gRPC 8084, HTTP 8083
+- **Architecture**:
+  - `handler/` - HTTP/gRPC request handlers
+  - `service/` - Business logic
+  - `ent/schema/` - Database schema definitions
+  - `publisher/` - Kafka publishers
+  - `subscriber/` - Kafka consumers
+  - `tasks/` - Asynq background jobs
+  - `processor/` - Data transformation
+- **Key Services**: OrderService, CustomerService, PatientService, SpecimenService, RequiredTubeVolumeService
+- **Infrastructure**: Consul, Redis, Kafka, MySQL, Jaeger (tracing), Sentry
+- **Rate Limit**: 100 QPS
+- **Command**: `./dev.sh` (requires `make proto` && `make ent` first)
+- **Env**: `CORESAMPLES_ENV` (dev, staging, aks_staging, aks_production)
+
+### Empty/Placeholder Repos
+
+These repos appear to be empty or minimal:
+- **EHR-backend** - Contains only NestJS template README
+- **LIS-backend-billing** - Empty
+- **LIS-backend-coreSamples** - Empty
+- **LIS-backend-v2-order-management** - Empty
+- **Portal-Calendar** - Does not exist
+
+---
+
+## Patterns
+
+### NestJS Projects (LIS-transformer, LIS-transformer-v2, lis-backend-emr-v2, LIS-setting-consumer)
+- **Entry Point**: `src/main.ts` for bootstrap, middleware, Sentry
+- **Module Structure**: Controllers → Services → DTOs pattern
+- **Prisma**: Always run `npx prisma generate` after schema changes
+- **Dual Prisma**: Some projects use two schemas (generate both separately)
+- **gRPC**: Proto files in `protos/` directory, options in `src/grpc.option.ts`
+- **Testing**: Jest with co-located `*.spec.ts` files, E2E in `test/`
+- **Docker**: Multi-stage build (node builder → alpine runtime)
+
+### Java/Maven Projects (EMR-Backend)
+- **Build**: `mvn package`
+- **Plugins**: Run mybatis-generator and protobuf manually before build
+- **Entry Point**: Specified in pom.xml, run with `java -cp jar`
+
+### Go Projects (LIS-backend-v2-coreSamples)
+- **Code Gen**: `make proto` for protobuf, `make ent` for ORM
+- **Testing**: In-memory SQLite via `enttest`, mock Redis with `tempredis`
+- **Background Jobs**: Asynq for async tasks
+
+---
+
+## Gotchas
+
+#### TEST AUTO LEARNING
+- **Problem**: Test problem from auto-learning
+- **Solution**: Test solution from auto-learning
+
+### Prisma Dual Schema
+- **LIS-transformer-v2**: `prisma/` (PostgreSQL) and `prisma2/` (MySQL) - must generate both
+- **LIS-setting-consumer**: `prisma/` (primary) and `prisma2/` (transactions) - must generate both
+- Import client2 from custom path: `prisma2/generated/client2`
+
+### Kafka Consumer Groups
+- Consumer group IDs must match exactly between config and controller
+- Changes to consumer groups affect production message processing
+- LIS-setting-consumer has 20+ topics - critical infrastructure
+
+### Large Files
+- `LIS-transformer/src/trans/trans.service.ts` ~840KB (~4000 lines)
+- `LIS-transformer-v2/src/trans/trans.service.ts` ~4000 lines
+- `LIS-setting-consumer/src/setting-consumer/setting-consumer.controller.ts` ~16K lines
+
+### EMR Integration - Provider Name vs Clinic Name (CRITICAL)
+- **Ticket description**: Contains clinic/facility name (e.g., "Holistic Health Code")
+- **RPC call**: Returns provider personal name (e.g., "Megan Tantillo FNP-BC") + NPI
+- **order_clients.customer_name**: MUST be provider personal name from RPC, NOT clinic name
+- **order_clients.customer_practice_name**: IS the clinic name from ticket
+- **Wrong**: `customer_name = "Holistic Health Code"` ❌
+- **Correct**: `customer_name = "Megan Tantillo FNP-BC"` ✅
+- **How to fix**: Call `get-customer-rpc.ts` script to get real provider data before inserting
+- Read specific line ranges, not entire files
+
+### EMR Integration - MSH Value Detection (CRITICAL)
+- **Default**: `msh06_receiving_facility` = customer_id
+- **Exception**: When ticket EXPLICITLY says "MSH value is the Practice ID"
+- **Pattern to detect**: Look for these phrases in ticket description:
+  - "MSH value is the Practice ID"
+  - "MSH value is the practice ID"
+  - "msh value is the practice id"
+  - "update all MSH values to practice ID" ← **This indicates BULK UPDATE!**
+  - "use practice ID for MSH"
+- **Examples**:
+  - VP-15979: No MSH mention → msh06 = 18235 (customer_id) ✅
+  - VP-15791: Says "MSH value is the Practice ID" + "update ALL MSH values" → **BULK UPDATE all providers in clinic 127265** ✅
+- **Why this matters**: Missing this pattern causes incorrect MSH routing in HL7 messages
+- **How to fix**: Check ticket description for MSH patterns FIRST before deciding msh06_source
+
+### EMR Integration - BULK UPDATE Pattern (CRITICAL)
+- **When ticket says "update ALL MSH values"**: It means update ALL existing providers in the practice, not just the new one
+- **Pattern to detect**: "update **ALL** MSH values to practice ID" or "for **this practice**" + MSH pattern
+- **What to do**: Use `update-clinic-msh.ts` to update ALL records with `clinic_id = {Practice ID}`
+- **Example VP-15791**:
+  - Practice ID: 127265
+  - Found 3 records: 100212 (correct), 20665 (wrong), 20665 (wrong)
+  - Ran: `npx ts-node scripts/update-clinic-msh.ts --clinic-id=127265`
+  - Result: All 3 records now have msh06 = 127265 ✅
+- **Why this matters**: Some practices want ALL providers to use the same Practice ID for MSH routing
+
+### EMR Integration - Multi-Practice Provider Pattern (CRITICAL)
+- **When ticket has a table with Practice IDs and Provider IDs**: Same provider may appear under multiple practices
+- **Pattern to detect**: Table format with columns like "Practice ID", "Location", "Provider Name", "Provider ID"
+- **What it means**: Each (Provider, Practice) combination needs its OWN `ehr_integrations` record
+- **Example VP-15874**:
+  - Anna Emanuel (43262) appears in 3 practices: 2930, 8003, 36290
+  - This creates 3 separate ehr_integrations records for the SAME provider
+  - Each record has different clinic_id and msh06_receiving_facility
+- **Data structure**:
+  - `ehr_integrations`: customer_id=43262, clinic_id=2930, msh06=2930
+  - `ehr_integrations`: customer_id=43262, clinic_id=8003, msh06=8003
+  - `ehr_integrations`: customer_id=43262, clinic_id=36290, msh06=36290
+- **Why this matters**: One provider can work at multiple locations; each location needs its own integration record
+
+### TypeScript Strict Mode
+- Most projects have `strictNullChecks: false` and `noImplicitAny: false`
+- Don't introduce strict typing unless asked
+
+### Environment Variables
+- `NODE_ENV` vs `SERVER_ENVIRONMENT` vs `DEPLOY_ENVIRONMENT` vs `platform_type`
+- Check which project uses which convention
+
+### EMR Integration Tickets
+- **CRITICAL**: EMR integration/order/result tickets should primarily use **lis-backend-emr-v2** (NestJS v2)
+- **EMR-Backend** (Java) is the legacy system being migrated FROM
+- **Migration path**: EMR-Backend → lis-backend-emr-v2
+- For "no results received" or "integration check" tickets:
+  1. Check `lis_emr.ehr_integrations` table for practice/customer ID
+  2. If no row = no integration (root cause)
+  3. Practice ID queries use: `WHERE clinic_id = {ID} AND customer_id = -1`
+  4. Customer ID queries use: `WHERE customer_id = {ID}`
+- **ALWAYS use existing scripts in lis-backend-emr-v2/scripts/**:
+  - `scripts/insert-ehr-integration.ts` - for ehr_integrations table
+  - `scripts/insert-order-client.ts` - for order_clients table
+- **NEVER write raw SQL directly** - use these scripts instead
+
+### EMR Integration - Auto-Healing Execution
+
+**Agent Auto-Healing Capabilities:**
+- **ts-node not found** → Auto-install `npm install --save-dev ts-node`
+- **Missing dependencies** → Auto-run `npm install`
+- **TypeScript compile errors** → Retry with `--transpile-only` flag
+- **Database state checking** → Use `scripts/check-db-state.ts` before updates
+- **Smart table updates** → Only update tables that need changes (ehr_integrations, order_clients, sftp_folder_mapping)
+
+**Execution Flow:**
+1. Check database state first (is record PENDING or missing?)
+2. Use `npx ts-node` instead of `npm run` for direct script execution
+3. Auto-heal common errors before giving up
+4. Report actions taken (e.g., "Installed ts-node, Used transpile-only mode")
+
+**getCustomer RPC Integration:**
+- For real customer data, call gRPC service at `192.168.60.6:30276`
+- **Script**: `scripts/get-customer-rpc.ts` - returns JSON with customer data
+- Extract: customer_first_name, customer_last_name, customer_middle_name, customer_suffix, customer_npi_number
+- **CRITICAL**: Provider personal name (e.g., "Megan Tantillo FNP-BC") comes from RPC, NOT from ticket
+- **CRITICAL**: Ticket only contains clinic name (e.g., "Holistic Health Code"), not provider personal name
+- Build full provider name: `{first} {middle} {last} {suffix}` → "Megan Tantillo FNP-BC"
+- For order_clients: Use `customer_lastname = f"{last} {suffix}"` so `customer_name` becomes "Megan Tantillo FNP-BC"
+- Fallback to parsing from ticket description if RPC fails
+
+### EMR Integration - Correct Field Mappings
+
+**ehr_integrations table (via insert-ehr-integration.ts):**
+```
+Required params:
+- customer-firstname, customer-lastname, npi, clinic-name, clinic-id, customer-id, emr-name, folder, ticket-number, integration-type, msh06
+
+Auto-generated/hardcoded:
+- id → CUID auto-generated
+- ehr_vendor_id → lookup from ehr_vendors table by emr_name
+- integration_origin → "NEW_INTEGRATION"
+- priority → "NORMAL"
+- status → "LIVE"
+- contact_name → "Leo"
+- contact_email → "hung.l@zymebalanz.com"
+- ordering_enabled → 1 if FULL_INTEGRATION/ORDER_ONLY, else 0
+- result_enabled → 1 if FULL_INTEGRATION/RESULT_ONLY, else 0
+- sftp_enabled → 1
+- api_enabled → 1 if ehr_vendor_id=7 (CHARMEHR), else 0
+- legacy_result_send_type → HTTP if ehr_vendor_id=7, else SFTP
+- hl7_version → "2.3"
+- msh06_receiving_facility → msh06 param (required)
+- sftp_host/port → lookup from ehr_vendors table
+- sftp_result_path → MDHQ: /{folder}/results/, others: copy from existing same emr_name
+- sftp_archive_path → MDHQ: /{folder}/results/archive, others: blank
+- report_option → lookup existing same clinic_id, else PERSONALIZED
+- kit_delivery_option → "NO_DELIVERY"
+- legacy_emr_service → from ehr_vendors lookup
+- use_vendor_sftp_config → 1
+
+**order_clients table (via insert-order-client.ts):**
+```
+Required:
+- customer-firstname, customer-lastname, npi, clinic-name, clinic-id, emr-name, folder
+
+Key logic:
+- Duplicate check: NPI + clinic_id → error if exists
+- remote_folder_path: cerbo/mdhq → /{folder}/orders/, others → lookup existing same emr_name or blank
+- For MDHQ: also handles sftp_folder_mapping table
+```
+
+---
+
+## Questions
+
+### Q: Ticket VP-15979 conversation
+> **A**: Ticket: VP-15979
+Summary: New EMR Integration - Cerbo - Practice ID: 131492
+Analysis: {'ticket': JiraTicket(key='VP-15979', summary='New EMR Integration - Cerbo - Practice ID: 131492', description='Name:\xa0 Holistic Health Code Provider ID:\xa0 18235 Practice ID:\xa0 131492 Please set Practice ID as the MSH. EMR Vendor:  Cerbo Folder path:  myhhc', status='Dev In Progress', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Kristine Legaspi', labels=[], components=[], attachments=[]), 'repos': ['LIS-backend-emr-v2', 'EMR-Backend'], 'files': {'LIS-backend-emr-v2': ['adapters/rpc/getCustomer.proto', 'adapters/rpc/customer_controller.py', 'adapters/outbound/cerbo_client.py', 'config/settings.py'], 'EMR-Backend': ['src/main/java/com/emr/cerbo/CerboService.java', 'src/main/resources/application.properties']}, 'change_type': 'feature', 'confidence': 'high', 'reasoning': "根據 PAST FEEDBACK 的規則，這是一個典型的 'New EMR Integration' ticket。主要任務是在資料庫中建立新的整合設定（order_clients, sftp_folder_mapping, ehr_integrations）。\n\n1. **資料庫確認與設定 (關鍵步驟)**: Ticket 提供了 Provider ID (18235) 和 Practice ID (131492)，以及 Folder path (myhhc)。這些資訊必須被加入到 `lis_emr` schema 的相關表中。由於無法直接連接資料庫，需要檢查 `LIS-backend-emr-v2` 是否有支援此 Vendor (Cerbo) 和邏輯。\n\n2. **LIS-backend-emr-v2**: 這是主要的 EMR 整合後端，負責處理 Order 和 Result 的發送與接收。需要確認是否有 Cerbo 的 adapter（如 `cerbo_client.py`），或者需要新增對應的 client 代碼來處理 MSH.3 設定為 Practice ID 的需求。\n\n3. **EMR-Backend**: Feedback 指出此 Repo 與 `lis-backend-emr-v2` 有功能重疊或正在遷移中。雖然主要維護目標是 v2，但在部分整合案例中仍需參考或修改此 Repo，特別是當涉及到特定的 HL7 處理或 Cerbo 特有的邏輯時。需檢查是否已有 Cerbo 的 Java Service。\n\n結論：這主要是資料庫設定工作，但程式碼層面需確認 LIS-backend-emr-v2 是否具備處理 Cerbo 整合（包含 MSH segment 處理）的能力，如果沒有則需新增相關代碼。"}
+
+### Q: Ticket analysis for VP-15979
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15979', summary='New EMR Integration - Cerbo - Practice ID: 131492', description='Name:\xa0 Holistic Health Code Provider ID:\xa0 18235 Practice ID:\xa0 131492 Please set Practice ID as the MSH. EMR Vendor:  Cerbo Folder path:  myhhc', status='Dev In Progress', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Kristine Legaspi', labels=[], components=[], attachments=[]), 'repos': ['EMR-Backend', 'lis-backend-emr-v2'], 'files': {'EMR-Backend': ['Unknown/Controller/OrderController.java', 'Unknown/Service/OrderService.java'], 'lis-backend-emr-v2': ['src/routes/emr/v2.py', 'src/services/order_integration_service.py']}, 'change_type': 'feature', 'confidence': 'medium', 'reasoning': '根據 Past Feedback 中的規則，New EMR Integration 主要涉及資料庫資料的新增與配置，且核心問題在於 EMR-Backend 與 lis-backend-emr-v2 的連結。此類 Ticket 通常需要修改 EMR-Backend (Java) 以處理來源端，並修改 lis-backend-emr-v2 (Python) 以處理 HL7 與路由。由於我目前對具體的資料庫表 (order_clients, sftp_folder_mapping, ehr_integrations) 是否已包含此 Provider ID (18235) 或 Practice ID (131492) 尚未確認，以及資料夾路徑 myhhc 的對應關係未明，因此列出了可能的路由與服務文件，置信度為 Medium。'}
+Feedback: No, 這不需要修改code,只需要確認database
+
+### Q: Ticket analysis for VP-15979
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15979', summary='New EMR Integration - Cerbo - Practice ID: 131492', description='Name:\xa0 Holistic Health Code Provider ID:\xa0 18235 Practice ID:\xa0 131492 Please set Practice ID as the MSH. EMR Vendor:  Cerbo Folder path:  myhhc', status='Dev In Progress', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Kristine Legaspi', labels=[], components=[], attachments=[]), 'repos': ['LIS-transformer-v2'], 'files': {'LIS-transformer-v2': ['src/hl7/parser.ts', 'src/hl7/mapper.ts', 'src/modules/config/emr-config.service.ts']}, 'change_type': 'feature', 'confidence': 'medium', 'reasoning': "根據票據資訊 (VP-15979)，這是一個新的 EMR 整合任務。根據 Past Feedback 的記錄，關於 EMR Integration 的任務，過去曾經在分析時誤判了涉及 'EMR-Backend'，但實際上核心問題是在於 'lis-backend-emr-v2'。然而，這次可用的 Repositories 列表中並沒有 'lis-backend-emr-v2'，而是有 'LIS-transformer-v2'。\n\n由於票據描述明確提到了 EMR Vendor (Cerbo)、Folder path (myhhc) 以及 Practice ID (131492)，這通常意味著需要設定新的路由規則或檔案映射。在沒有 'lis-backend-emr-v2' 的情況下，'LIS-transformer-v2' 作為 HL7 轉換的 API Gateway，是負責處理進入訊息路由最有可能的候選者。\n\n主要變更應該包含：\n1. 新增 Cerbo 的特定設定或路由邏輯。\n2. 設定 MSH (Message Header) 的處理規則，因為票據要求將 Practice ID 設為 MSH。\n3. 對應 Folder path 'myhhc' 到具體的處理邏輯。\n\n**注意**: 由於沒有 'lis-backend-emr-v2' 或 'LIS-setting-consumer' (根據 feedback，新的 integration request 涉及資料庫操作)，無法進行完整的資料庫整合設定 (order_clients, sftp_folder_mapping, ehr_integrations)。如果可能，應向 Leo 確認是否遺漏了這些關鍵 Repositories。"}
+Feedback: 這個還是關於integration request,確實是和order_clients, sftp_folder_mapping, ehr_integrations表有關。但是也是跟lis-backend-emr-v2，EMR-Backend有關。未來遇到這種問題。請先到jdbc:mysql://lisportalprod2.mysql.database.azure.com:3306 的lis_emr schema確認這些資料有沒有存在(請仔細scan EMR-Backend 和 lis-backend-emr-v2看看order/result是如何操作的。並確認ticket裡面的customer有沒有能夠透過這兩個repo發request和收result)如果不存在，則需要拿這個provider_id 到192.168.60.6:30276的getCustomer rpc 用這個customer_id 拿到資料並且在結論告訴我這些資訊
+
+### Q: Ticket analysis for VP-15980
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15980', summary='New EMR Integration - Cerbo - provider ID: 46492 practice ID: 150017 Cerbo ID: C3825', description='Issue :  can you help to set up the new integration for cerbo please?  They would like to have a Bidirectional Integration Cerbo ID: C3825  Provider ID: 46492  Practice ID: 150017   Description : including additional info as a screenshot from cerbo support as to not miss any info.  ', status='Dev To Do', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Jennifer Poon', labels=['jira_escalated'], components=[], attachments=[{'id': '48693', 'filename': 'image-20260406-180204.png', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48693', 'size': 465789, 'mimeType': 'image/png'}]), 'repos': ['lis-backend-emr-v2', 'EMR-Backend'], 'files': {'lis-backend-emr-v2': ['src/app/main.py', 'src/core/config.py', 'src/services/cerbo_integration.py', 'src/models/configuration.py'], 'EMR-Backend': ['src/main/java/com/emr/integration/CerboIntegration.java', 'src/main/resources/application.properties']}, 'change_type': 'feature', 'confidence': 'medium', 'reasoning': '根據 Feedback，EMR order/result 相關任務主要涉及 **lis-backend-emr-v2** (新架構) 和 **EMR-Backend** (舊架構/Java)。\n\n1. **lis-backend-emr-v2**: 這是新 EMR 整合的主要 Repo。任務要求建立新的 Cerbo 雙向整合。\n   - **Config**: 需要新增 Provider ID (46492), Practice ID (150017), Cerbo ID (C3825) 到設定檔。\n   - **Service**: 需建立或修改 Cerbo 專用的整合服務 (如 `cerbo_integration.py`)。\n   - **Main/Config**: 註冊新的整合路由或服務。\n\n2. **EMR-Backend**: 既然是「新整合」，可能需要參考現有的 Java 實作，或者在雙系統並行期需要同步設定。\n   - Java 端可能需要對應的 Integration class 或 properties 更新。\n\n Confidence 為 medium，因為不確定目前程式碼庫中是否已存在 Cerbo 的部分實作，或者是否完全從頭開始。'}
+Feedback: No, 像是這種new integration request, 主要是要往資料庫加資料.包含order_clients, sftp_folder_mapping, ehr_integrations. 需要檢查有沒有符合條件的資料。如果沒有的話要往裡面加。
+
+### Q: Ticket analysis for VP-15941
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15941', summary='check EMR integration for practice ID: 5144 - Charm', description='Issue :  can you help check to see is there existing integration for Charm and practice ID: 5144 please?  They noted they aren’t receiving any emr reports. example accession ID:  2603237136  Description : when checking the database it appears that it is being pushed to Charm.   ', status='Dev In Progress', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Jennifer Poon', labels=['jira_escalated'], components=[], attachments=[{'id': '48329', 'filename': 'image-20260401-232053.png', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48329', 'size': 67264, 'mimeType': 'image/png'}, {'id': '48328', 'filename': 'image-20260401-232105.png', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48328', 'size': 55916, 'mimeType': 'image/png'}]), 'repos': ['EMR-Backend'], 'files': {'EMR-Backend': ['src/main/java/com/lis/integration/service/EmrPushService.java', 'src/main/resources/application.properties', 'src/main/java/com/lis/integration/repository/PracticeRepository.java']}, 'change_type': 'bugfix', 'confidence': 'medium', 'reasoning': "根據 Ticket 描述，問題是特定 Practice ID (Charm - 5144) 沒有收到 EMR 報告，但資料庫顯示有 Push 記錄。這意味著問題可能出在 EMR-Backend 中的發送邏輯（EmrPushService）、該 Practice 的配置設定，或者是目標 EMR 系統的接收端點配置。由於涉及 'EMR integration' 檢查且是 Java 後端專案，主要排查對象為 EMR-Backend。LIS-transformer-v2 和 LIS-setting-consumer 雖然在可用清單中，但負責轉換與設定消費，若資料庫已記錄為 Pushed，問題多半在 EMR 發送層。"}
+Feedback: no, please check your **Gotchas** 和 **Ticket 處理流程*
+
+### Q: Ticket analysis for VP-15941
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15941', summary='check EMR integration for practice ID: 5144 - Charm', description='Issue :  can you help check to see is there existing integration for Charm and practice ID: 5144 please?  They noted they aren’t receiving any emr reports. example accession ID:  2603237136  Description : when checking the database it appears that it is being pushed to Charm.   ', status='Dev In Progress', issue_type='Task', priority='P2 - Medium', assignee='Hung-Fan Lin', reporter='Jennifer Poon', labels=['jira_escalated'], components=[], attachments=[{'id': '48329', 'filename': 'image-20260401-232053.png', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48329', 'size': 67264, 'mimeType': 'image/png'}, {'id': '48328', 'filename': 'image-20260401-232105.png', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48328', 'size': 55916, 'mimeType': 'image/png'}]), 'repos': ['LIS-transformer-v2', 'LIS-setting-consumer', 'EMR-Backend'], 'files': {}, 'change_type': 'feature', 'confidence': 'low', 'reasoning': "Analysis failed: Expecting ',' delimiter: line 25 column 542 (char 1250)"}
+Feedback: No, 正確的是lis-emr-backend-v2誒, 因為這個是 EMR integration,然後問題在於沒有收到result
+
+### Q: Ticket analysis for VP-15948
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15948', summary='Repush Charm results', description='Charm is unable to pull the results from the URL. Please repush results from Dec 1, 2025 _ As per the HTTPS communication mode, we need to push lab results to our URL. Once they receive the result, Charm will return an ACK message. In case of any failure or error, they will return a NACK message.  Please share response, Charm will analyze and get back with results. To send lab results, please refer to the attached document: “ChARM EHR Lab Result Interface Connectivity.pdf” If Charm receive an invalid Authorization header, they will return the following response: HTTP Status Code:  401 Response: {\n    "code": 14,\n    "message": "Invalid Ticket"\n}  ', status='Dev To Do', issue_type='Task', priority='P0 - Highest', assignee='Hung-Fan Lin', reporter='Kristine Legaspi', labels=[], components=[], attachments=[{'id': '48409', 'filename': 'ChARM EHR Lab Result Interface Connectivity.pdf', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48409', 'size': 174602, 'mimeType': 'application/pdf'}]), 'repos': ['LIS-setting-consumer'], 'files': {'LIS-setting-consumer': ['src/modules/charm/charm.service.ts', 'src/modules/charm/charm.controller.ts', 'src/modules/charm/dto/charm-result.dto.ts', 'src/modules/charm/interfaces/charm.interface.ts']}, 'change_type': 'feature', 'confidence': 'high', 'reasoning': '根據 Ticket 描述，此任務要求實現將 2025 年 12 月 1 日的檢驗結果重新推送至 ChARM 系統的邏輯。\n\n1. **選擇 LIS-setting-consumer 的原因**：該專案是一個基於 NestJS 的微服務，負責處理與患者樣本、檢驗結果相關的事件。Ticket 中明確提到需要通過 HTTPS 通信模式將 Lab Results 推送到 ChARM 的 URL，這屬於典型的外部系統集成功能，適合由事件驅動的消費者服務來處理。\n\n2. **具體實作內容**：需要新增或修改發送 HTTP 請求的邏輯，處理 ACK/NACK 響應，並實現針對特定日期（2025-12-01）結果的篩選與重推機制。LIS-transformer-v2 雖然是 API Gateway，但具體的業務邏輯實作（如數據抓取與外部推送）通常在下游服務（如 LIS-setting-consumer）中完成。\n\n3. **變更類型**：由於是添加新的結果推送功能或修復推送失敗的問題，歸類為 feature 或 bugfix（視現有代碼是否已存在該邏輯而定），這裡傾向於 feature（實現重推邏輯）。'}
+Feedback: No, this is regarding EMR-Backend and lis-backend-emr-v2
+
+### Q: Ticket analysis for VP-15948
+> **A**: Analysis: {'ticket': JiraTicket(key='VP-15948', summary='Repush Charm results', description='Charm is unable to pull the results from the URL. Please repush results from Dec 1, 2025 _ As per the HTTPS communication mode, we need to push lab results to our URL. Once they receive the result, Charm will return an ACK message. In case of any failure or error, they will return a NACK message.  Please share response, Charm will analyze and get back with results. To send lab results, please refer to the attached document: “ChARM EHR Lab Result Interface Connectivity.pdf” If Charm receive an invalid Authorization header, they will return the following response: HTTP Status Code:  401 Response: {\n    "code": 14,\n    "message": "Invalid Ticket"\n}  ', status='Dev To Do', issue_type='Task', priority='P0 - Highest', assignee='Hung-Fan Lin', reporter='Kristine Legaspi', labels=[], components=[], attachments=[{'id': '48409', 'filename': 'ChARM EHR Lab Result Interface Connectivity.pdf', 'content': 'https://vibrantamerica.atlassian.net/rest/api/3/attachment/content/48409', 'size': 174602, 'mimeType': 'application/pdf'}]), 'repos': ['LIS-setting-consumer', 'LIS-transformer-v2'], 'files': {'LIS-setting-consumer': ['src/charm/charm.service.ts', 'src/charm/charm.controller.ts'], 'LIS-transformer-v2': ['src/charm/charm.module.ts', 'src/charm/charm.service.ts']}, 'change_type': 'bugfix', 'confidence': 'medium', 'reasoning': '根據 Ticket VP-15948 的描述，這是一個關於 Charm EHR 系統無法接收實驗室結果的問題，需要重新推送 2025 年 12 月 1 日的結果。描述中提到了 HTTPS 通訊模式、Authorization header (401 錯誤) 以及 ACK/NACK 訊息處理，這通常涉及系統整合層的邏輯。\n\n在可用的 Repository 中：\n\n1.  **LIS-setting-consumer**：雖然標註為 Python (readme)，但其路徑顯示是 TypeScript/JavaScript 專案，且作為消費 Kafka 訊息的微服務，極有可能負責將實驗室結果轉發給外部系統（如 Charm EHR）。該服務可能包含觸發推送的邏輯。\n\n2.  **LIS-transformer-v2**：作為 GraphQL API 閘道且整合後端微服務，它可能包含轉換數據格式或與 Charm 介面對接的 Service/Module。如果是 NestJS 架構，通常會在特定目錄下處理外部 API 請求。\n\n由於問題包含「推送結果」和「處理 HTTP 401/ACK/NACK」，這暗示需要修改處理外部通訊邏輯的檔案（如 charm.service.ts）。雖然可以推測這兩個 Repo 最有可能涉及，但確切的檔案結構（如是否真的存在 `src/charm` 目錄）需進一步確認，因此信心度為 Medium。'}
+Feedback: 這個分析是錯誤的。首先，背景知識是我們想要從EMR-Backend migrate到lis-backend-emr-v2,但是好像缺了一部份，請你嘗試比較這兩者的功能，和閱讀下載的pdf,並且分析問題出在哪裡。另外，emr order/result 大多數的狀況都是和這兩個repo有關。這點請你記錄下來，並告訴我你是怎麼記錄的。為什麼未來不會犯這個錯
+
+### Q: 1. 回答的時候請用中文 2. 這個pdf檔案是attatch 在ticket裡面的
+> **A**: Q: 1. 回答的時候請用中文 2. 這個pdf檔案是attatch 在ticket裡面的
+A: 我已經了解您的指示：
+
+1.  **語言設定**：之後的回答將會使用**繁體中文**。
+2.  **PDF 檔案確認**：我知道這個 PDF 檔案是附在 Ticket 中的附件。
+
+不過，目前的對話訊息中似乎**沒有包含這個 PDF 檔案的實際內容**（系統可能沒有成功上傳，或者我需要您提供檔案）。
+
+**請問您現在需要我對這個 PDF 做什麼？**
+
+如果是要我根據 PDF 內容進行程式開發或分析，請您：
+1.  **重新上傳或提供 PDF 內容**。
+2.  告訴我**這張 Ticket 的具體需求**是什麼（例如：是要實作新功能、修復 Bug，還是分析文件？）。
+
+一旦您提供 PDF，我可以根據上述 Knowledge Index 中的架構，幫您找出需要修改的 Repo 和檔案。
+
+### Q: How to determine which repo to modify for a ticket?
+> **A**:
+> 1. Check ticket project key (LIS, EMR, etc.)
+> 2. Check ticket keywords:
+>    - "calendar", "schedule", "appointment" → LIS-transformer-v2 calendar module
+>    - "HL7", "transform" → LIS-transformer
+>    - "order", "sample", "patient" → LIS-backend-v2-coreSamples
+>    - "notification", "email", "SMS" → LIS-setting-consumer
+>    - "EMR", "AutoIntegrate" → lis-backend-emr-v2
+> 3. Search relevant files in identified repos
+
+### Q: What to do when Prisma schema changes?
+> **A**:
+> 1. Run `npx prisma generate` for default schema
+> 2. If project has dual schemas, also run `npx prisma generate --schema=prisma2/schema2.prisma`
+> 3. Restart the dev server
+
+---
+
+## Jira
+
+### Project Keys
+- **LIS** - LIS related projects (transformer, samples, billing, etc.)
+- **EMR** - EMR related projects
+
+### Custom Fields
+- `customfield_10000` - Sprint
+
+---
+
+## Agent Capabilities
+
+### Verification & Self-Healing
+The agent now has built-in verification and self-healing capabilities:
+- **Post-execution verification**: After running scripts, agent queries database to confirm records were actually created
+- **Automatic ID mapping**: Correctly uses `provider_id` (not `practice_id`) for `order_clients.customer_id`
+- **Learning from errors**: Verification errors are logged to `memory/verification_errors.md`
+- **Script auto-fixing**: Can detect and fix common SQL errors (e.g., non-existent columns)
+
+### ID Mapping for EMR Integration Tickets
+- **ehr_integrations table**: `customer_id` = `provider_id` (from ticket)
+- **order_clients table**: `customer_id` = `provider_id` (NOT practice_id!)
+- **Ticket fields**:
+  - Provider ID: The actual customer/provider ID (use for database lookups)
+  - Practice ID: The clinic/facility ID (use for clinic_id field, MSH.6)
+
+### Vendor Name Mapping
+Common names to database codes:
+- "cerbo" → "MDHQ"
+- "mdhq" → "MDHQ"
+- "charm" → "CHARMEHR"
+- "eclinical" → "ECW"
+- "athena" → "ATHENA"
+
+---
+
+## Ticket → Repo Mapping Guide
+
+| Ticket Keywords | Likely Repo | Module/Path |
+|----------------|-------------|-------------|
+| calendar, schedule, appointment, Google, Outlook, Zoom | LIS-transformer-v2 | `src/calendar/` |
+| GraphQL, patient order, merchandise, PNS, setting | LIS-transformer-v2 | `src/trans/` |
+| questionnaire, survey, form | LIS-transformer-v2 | `src/questionnaire/` |
+| provider setting, 2FA, Twilio, email branding | LIS-transformer-v2 | `src/setting/` |
+| patient variable, encounter note | LIS-transformer-v2 | `src/patientvariable/` |
+| role, permission, RBAC | LIS-transformer-v2 | `src/role/` |
+| vital sign, BMI | LIS-transformer-v2 | `src/vitals/` |
+| HL7, transformation | LIS-transformer | `src/trans/` |
+| clinic setting, billing, test ordering | LIS-transformer | `src/setting/` |
+| EMR order, AutoIntegrate | lis-backend-emr-v2 | `src/modules/integration-management/` |
+| sample, order, patient (core) | LIS-backend-v2-coreSamples | `service/` |
+| notification, email, SMS, push | LIS-setting-consumer | `src/setting-consumer/` |
+| result ready, shipment, kit, billing | LIS-setting-consumer | Kafka topics |
+| Java, gRPC proto | EMR-Backend | `com.vibrant.emr.*` |
+
+---
+
+## Agent Thinking
+
+### LLM-Driven Analysis (Think Before Act)
+
+The agent uses LLM to analyze tickets BEFORE taking action:
+
+**Analysis Process:**
+1. **Extract** all information from ticket description
+2. **Identify** what data is MISSING (e.g., provider personal name, NPI)
+3. **Determine** HOW to get missing data (e.g., call gRPC service)
+4. **Plan** the execution steps
+
+**Output Format:**
+- `reasoning`: Step-by-step explanation of the analysis
+- `extracted`: Structured data extracted from ticket
+- `missing`: List of data that needs to be fetched
+- `actions`: Planned steps to execute
+- `grpc_needed`: Boolean flag for whether gRPC call is required
+
+**Example Reasoning Output:**
+```
+🧠 REASONING:
+1. Analyze Ticket VP-15979: The ticket provides Provider ID (18235), Clinic Name ('Holistic Health Code')
+2. Data Gap Analysis: Ticket 'Name' is Clinic name, but order_clients needs Provider personal name
+3. Solution Strategy: Call gRPC CustomerService.GetCustomer at 192.168.60.6:30276
+4. Execution Plan: Get provider data from RPC, then insert into ehr_integrations and order_clients
+```
+
+**Key Principle:**
+- Agent **reads SOUL.md** for business rules
+- Agent **figures out** what to do dynamically
+- Agent **shows its reasoning** before executing
+- No hardcoded solutions - adapt to any situation
+
+---
+
+*This file grows with every interaction. Last Updated: 2026-04-07*

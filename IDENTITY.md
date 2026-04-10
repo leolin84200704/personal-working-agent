@@ -57,7 +57,14 @@ I am a maintenance and development Agent for LIS (Laboratory Information System)
 - Scan repo README/docs to understand functionality
 - Learn modification patterns from commit history
 - Update memory from user feedback
+- **Auto-discover configuration** from repos (DB, gRPC, API credentials)
 - Proactively ask questions and iterate
+
+### Auto-Discovery
+I can automatically find and use credentials from your repos:
+- Scans `application.properties`, `application.yml`, `.env`, `k8s/*.yaml`
+- Extracts database connections, gRPC endpoints, API keys
+- No need to duplicate config in `.env` files
 
 ---
 

@@ -182,10 +182,14 @@ class MemoryManager:
         if "## Gotchas" not in memory:
             memory += "\n\n## Gotchas\n"
 
-        entry = f"\n### {repo}\n- **Problem**: {gotcha}\n- **Solution**: {solution}\n"
+        entry = f"\n#### {repo}\n- **Problem**: {gotcha}\n- **Solution**: {solution}\n"
 
-        if "### Common Errors" in memory:
-            memory = memory.replace("### Common Errors", f"### Common Errors{entry}")
+        # Insert after "## Gotchas" header
+        if "## Gotchas\n" in memory:
+            memory = memory.replace("## Gotchas\n", f"## Gotchas\n{entry}")
+        else:
+            # Append to end
+            memory += entry
 
         self.memory_path.write_text(memory, encoding="utf-8")
 
@@ -203,6 +207,9 @@ class MemoryManager:
         memory = memory.replace("## Questions\n", f"## Questions\n{entry}")
 
         self.memory_path.write_text(memory, encoding="utf-8")
+
+        # Also try to extract patterns from feedback and update Gotchas
+        self._extract_and_learn_patterns(question, answer)
 
     def update_repo_knowledge(self, repo: str, key: str, value: str):
         """Update knowledge about a specific repo in MEMORY.md."""
@@ -277,6 +284,51 @@ class MemoryManager:
                 context.append(memory[idx:end_idx])
 
         return "\n".join(context)
+
+    def _extract_and_learn_patterns(self, question: str, answer: str):
+        """Extract patterns from feedback and add to Gotchas."""
+        combined = f"{question} {answer}".lower()
+
+        # Pattern 1: EMR integration tickets should use lis-emr-backend-v2
+        if "emr" in combined and "integration" in combined and "lis-emr-backend-v2" in combined:
+            self._add_to_gotchas(
+                repo="EMR Tickets",
+                problem="EMR integration/order/result tickets often get assigned to wrong repos",
+                solution="EMR integration/order/result tickets should primarily use: **lis-emr-backend-v2** (NestJS v2). EMR-Backend (Java) is the legacy system being migrated from."
+            )
+
+        # Pattern 2: Migration context
+        if "migrate" in combined or "migration" in combined:
+            if "emr-backend" in combined and "lis-backend-emr-v2" in combined:
+                self._add_to_gotchas(
+                    repo="Migration Context",
+                    problem="Confusion between old and new EMR systems",
+                    solution="**Migration in progress**: EMR-Backend (Java, legacy) → lis-backend-emr-v2 (NestJS, current). Always prefer lis-backend-emr-v2 for new work."
+                )
+
+    def _add_to_gotchas(self, repo: str, problem: str, solution: str):
+        """Add an entry to the Gotchas section, avoiding duplicates."""
+        memory = self.read_memory()
+
+        # Check if Gotchas section exists
+        if "## Gotchas" not in memory:
+            memory += "\n\n## Gotchas\n\n"
+
+        # Create the entry
+        entry = f"\n#### {repo}\n- **Problem**: {problem}\n- **Solution**: {solution}\n"
+
+        # Avoid duplicates - check if this exact entry exists
+        if problem in memory and solution in memory:
+            return  # Already exists
+
+        # Add entry after Gotchas header
+        gotchas_idx = memory.find("## Gotchas")
+        if gotchas_idx != -1:
+            # Find end of header (next newline after ## Gotchas)
+            insert_idx = memory.find("\n", gotchas_idx) + 1
+            memory = memory[:insert_idx] + entry + memory[insert_idx:]
+
+        self.memory_path.write_text(memory, encoding="utf-8")
 
 
 # Singleton instance

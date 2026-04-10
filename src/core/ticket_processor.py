@@ -12,10 +12,12 @@ Orchestrates:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Literal
 
+import mysql.connector
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
@@ -62,6 +64,9 @@ class TicketProcessor:
 
         # Discover repos
         self.repos = {r.name: r for r in find_git_repos(self.repos_base_path)}
+
+        # Auto-discover credentials from repos
+        self.credential_cache = {}
 
     def scan_tickets(self, limit: int = 10) -> list[JiraTicket]:
         """
@@ -129,6 +134,95 @@ class TicketProcessor:
                 "reason": "No matching repos found",
             }
 
+        # Get past feedback from memory
+        past_feedback = self._get_relevant_feedback(ticket)
+
+        # Check if this is an EMR integration ticket - if so, query database
+        db_check_info = ""
+        is_emr_ticket = (
+            "emr" in ticket.summary.lower() or
+            "emr" in ticket.description.lower() or
+            "integration" in ticket.summary.lower() or
+            "cerbo" in ticket.summary.lower() or
+            "charm" in ticket.summary.lower()
+        )
+
+        if is_emr_ticket:
+            print("  Checking EMR integration database (auto-discovering credentials)...")
+            db_result = self._check_emr_integration_db(ticket)
+
+            db_check_info = "\n\n## Database Check Results (Auto-discovered)\n"
+
+            if db_result.get("error"):
+                db_check_info += f"- **Status**: ❌ Could not connect to database\n"
+                db_check_info += f"- **Error**: {db_result['error']}\n"
+                if db_result.get("suggestion"):
+                    db_check_info += f"- **Suggestion**: {db_result['suggestion']}\n"
+                if db_result.get("db_config_used"):
+                    db_check_info += f"- **Tried config**: {db_result['db_config_used']}\n"
+            else:
+                db_check_info += f"- **Status**: ✅ Connected (credentials auto-discovered from repo)\n"
+                db_check_info += f"- **Provider ID**: {db_result.get('provider_id', 'N/A')}\n"
+                db_check_info += f"- **Practice ID**: {db_result.get('practice_id', 'N/A')}\n"
+                db_check_info += f"- **Customer ID**: {db_result.get('customer_id', 'N/A')}\n\n"
+
+                # ehr_integrations check
+                if db_result.get("ehr_integrations"):
+                    rows = db_result['ehr_integrations']
+                    db_check_info += f"- **ehr_integrations**: Found {len(rows)} row(s)\n"
+
+                    # Check status and provide specific guidance
+                    for row in rows:
+                        status = row.get('status', 'UNKNOWN')
+                        if status == 'PENDING':
+                            db_check_info += f"  ⚠️ Status: {status} - NEEDS UPDATE TO LIVE\n"
+                            db_check_info += f"  Action: UPDATE status, updated_at, enable flags (ordering_enabled=1, result_enabled=1, sftp_enabled=1)\n"
+                        elif status in ['ACTIVE', 'LIVE', 'ENABLED']:
+                            db_check_info += f"  ✅ Status: {status}\n"
+                        else:
+                            db_check_info += f"  ℹ️ Status: {status}\n"
+
+                        # Show if ordering/result/sftp are disabled
+                        if not row.get('ordering_enabled'):
+                            db_check_info += f"  ⚠️ ordering_enabled=0 (disabled)\n"
+                        if not row.get('result_enabled'):
+                            db_check_info += f"  ⚠️ result_enabled=0 (disabled)\n"
+                        if not row.get('sftp_enabled'):
+                            db_check_info += f"  ⚠️ sftp_enabled=0 (disabled)\n"
+                else:
+                    db_check_info += "- **ehr_integrations**: NO DATA FOUND (integration not set up)\n"
+
+                # order_clients check
+                if db_result.get("order_clients"):
+                    db_check_info += f"- **order_clients**: Found {len(db_result['order_clients'])} row(s)\n"
+                else:
+                    db_check_info += "- **order_clients**: NO DATA FOUND\n"
+
+                # sftp_folder_mapping
+                if db_result.get("sftp_folder_mapping"):
+                    db_check_info += f"- **sftp_folder_mapping**: {len(db_result['sftp_folder_mapping'])} rows total\n"
+
+                # Conclusion
+                if db_result.get("ehr_integrations") or db_result.get("order_clients"):
+                    has_pending = any(
+                        row.get('status') == 'PENDING'
+                        for row in db_result.get('ehr_integrations', [])
+                    )
+                    if has_pending:
+                        db_check_info += "\n**Action Required**: UPDATE PENDING records to LIVE status.\n"
+                    else:
+                        db_check_info += "\n**Conclusion**: Integration records EXIST in database.\n"
+                else:
+                    db_check_info += "\n**Conclusion**: Integration NOT SET UP - need to add records to database.\n"
+
+                    # Auto-discover gRPC config for the suggestion
+                    grpc_config = self._discover_grpc_credentials()
+                    if grpc_config:
+                        grpc_info = f"{grpc_config.get('host', '192.168.60.6')}:{grpc_config.get('port', '30276')}"
+                        db_check_info += f"- If Provider ID exists, call getCustomer RPC at {grpc_info} (auto-discovered)\n"
+                    else:
+                        db_check_info += "- If Provider ID exists, call getCustomer RPC (need to discover endpoint from repos)\n"
+
         # Use Claude to analyze which repos need changes
         repo_context = self._build_repo_context(available_repos)
 
@@ -138,6 +232,8 @@ IMPORTANT:
 - Respond in **Traditional Chinese (繁體中文)** for the "reasoning" field
 - Repository names and file paths should remain in English
 - Code snippets should remain in English
+- **LEARN FROM PAST FEEDBACK** - use the feedback section to avoid repeating mistakes
+- **INCLUDE DATABASE CHECK RESULTS** in your reasoning if available
 
 ## Ticket Information
 {ticket.get_context()}
@@ -150,6 +246,10 @@ IMPORTANT:
 
 ## Agent User Preferences
 {self.memory.read_user()}
+
+## PAST FEEDBACK - LEARN FROM THIS
+{past_feedback}
+{db_check_info}
 
 ## Task
 Analyze this ticket and determine:
@@ -277,6 +377,360 @@ Respond in JSON format:
             return lang_map.get(most_common, "Unknown")
 
         return "Unknown"
+
+    def _get_relevant_feedback(self, ticket: JiraTicket) -> str:
+        """Get past feedback from memory that might be relevant to this ticket."""
+        memory = self.memory.read_memory()
+
+        feedback_sections = []
+
+        # 1. First, include Gotchas section (structured learnings)
+        if "## Gotchas" in memory:
+            gotchas_section = memory.split("## Gotchas")[1]
+            # Get content until next major section
+            for next_section in ["## Questions", "## Jira"]:
+                if next_section in gotchas_section:
+                    gotchas_section = gotchas_section.split(next_section)[0]
+            feedback_sections.append("### 重要規則 (Gotchas)")
+            feedback_sections.append(gotchas_section[:500])  # Limit length
+
+        # 2. Then, include relevant Q&A feedback
+        if "## Questions" in memory:
+            questions_part = memory.split("## Questions")[1]
+            entries = questions_part.split("### Q:")
+
+            for entry in entries[1:]:  # Skip first empty entry
+                entry_lower = entry.lower()
+
+                # Check for keywords related to this ticket
+                keywords = [
+                    "emr", "integration", "result", "order",
+                    "repo", "feedback", "正確", "錯誤", "lis-emr-backend-v2",
+                    "emr-backend", "lis-backend-emr-v2"
+                ]
+
+                # Also check for ticket key if it exists
+                if ticket.key:
+                    keywords.append(ticket.key.lower())
+
+                # If any keyword matches, include this feedback
+                if any(kw in entry_lower for kw in keywords):
+                    if "Feedback:" in entry:
+                        feedback = entry.split("Feedback:")[1].strip()
+                        feedback = feedback.split("\n\n")[0].strip()
+                        feedback_sections.append(f"- {feedback}")
+
+        if feedback_sections:
+            return "\n".join(feedback_sections[:10])  # Limit to 10 entries
+        else:
+            return "No relevant past feedback available."
+
+    def _discover_db_credentials(self) -> dict | None:
+        """
+        Auto-discover database credentials from repos.
+
+        Searches for:
+        - application.properties / application.yml (Java)
+        - .env files (Python/Node.js)
+        - k8s deployment yaml files
+        """
+        if "db_credentials" in self.credential_cache:
+            return self.credential_cache["db_credentials"]
+
+        import re
+
+        # Common config file patterns
+        config_patterns = [
+            ("application.properties", r"datasource\.url[=:]\s*jdbc:mysql://([^:]+):(\d+)/([^\n]+)"),
+            ("application.properties", r"spring\.datasource\.username[=:]\s*([^\n]+)"),
+            ("application.properties", r"spring\.datasource\.password[=:]\s*([^\n]+)"),
+            ("application.yml", r"url:\s*jdbc:mysql://([^:]+):(\d+)/([^#\n]+)"),
+            ("application.yml", r"username:\s*([^\n#]+)"),
+            ("application.yml", r"password:\s*([^\n#]+)"),
+            (".env", r"DB_HOST[=:]\s*([^\n]+)"),
+            (".env", r"DB_PORT[=:]\s*(\d+)"),
+            (".env", r"DB_USER[=:]\s*([^\n]+)"),
+            (".env", r"DB_PASSWORD[=:]\s*([^\n]+)"),
+        ]
+
+        credentials = {}
+
+        for repo_name, repo_path in self.repos.items():
+            # Focus on EMR-related repos first
+            if "emr" not in repo_name.lower():
+                continue
+
+            for root, dirs, files in os.walk(repo_path):
+                # Skip hidden dirs and common non-config dirs
+                dirs[:] = [d for d in dirs if not d.startswith((".", "node_modules", "target", "build", ".git"))]
+
+                for file in files:
+                    if file in ["application.properties", "application.yml", ".env", "config.py"]:
+                        file_path = Path(root) / file
+                        try:
+                            content = file_path.read_text(encoding="utf-8", errors="ignore")
+
+                            # Extract credentials using patterns
+                            for pattern_name, pattern in config_patterns:
+                                if pattern_name in file or file == ".env":
+                                    match = re.search(pattern, content)
+                                    if match:
+                                        if "url" in pattern.lower() or "DB_HOST" in pattern:
+                                            credentials["host"] = match.group(1)
+                                            if len(match.groups()) > 1:
+                                                credentials["port"] = int(match.group(2))
+                                            if len(match.groups()) > 2:
+                                                credentials["database"] = match.group(3)
+                                        elif "username" in pattern.lower() or "DB_USER" in pattern:
+                                            credentials["user"] = match.group(1).strip()
+                                        elif "password" in pattern.lower() or "DB_PASSWORD" in pattern:
+                                            credentials["password"] = match.group(1).strip()
+
+                            # If we found basic credentials, stop searching
+                            if "host" in credentials and "user" in credentials:
+                                break
+                        except Exception:
+                            continue
+
+                if "host" in credentials and "user" in credentials:
+                    break
+
+            if credentials:
+                break
+
+        if credentials:
+            self.credential_cache["db_credentials"] = credentials
+            return credentials
+
+        return None
+
+    def _discover_grpc_credentials(self) -> dict | None:
+        """Auto-discover gRPC credentials from repos."""
+        if "grpc_credentials" in self.credential_cache:
+            return self.credential_cache["grpc_credentials"]
+
+        import re
+
+        credentials = {}
+
+        for repo_name, repo_path in self.repos.items():
+            if "emr" not in repo_name.lower():
+                continue
+
+            for root, dirs, files in os.walk(repo_path):
+                dirs[:] = [d for d in dirs if not d.startswith((".", "node_modules", "target", "build"))]
+
+                for file in files:
+                    if file.endswith((".properties", ".yml", ".yaml", ".env", ".py", ".ts")):
+                        file_path = Path(root) / file
+                        try:
+                            content = file_path.read_text(encoding="utf-8", errors="ignore")
+
+                            # Look for gRPC server/host/port patterns
+                            grpc_patterns = [
+                                r"grpc\.server\.host[=:]\s*([^\n:#]+)",
+                                r"grpc\.host[=:]\s*([^\n:#]+)",
+                                r"GRPC_HOST[=:]\s*([^\n:#]+)",
+                                r"grpc\.server\.port[=:]\s*(\d+)",
+                                r"grpc\.port[=:]\s*(\d+)",
+                                r"GRPC_PORT[=:]\s*(\d+)",
+                                r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{4,5})",  # ip:port
+                            ]
+
+                            for pattern in grpc_patterns:
+                                match = re.search(pattern, content)
+                                if match:
+                                    groups = match.groups()
+                                    if ":" in match.group(0) or "port" in pattern.lower():
+                                        if len(groups) >= 2:
+                                            credentials["host"] = groups[0]
+                                            credentials["port"] = groups[1]
+                                        elif groups[0].isdigit():
+                                            credentials["port"] = groups[0]
+                                    else:
+                                        credentials["host"] = groups[0]
+
+                        except Exception:
+                            continue
+
+                if credentials:
+                    break
+
+            if credentials:
+                break
+
+        if credentials:
+            self.credential_cache["grpc_credentials"] = credentials
+            return credentials
+
+        return None
+
+    def _check_emr_integration_db(self, ticket: JiraTicket) -> dict:
+        """
+        Check EMR integration database tables for existing records.
+
+        Returns dict with findings from:
+        - order_clients
+        - sftp_folder_mapping
+        - ehr_integrations
+        """
+        result = {
+            "exists": False,
+            "order_clients": None,
+            "sftp_folder_mapping": None,
+            "ehr_integrations": None,
+            "error": None,
+        }
+
+        # Extract IDs from ticket description
+        description = ticket.description.lower()
+        provider_id = None
+        practice_id = None
+        customer_id = None
+
+        # Try to extract IDs
+        id_patterns = {
+            "provider id": r"provider id[:\s]+(\d+)",
+            "practice id": r"practice id[:\s]+(\d+)",
+            "customer id": r"customer id[:\s]+(\d+)",
+        }
+
+        for key, pattern in id_patterns.items():
+            match = re.search(pattern, description)
+            if match:
+                value = match.group(1)
+                if "provider" in key:
+                    provider_id = value
+                elif "practice" in key:
+                    practice_id = value
+                elif "customer" in key:
+                    customer_id = value
+
+        result["provider_id"] = provider_id
+        result["practice_id"] = practice_id
+        result["customer_id"] = customer_id
+
+        # Auto-discover database credentials
+        db_config = self._discover_db_credentials()
+
+        if not db_config:
+            result["error"] = "Could not auto-discover database credentials from repos"
+            result["suggestion"] = "Check lis-backend-emr-v2 or EMR-Backend for application.properties with datasource config"
+            return result
+
+        result["db_source"] = f"Auto-discovered from repo"
+
+        # Try to connect to database
+        try:
+            conn = mysql.connector.connect(
+                host=db_config.get("host"),
+                port=db_config.get("port", 3306),
+                user=db_config.get("user"),
+                password=db_config.get("password"),
+                database=db_config.get("database", "lis_emr"),
+                connection_timeout=5,
+            )
+            cursor = conn.cursor(dictionary=True)
+
+            # Check ehr_integrations
+            if practice_id:
+                cursor.execute(
+                    "SELECT * FROM ehr_integrations WHERE clinic_id = %s AND customer_id = -1",
+                    (practice_id,)
+                )
+                result["ehr_integrations"] = cursor.fetchall()
+
+            if customer_id:
+                cursor.execute(
+                    "SELECT * FROM ehr_integrations WHERE customer_id = %s",
+                    (customer_id,)
+                )
+                rows = cursor.fetchall()
+                if not result["ehr_integrations"]:
+                    result["ehr_integrations"] = rows
+
+            # Check order_clients
+            if provider_id or customer_id:
+                if provider_id:
+                    cursor.execute(
+                        "SELECT * FROM order_clients WHERE provider_id = %s",
+                        (provider_id,)
+                    )
+                elif customer_id:
+                    cursor.execute(
+                        "SELECT * FROM order_clients WHERE customer_id = %s",
+                        (customer_id,)
+                    )
+                result["order_clients"] = cursor.fetchall()
+
+            # Check sftp_folder_mapping
+            cursor.execute("SELECT * FROM sftp_folder_mapping LIMIT 100")
+            result["sftp_folder_mapping"] = cursor.fetchall()
+
+            cursor.close()
+            conn.close()
+
+            # Check if any integration exists
+            if result["ehr_integrations"] or result["order_clients"]:
+                result["exists"] = True
+
+        except Exception as e:
+            result["error"] = str(e)
+            result["db_config_used"] = {k: v for k, v in db_config.items() if k != "password"}
+
+        return result
+
+    def _get_customer_from_grpc(self, provider_id: str | None, customer_id: str | None) -> dict:
+        """
+        Get customer data from gRPC getCustomer service.
+
+        Returns dict with customer information.
+        """
+        result = {
+            "found": False,
+            "customer_data": None,
+            "error": None,
+        }
+
+        if not provider_id and not customer_id:
+            result["error"] = "No provider_id or customer_id provided"
+            return result
+
+        # Auto-discover gRPC credentials
+        grpc_config = self._discover_grpc_credentials()
+
+        if not grpc_config:
+            result["error"] = "Could not auto-discover gRPC config from repos"
+            result["suggestion"] = "Check lis-backend-emr-v2 or EMR-Backend for gRPC host/port in config files"
+            return result
+
+        grpc_host = grpc_config.get("host", "192.168.60.6")
+        grpc_port = grpc_config.get("port", "30276")
+        result["grpc_source"] = f"Auto-discovered from repo ({grpc_host}:{grpc_port})"
+
+        try:
+            import grpc
+
+            # Try to connect to gRPC service
+            channel = grpc.insecure_channel(f"{grpc_host}:{grpc_port}")
+
+            # Check if channel is ready
+            try:
+                grpc.channel_ready_future(channel).result(timeout=2)
+                result["channel_connected"] = True
+                result["grpc_endpoint"] = f"{grpc_host}:{grpc_port}"
+            except grpc.FutureTimeoutError:
+                result["error"] = f"gRPC connection timeout to {grpc_host}:{grpc_port}"
+                return result
+
+            channel.close()
+
+        except ImportError:
+            result["error"] = "grpc library not installed"
+        except Exception as e:
+            result["error"] = str(e)
+
+        return result
 
     def process_ticket(self, ticket: JiraTicket) -> dict:
         """

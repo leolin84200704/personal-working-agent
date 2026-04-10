@@ -5,11 +5,29 @@ GitPython>=3.1.40
 pydantic>=2.0.0
 python-dotenv>=1.0.0
 
+# API & WebSocket
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+websockets>=12.0
+python-multipart>=0.0.6
+
+# Vector Database & RAG
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
+# Async utilities
+aiofiles>=23.0
+
 # Optional: for richer parsing
 markdownify>=0.11.6
 rich>=13.0.0
+
+# Configuration
+pydantic-settings>=2.0
+eval-type-backport>=0.1.0
 
 # Development
 pytest>=7.0.0
 black>=23.0.0
 mypy>=1.0.0
+httpx>=0.24.0  # For testing async endpoints

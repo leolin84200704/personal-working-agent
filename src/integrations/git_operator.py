@@ -416,3 +416,77 @@ def find_git_repos(base_path: Path) -> list[Path]:
             repos.append(item)
 
     return repos
+
+
+# Thread-safe Git operations for backend service
+from threading import Lock
+
+
+class ThreadSafeGitOperator(GitOperator):
+    """
+    Thread-safe wrapper around GitOperator.
+
+    Ensures that concurrent operations on the same repository
+    are serialized to avoid conflicts.
+    """
+
+    # Class-level locks for each repo path
+    _repo_locks: dict[Path, Lock] = {}
+    _global_lock = Lock()
+
+    def __init__(self, repo_path: Path, dry_run: bool = False):
+        """Initialize with thread-safe locking."""
+        super().__init__(repo_path, dry_run)
+
+        # Get or create lock for this repo
+        with ThreadSafeGitOperator._global_lock:
+            # Normalize path for consistent locking
+            normalized_path = repo_path.resolve()
+            if normalized_path not in ThreadSafeGitOperator._repo_locks:
+                ThreadSafeGitOperator._repo_locks[normalized_path] = Lock()
+            self._lock = ThreadSafeGitOperator._repo_locks[normalized_path]
+
+    def _run(self, command: list[str], check: bool = True) -> subprocess.CompletedProcess:
+        """Run git command with lock for thread safety."""
+        with self._lock:
+            return super()._run(command, check)
+
+    def create_branch(self, branch_name: str, ticket_id: str, base_branch: str | None = None) -> str:
+        """Create branch with lock."""
+        with self._lock:
+            return super().create_branch(branch_name, ticket_id, base_branch)
+
+    def commit(self, message: str, ticket_id: str = "") -> None:
+        """Commit with lock."""
+        with self._lock:
+            return super().commit(message, ticket_id)
+
+    def push(self, branch: str | None = None, remote: str = "origin") -> None:
+        """Push with lock."""
+        with self._lock:
+            return super().push(branch, remote)
+
+    def checkout(self, branch: str, create: bool = False) -> None:
+        """Checkout with lock."""
+        with self._lock:
+            return super().checkout(branch, create)
+
+    def add(self, files: list[str] | str = ".") -> None:
+        """Add files with lock."""
+        with self._lock:
+            return super().add(files)
+
+    @classmethod
+    def get_lock_stats(cls) -> dict[str, int]:
+        """Get statistics about repository locks."""
+        with cls._global_lock:
+            return {
+                "total_repos_locked": len(cls._repo_locks),
+                "repos": [str(p) for p in cls._repo_locks.keys()],
+            }
+
+    @classmethod
+    def clear_locks(cls) -> None:
+        """Clear all locks (use with caution, mostly for testing)."""
+        with cls._global_lock:
+            cls._repo_locks.clear()

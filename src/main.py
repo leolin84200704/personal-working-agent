@@ -5,6 +5,10 @@ CLI for scanning and processing Jira tickets.
 """
 from __future__ import annotations
 
+# Suppress urllib3 OpenSSL warning on macOS
+import warnings
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
+
 import sys
 import argparse
 from pathlib import Path
@@ -291,12 +295,15 @@ def main() -> int:
     # Interactive command
     interactive_parser = subparsers.add_parser("interactive", help="Start interactive chat mode")
     interactive_parser.add_argument(
+        "--rich",
+        action="store_true",
+        help="Use rich display (may have terminal issues in some shells)"
+    )
+    interactive_parser.add_argument(
         "--simple",
         action="store_true",
         help="Use simple I/O (no rich library) to avoid terminal issues"
     )
-
-    args = parser.parse_args()
 
     args = parser.parse_args()
 
@@ -340,9 +347,13 @@ def main() -> int:
         if hasattr(args, "simple") and args.simple:
             from src.simple_interactive import SimpleInteractiveAgent
             agent = SimpleInteractiveAgent()
-        else:
+        elif hasattr(args, "rich") and args.rich:
             from src.interactive import InteractiveAgent
             agent = InteractiveAgent()
+        else:
+            # Default: prompt_toolkit mode (best for terminal compatibility)
+            from src.prompt_interactive import PromptToolkitInteractiveAgent
+            agent = PromptToolkitInteractiveAgent()
         agent.run()
         return 0
 
