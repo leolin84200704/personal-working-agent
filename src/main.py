@@ -189,6 +189,8 @@ def cmd_config(args) -> int:
     print(f"  JIRA_SERVER: {os.getenv('JIRA_SERVER', 'Not set')}")
     print(f"  JIRA_EMAIL: {os.getenv('JIRA_EMAIL', 'Not set')}")
     print(f"  ANTHROPIC_API_KEY: {'Set' if os.getenv('ANTHROPIC_API_KEY') else 'Not set'}")
+    from src.auth import get_oauth_token
+    print(f"  Claude /login OAuth: {'Available' if get_oauth_token() else 'Not found'}")
 
     # Memory
     memory = MemoryManager()

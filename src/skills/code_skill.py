@@ -85,7 +85,7 @@ Important:
 Respond with the changes only, no explanations."""
 
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.settings.default_model,
                 max_tokens=3000,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -226,7 +226,7 @@ Be concise."""
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.settings.default_model,
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
             )

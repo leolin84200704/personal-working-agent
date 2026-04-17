@@ -9,13 +9,15 @@ Execution layer: Claude Code CLI (`claude -p`)
 This is the "when and what" layer:
 - WHEN: webhook, schedule, manual trigger
 - WHAT: which prompt to send
-- WHERE: where to send the result (Jira comment, Slack, file)
+- WHERE: where to send the result (Jira comment, file)
 """
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.flows.prompts import TICKET_TRIAGE_PROMPT, TRIAGE_REVIEW_PROMPT, TICKET_CODE_REVIEW_PROMPT
@@ -220,10 +222,11 @@ class FlowRunner:
         }
         self._save_result(ticket_id, "triage", output)
 
-        # Notify
+        # Notify + Audit
         if settings.flow_post_to_jira:
             await self._post_jira_comment(ticket_id, combined_response)
         self._write_analysis_file(ticket_id, combined_response)
+        _write_audit_log(ticket_id, combined_response)
 
         return output
 
@@ -247,6 +250,7 @@ class FlowRunner:
         self._save_result(ticket_id, "review", output)
 
         self._write_analysis_file(ticket_id, result.get("response", ""))
+        _write_audit_log(ticket_id, result.get("response", ""))
 
         return output
 
@@ -276,7 +280,6 @@ class FlowRunner:
     def _write_analysis_file(self, ticket_id: str, content: str) -> None:
         """Write analysis result to ~/Desktop/Jira Analysis/{ticket_id}.md"""
         try:
-            from pathlib import Path
             analysis_dir = Path.home() / "Desktop" / "Jira Analysis"
             analysis_dir.mkdir(parents=True, exist_ok=True)
             filepath = analysis_dir / f"{ticket_id}.md"
@@ -284,3 +287,52 @@ class FlowRunner:
             logger.info(f"[Flow] Analysis written to {filepath}")
         except Exception as e:
             logger.error(f"[Flow] Failed to write analysis file: {e}")
+
+
+def _write_audit_log(ticket_id: str, response_text: str) -> None:
+    """
+    Extract and log any SQL queries found in the agent response.
+
+    Writes to storage/audit/sql_audit.jsonl for traceability.
+    SQL safety: logs all queries so dangerous patterns can be detected post-hoc.
+    """
+    try:
+        audit_dir = get_settings().storage_path / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        audit_file = audit_dir / "sql_audit.jsonl"
+
+        # Extract SQL-like patterns from the response
+        sql_patterns = re.findall(
+            r'(?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\s+.+?(?:;|$)',
+            response_text,
+            re.IGNORECASE | re.MULTILINE,
+        )
+
+        if not sql_patterns:
+            return
+
+        # Flag dangerous queries
+        dangerous_keywords = re.compile(
+            r'\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b', re.IGNORECASE
+        )
+
+        entries = []
+        for sql in sql_patterns:
+            sql_clean = sql.strip()[:500]  # Cap length
+            is_dangerous = bool(dangerous_keywords.search(sql_clean))
+            entries.append({
+                "timestamp": datetime.now().isoformat(),
+                "ticket_id": ticket_id,
+                "sql": sql_clean,
+                "dangerous": is_dangerous,
+            })
+            if is_dangerous:
+                logger.warning(f"[Audit] DANGEROUS SQL detected for {ticket_id}: {sql_clean[:100]}")
+
+        with open(audit_file, "a", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+        logger.info(f"[Audit] Logged {len(entries)} SQL queries for {ticket_id}")
+    except Exception as e:
+        logger.error(f"[Audit] Failed to write SQL audit log: {e}")

@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from src.config import get_settings
 from src.integrations.jira import JiraClient
 from src.core.ticket_processor import TicketProcessor
 from src.core.markdown_executor import MarkdownExecutor
@@ -105,7 +106,7 @@ Maintain conversation context and reference previous messages when relevant."""
         messages.append({"role": "user", "content": question})
 
         response = self.processor.claude.messages.create(
-            model="claude-sonnet-4-6",
+            model=get_settings().default_model,
             max_tokens=1000,
             system=system_prompt,
             messages=messages
@@ -328,7 +329,7 @@ Answer in Traditional Chinese (繁體中文). Be specific about this ticket."""
 
                 messages = list(self.conversation_history)
                 response = self.processor.claude.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=get_settings().default_model,
                     max_tokens=1000,
                     system=system_prompt,
                     messages=messages
@@ -474,7 +475,7 @@ Return JSON:
 
         try:
             response = self.processor.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=1000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}]
@@ -569,7 +570,7 @@ Format your response with clear sections."""
 
         try:
             response = self.processor.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=500,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}]

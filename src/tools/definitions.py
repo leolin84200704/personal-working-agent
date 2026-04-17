@@ -394,3 +394,135 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
+
+
+# ─── Plan Mode Tools ─────────────────────────────────────────────
+PLAN_TOOL_DEFINITIONS = [
+    {
+        "name": "enter_plan_mode",
+        "description": (
+            "Enter planning mode. In this mode, only read-only tools are available. "
+            "Use this before complex tasks to investigate first, then create a structured plan. "
+            "The user must approve the plan before execution begins."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "create_plan",
+        "description": (
+            "Create a structured execution plan for user approval. "
+            "Only available in planning mode. List each step with description, "
+            "the tool you intend to use, and your reasoning."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string",
+                    "description": "The overall goal of this plan",
+                },
+                "steps": {
+                    "type": "array",
+                    "description": "Ordered list of execution steps",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "description": {
+                                "type": "string",
+                                "description": "What this step does",
+                            },
+                            "tool": {
+                                "type": "string",
+                                "description": "Which tool to use (e.g., edit_file, run_bash)",
+                            },
+                            "reasoning": {
+                                "type": "string",
+                                "description": "Why this step is needed",
+                            },
+                        },
+                        "required": ["description"],
+                    },
+                },
+            },
+            "required": ["goal", "steps"],
+        },
+    },
+    {
+        "name": "exit_plan_mode",
+        "description": (
+            "Exit planning mode and restore all tools. "
+            "Call this after the user has approved the plan."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+]
+
+
+# ─── Sub-Agent Tools ─────────────────────────────────────────────
+SUB_AGENT_TOOL_DEFINITIONS = [
+    {
+        "name": "spawn_agent",
+        "description": (
+            "Spawn a sub-agent to handle a specific task independently. "
+            "The sub-agent runs with its own context and tool set, then returns results. "
+            "Use this to delegate investigation, analysis, or code tasks."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "Clear task description for the sub-agent",
+                },
+                "agent_type": {
+                    "type": "string",
+                    "enum": ["explore", "analyze", "code"],
+                    "description": (
+                        "Agent type: "
+                        "'explore' = read-only file/git tools for investigation; "
+                        "'analyze' = read-only + jira + memory for analysis; "
+                        "'code' = full tools for code changes"
+                    ),
+                    "default": "explore",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Additional context to provide to the sub-agent (e.g., what you've already found)",
+                },
+            },
+            "required": ["task", "agent_type"],
+        },
+    },
+    {
+        "name": "list_agents",
+        "description": "List all sub-agent results from this session.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+]
+
+
+from src.agent.task_manager import TASK_TOOL_DEFINITIONS
+from src.tools.web import WEB_TOOL_DEFINITIONS
+from src.agent.background import BACKGROUND_TOOL_DEFINITIONS
+from src.memory.short_term import STM_TOOL_DEFINITIONS
+from src.memory.distiller import DISTILL_TOOL_DEFINITIONS
+
+ALL_TOOL_DEFINITIONS = (
+    TOOL_DEFINITIONS
+    + PLAN_TOOL_DEFINITIONS
+    + SUB_AGENT_TOOL_DEFINITIONS
+    + TASK_TOOL_DEFINITIONS
+    + WEB_TOOL_DEFINITIONS
+    + BACKGROUND_TOOL_DEFINITIONS
+    + STM_TOOL_DEFINITIONS
+    + DISTILL_TOOL_DEFINITIONS
+)

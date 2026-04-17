@@ -7,6 +7,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
+from src.config import get_settings
 from src.skills.base import Skill
 from src.integrations.jira import JiraClient
 from src.memory.manager import MemoryManager
@@ -48,7 +49,7 @@ Provide a brief analysis in Traditional Chinese:
 Be concise."""
 
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=1000,
                 messages=[{"role": "user", "content": prompt}],
             )

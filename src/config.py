@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     agent_root: Path = Field(default_factory=get_agent_root)
 
     # Claude API
-    anthropic_api_key: str
+    anthropic_api_key: Optional[str] = None
     anthropic_base_url: Optional[str] = None
     api_timeout_ms: int = 300000
+    default_model: str = "claude-opus-4-6"
 
     # Jira
     jira_server: str
@@ -72,6 +73,11 @@ class Settings(BaseSettings):
     max_retrieved_memories: int = 5
     auto_update_memory: bool = True
 
+    # Short-Term Memory
+    stm_decay_days: int = 30
+    stm_cross_review_interval: int = 5
+    knowledge_compress_threshold: int = 50000
+
     # Flow / Webhook
     jira_webhook_secret: str = ""  # Optional: Jira webhook signature secret
     flow_post_to_jira: bool = False  # Post triage results as Jira comments
@@ -103,6 +109,10 @@ class Settings(BaseSettings):
     @property
     def memory_path(self) -> Path:
         return self.agent_root / "MEMORY.md"
+
+    @property
+    def short_term_memory_path(self) -> Path:
+        return self.storage_path / "short_term_memory"
 
     @property
     def conversations_path(self) -> Path:

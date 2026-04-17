@@ -18,6 +18,7 @@ from src.config import get_settings
 from src.integrations.jira import JiraClient, JiraTicket
 from src.integrations.git_operator import GitOperator, find_git_repos
 from src.memory.vector_store import VectorStore
+from src.tools.web import web_fetch, web_search
 
 settings = get_settings()
 
@@ -490,6 +491,14 @@ def execute_tool(name: str, input_data: dict[str, Any]) -> str:
             query=d["query"],
             collection=d.get("collection", "conversations"),
             n_results=d.get("n_results", 5),
+        ),
+        "web_fetch": lambda d: web_fetch(
+            url=d["url"],
+            max_chars=d.get("max_chars", 80000),
+        ),
+        "web_search": lambda d: web_search(
+            query=d["query"],
+            max_results=d.get("max_results", 5),
         ),
     }
 

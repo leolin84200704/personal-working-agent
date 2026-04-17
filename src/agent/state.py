@@ -20,6 +20,35 @@ class Message:
 
 
 @dataclass
+class PlanStep:
+    """A single step in an execution plan."""
+    description: str
+    tool: str = ""
+    reasoning: str = ""
+    status: str = "pending"
+
+
+@dataclass
+class Plan:
+    """A structured execution plan awaiting user approval."""
+    goal: str
+    steps: list[PlanStep] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
+    status: str = "draft"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "goal": self.goal,
+            "steps": [
+                {"description": s.description, "tool": s.tool, "reasoning": s.reasoning, "status": s.status}
+                for s in self.steps
+            ],
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass
 class ConversationContext:
     """Conversation context for a session."""
 
@@ -27,6 +56,8 @@ class ConversationContext:
     created_at: datetime = field(default_factory=datetime.now)
     last_activity: datetime = field(default_factory=datetime.now)
     messages: list[Message] = field(default_factory=list)
+    mode: str = "normal"  # "normal" or "planning"
+    current_plan: Plan | None = None
 
     def add_message(self, role: str, content: str) -> None:
         """Add a message to the conversation history."""

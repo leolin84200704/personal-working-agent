@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": ".claude/hooks/validate-git-push.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "if": "Bash(git reset*)",
+            "command": ".claude/hooks/validate-git-destructive.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "if": "Bash(git clean*)",
+            "command": ".claude/hooks/validate-git-destructive.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

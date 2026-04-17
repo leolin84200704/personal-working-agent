@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Permission rules for lis-code-agent.",
+    "Each rule has: tool (tool name or '*'), action ('allow'/'deny'), pattern (regex), reason.",
+    "Deny rules are evaluated before allow rules. If no rule matches, the action is allowed.",
+    "Hardcoded safety defaults (rm -rf, force push, etc.) are always enforced regardless of this file."
+  ],
+  "rules": [
+    {
+      "tool": "run_bash",
+      "action": "deny",
+      "pattern": "docker\\s+rm",
+      "reason": "Prevent accidental container deletion"
+    },
+    {
+      "tool": "run_bash",
+      "action": "deny",
+      "pattern": "docker\\s+system\\s+prune",
+      "reason": "Prevent Docker system prune"
+    },
+    {
+      "tool": "run_bash",
+      "action": "deny",
+      "pattern": "DROP\\s+TABLE|DROP\\s+DATABASE|TRUNCATE\\s+TABLE",
+      "reason": "Prevent destructive SQL operations"
+    },
+    {
+      "tool": "*",
+      "action": "deny",
+      "pattern": "password|secret|token|api_key|private_key",
+      "reason": "Prevent credential exposure in tool inputs"
+    },
+    {
+      "tool": "edit_file",
+      "action": "allow",
+      "pattern": ".*\\.test\\..*",
+      "reason": "Always allow editing test files"
+    },
+    {
+      "tool": "edit_file",
+      "action": "allow",
+      "pattern": ".*\\.spec\\..*",
+      "reason": "Always allow editing spec files"
+    }
+  ]
+}

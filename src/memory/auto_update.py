@@ -102,7 +102,7 @@ Be conservative - only extract clear, factual information. Do not extract opinio
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.settings.default_model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": conv_text}],
                 system=system_prompt,

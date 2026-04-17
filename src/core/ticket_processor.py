@@ -21,6 +21,8 @@ import mysql.connector
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from ..auth import resolve_api_key
+from ..config import get_settings
 from ..integrations.jira import JiraClient, JiraTicket
 from ..integrations.git_operator import GitOperator, find_git_repos
 from ..memory.manager import MemoryManager
@@ -50,12 +52,8 @@ class TicketProcessor:
         self.dry_run = dry_run
         self.memory = MemoryManager()
 
-        # Initialize Claude for analysis (supports z.ai proxy)
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set")
-
-        # Support for z.ai proxy or other custom base URLs
+        # Initialize Claude (OAuth from /login, fallback to API key)
+        api_key = resolve_api_key(os.getenv("ANTHROPIC_API_KEY"))
         base_url = os.getenv("ANTHROPIC_BASE_URL")
         if base_url:
             self.claude = Anthropic(api_key=api_key, base_url=base_url)
@@ -273,7 +271,7 @@ Respond in JSON format:
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -886,7 +884,7 @@ Return only a JSON list of file paths that should be modified, e.g.:
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -944,7 +942,7 @@ Only output the modified file, no explanations.
 
             try:
                 response = self.claude.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=get_settings().default_model,
                     max_tokens=10000,
                     messages=[{"role": "user", "content": prompt}],
                 )

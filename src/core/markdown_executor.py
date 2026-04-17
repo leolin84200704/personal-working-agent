@@ -18,6 +18,8 @@ from typing import Any
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from ..auth import resolve_api_key
+from ..config import get_settings
 from ..skills.loader import get_skill_loader, Skill
 
 load_dotenv()
@@ -42,8 +44,9 @@ class MarkdownExecutor:
             claude: Anthropic client for LLM consultation
         """
         if claude is None:
-            api_key = self._get_api_key()
-            base_url = self._get_base_url()
+            import os
+            api_key = resolve_api_key(os.getenv("ANTHROPIC_API_KEY"))
+            base_url = os.getenv("ANTHROPIC_BASE_URL")
             if base_url:
                 self.claude = Anthropic(api_key=api_key, base_url=base_url)
             else:
@@ -53,19 +56,6 @@ class MarkdownExecutor:
 
         self.skill_loader = get_skill_loader()
         self.repo_path = Path("/Users/hung.l/src/lis-backend-emr-v2")
-
-    def _get_api_key(self) -> str:
-        """Get Anthropic API key from environment."""
-        import os
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set")
-        return api_key
-
-    def _get_base_url(self) -> str | None:
-        """Get custom base URL (for z.ai proxy)."""
-        import os
-        return os.getenv("ANTHROPIC_BASE_URL")
 
     def execute_emr_integration(self, ticket: Any) -> dict:
         """
@@ -405,7 +395,7 @@ IMPORTANT: Respond ONLY with a JSON array.
             # Get plan from LLM
             try:
                 response = self.claude.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=get_settings().default_model,
                     max_tokens=4000,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -564,7 +554,7 @@ IMPORTANT: Respond ONLY with a JSON array.
         """
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=2000,
                 messages=[{
                     "role": "user",
@@ -853,7 +843,7 @@ AVAILABLE ACTIONS FOR CODE EXECUTION:
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=3000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],

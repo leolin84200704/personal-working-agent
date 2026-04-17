@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from anthropic import Anthropic
 
+from src.config import get_settings
 from .manager import MemoryManager, get_memory_manager
 
 
@@ -122,7 +123,7 @@ Extract the learning as JSON."""
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=2000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],

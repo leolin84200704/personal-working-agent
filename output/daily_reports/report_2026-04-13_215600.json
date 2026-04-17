@@ -1,0 +1,703 @@
+{
+  "timestamp": "2026-04-13T21:56:00.320650",
+  "date": "2026-04-13",
+  "summary": {
+    "new_tickets": 50,
+    "unresolved_tickets": 50,
+    "analyzed": 5
+  },
+  "new_tickets": [
+    {
+      "key": "VIB-1670",
+      "summary": "Add provider firstname and lastname in getEvents API",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P0 - Highest"
+    },
+    {
+      "key": "VP-16154",
+      "summary": "[BE] Trans v2 - Support OAuth (Leo)",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-16127",
+      "summary": "Please check why payment method not found when placing orders on Cerbo",
+      "status": "Dev Blocked",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15935",
+      "summary": "[BE] Support Multi-Vendor EMR Integration Per Practice",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15811",
+      "summary": "Optimantra order code issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VIB-1641",
+      "summary": "Create API for result sending",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15525",
+      "summary": "[appointment-event] Add `source: workflow` to event publishers",
+      "status": "QA Review",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15302",
+      "summary": "[BE] Add clinic-level custom panel support to current (legacy) EMR order system",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15080",
+      "summary": "Push EMR report for accession ID: 2601026141 without filling in questionnaire - cerbo - provider ID: 4953",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-14790",
+      "summary": "Implement Kafka Messages for Appointment Events",
+      "status": "QA Review",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13744",
+      "summary": "reports not been faxed from Athena EMR",
+      "status": "Inactive",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13645",
+      "summary": "re-push emr issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13535",
+      "summary": "Please check the reports for provider ID 4478",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-12876",
+      "summary": "[BE] Sample Service - Rewrite BatchCheckSampleAttributes",
+      "status": "Inactive",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-11736",
+      "summary": "reports mapping to wrong clinic",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-10381",
+      "summary": "Save accession_id instead of order_id into emr_tracking_data.emr_order_id ",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-16146",
+      "summary": "getClinic should return all patients from rpc",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16136",
+      "summary": "Repush 2603116897 for Cerbo due to file size too big (before fix was released)",
+      "status": "Dev To Do",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16111",
+      "summary": "check integration for accession ID: 2604056006 provider ID: 16991 - cerbo",
+      "status": "Dev In Progress",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-4352",
+      "summary": "[BE] Update the supported EMR vendor list in Settings",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16014",
+      "summary": "[BE] Update the supported EMR vendor list in Settings",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-4350",
+      "summary": "Fix MSH.5 and update MSH.12 for Charm results",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16009",
+      "summary": "CORS error for Third-Party Integrations on VI Personal Settings",
+      "status": "Dev Blocked",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15997",
+      "summary": "Check EMR integration for provider ID: 6305",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15955",
+      "summary": "New EMR Integration - Cerbo - Practice ID: 137737",
+      "status": "Dev Complete",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15868",
+      "summary": "New EMR Integration - Next Health with Follow That Patient",
+      "status": "Inactive",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15867",
+      "summary": "[BE] Investigate & Decommission Backend Services for Legacy Patient Calendar (if applicable)",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15790",
+      "summary": "Add all providers under Practice for Cerbo integration for humanauthealth",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15659",
+      "summary": "[BE] Create API for accessing patient HL7 data for Encounter Notes 2.0 composer",
+      "status": "Dev In Progress",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-3752",
+      "summary": "Create API for result sending",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15485",
+      "summary": "Check Athena integration connection - No results receive issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15461",
+      "summary": " [BE] Implement remote SFTP directory creation in EMR Order service",
+      "status": "Dev In Progress",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15460",
+      "summary": "[BE] Implement and validate cron job for HL7 file processing in EMR Order service",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15427",
+      "summary": "Check EMR integration for accession ID: 2602056890 and accession ID: 2602156096 for athena - provider ID: 6135",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-3324",
+      "summary": "[BE] Remove participant limits for event creation - Clinical",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15338",
+      "summary": "clinicCustomer for patient",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15279",
+      "summary": "[BE] Implement Order Attribution for Delegated Actions",
+      "status": "QA Review",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15272",
+      "summary": "Please check why the receipt email is patient's email for provider bill orders",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-2648",
+      "summary": "Transfer calendar api for provider to clinician",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-2577",
+      "summary": "Re-push report to EMR 2511046917",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-15050",
+      "summary": "Re-push report to EMR 2511046917",
+      "status": "Dev Complete",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-14873",
+      "summary": "[BE] Separate API and Table for Unsupported EHR Vendors",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-14787",
+      "summary": "[BE] Pass EMR Vendor form inputs",
+      "status": "Dev In Progress",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-2259",
+      "summary": "[BE] Clinical Schedule Migration - Import History Schedule Data",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-2257",
+      "summary": "Change Gut Zoomer Results to Classic Complete Report",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-14733",
+      "summary": "EMR order failed to place",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-14648",
+      "summary": "EMR order submission failed for provider ID 9889",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-14638",
+      "summary": "Please repush the report to Cerbo",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-1860",
+      "summary": "[BE] Get Familiar with EMR",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-1775",
+      "summary": "Deploy Zichen's new manual push RPC service",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    }
+  ],
+  "unresolved_tickets": [
+    {
+      "key": "VIB-1670",
+      "summary": "Add provider firstname and lastname in getEvents API",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P0 - Highest"
+    },
+    {
+      "key": "VP-16154",
+      "summary": "[BE] Trans v2 - Support OAuth (Leo)",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-16127",
+      "summary": "Please check why payment method not found when placing orders on Cerbo",
+      "status": "Dev Blocked",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15935",
+      "summary": "[BE] Support Multi-Vendor EMR Integration Per Practice",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15811",
+      "summary": "Optimantra order code issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VIB-1641",
+      "summary": "Create API for result sending",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15525",
+      "summary": "[appointment-event] Add `source: workflow` to event publishers",
+      "status": "QA Review",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15302",
+      "summary": "[BE] Add clinic-level custom panel support to current (legacy) EMR order system",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-15080",
+      "summary": "Push EMR report for accession ID: 2601026141 without filling in questionnaire - cerbo - provider ID: 4953",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-14790",
+      "summary": "Implement Kafka Messages for Appointment Events",
+      "status": "QA Review",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13744",
+      "summary": "reports not been faxed from Athena EMR",
+      "status": "Inactive",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13645",
+      "summary": "re-push emr issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-13535",
+      "summary": "Please check the reports for provider ID 4478",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-12876",
+      "summary": "[BE] Sample Service - Rewrite BatchCheckSampleAttributes",
+      "status": "Inactive",
+      "type": "Story",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-11736",
+      "summary": "reports mapping to wrong clinic",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-10381",
+      "summary": "Save accession_id instead of order_id into emr_tracking_data.emr_order_id ",
+      "status": "Inactive",
+      "type": "Task",
+      "priority": "P1 - High"
+    },
+    {
+      "key": "VP-16146",
+      "summary": "getClinic should return all patients from rpc",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16136",
+      "summary": "Repush 2603116897 for Cerbo due to file size too big (before fix was released)",
+      "status": "Dev To Do",
+      "type": "Bug",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "VP-16111",
+      "summary": "check integration for accession ID: 2604056006 provider ID: 16991 - cerbo",
+      "status": "Dev In Progress",
+      "type": "Task",
+      "priority": "P2 - Medium"
+    },
+    {
+      "key": "QH-4352",
+      "summary": "[BE] Update the supported EMR vendor list in Settings",
+      "status": "To Do",
+      "type": "QA Task",
+      "priority": "P2 - Medium"
+    }
+  ],
+  "analyses": [
+    {
+      "ticket": "VIB-1670",
+      "summary": "Add provider firstname and lastname in getEvents API",
+      "status": "Dev Complete",
+      "type": "Story",
+      "priority": "P0 - Highest",
+      "analysis": {
+        "ticket": {
+          "key": "VIB-1670",
+          "summary": "Add provider firstname and lastname in getEvents API",
+          "status": "Dev Complete",
+          "issue_type": "Story",
+          "priority": "P0 - Highest"
+        },
+        "repos": [],
+        "confidence": "low",
+        "reason": "No matching repos found"
+      },
+      "solution": "⚠️ Could not identify relevant repos. Ticket needs manual review.",
+      "code_updates": []
+    },
+    {
+      "ticket": "VP-16154",
+      "summary": "[BE] Trans v2 - Support OAuth (Leo)",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High",
+      "analysis": {
+        "ticket": {
+          "key": "VP-16154",
+          "summary": "[BE] Trans v2 - Support OAuth (Leo)",
+          "status": "Dev To Do",
+          "issue_type": "Story",
+          "priority": "P1 - High"
+        },
+        "repos": [
+          "LIS-transformer-v2"
+        ],
+        "files": {
+          "LIS-transformer-v2": [
+            "src/auth/unified-auth.guard.ts",
+            "src/auth/oauth2.strategy.ts",
+            "src/app.module.ts"
+          ]
+        },
+        "change_type": "feature",
+        "confidence": "high",
+        "reasoning": "The ticket specifically targets the 'BE Trans v2' service, which corresponds to the 'LIS-transformer-v2' repository (a NestJS gateway). The required changes involve implementing 'UnifiedAuthGuard' for GraphQL endpoints, which typically involves modifying Auth Guards and the Application Module configuration. While 'LIS-setting-consumer' is listed in available repos, it is an event-driven microservice and is unlikely to be the target for implementing HTTP/GraphQL authentication guards or the described 'settingTool' RPC utility logic."
+      },
+      "solution": "✅ Clear path forward: Modify LIS-transformer-v2. The ticket specifically targets the 'BE Trans v2' service, which corresponds to the 'LIS-transformer-v2' repository (a NestJS gateway). The required changes involve implementing 'UnifiedAuthGuard' for GraphQL endpoints, which typically involves modifying Auth Guards and the Application Module configuration. While 'LIS-setting-consumer' is listed in available repos, it is an event-driven microservice and is unlikely to be the target for implementing HTTP/GraphQL authentication guards or the described 'settingTool' RPC utility logic.",
+      "code_updates": [
+        {
+          "repo": "LIS-transformer-v2",
+          "files": [
+            "src/auth/unified-auth.guard.ts",
+            "src/auth/oauth2.strategy.ts",
+            "src/app.module.ts"
+          ],
+          "action": "create_branch"
+        }
+      ]
+    },
+    {
+      "ticket": "VP-16127",
+      "summary": "Please check why payment method not found when placing orders on Cerbo",
+      "status": "Dev Blocked",
+      "type": "Bug",
+      "priority": "P1 - High",
+      "analysis": {
+        "ticket": {
+          "key": "VP-16127",
+          "summary": "Please check why payment method not found when placing orders on Cerbo",
+          "status": "Dev Blocked",
+          "issue_type": "Bug",
+          "priority": "P1 - High"
+        },
+        "repos": [
+          "LIS-transformer-v2",
+          "LIS-setting-consumer"
+        ],
+        "files": {
+          "LIS-transformer-v2": [
+            "src/modules/order/payment.service.ts",
+            "src/modules/order/order.resolver.ts",
+            "src/modules/order/createOrder.dto.ts"
+          ],
+          "LIS-setting-consumer": [
+            "src/payment-method/payment-method.controller.ts",
+            "src/payment-method/payment-method.service.ts"
+          ]
+        },
+        "change_type": "bugfix",
+        "confidence": "medium",
+        "reasoning": "The ticket describes a 'Payment method not found' error during order placement on the 'Cerbo' integration. This indicates a failure in retrieving or validating payment details. I have identified two repositories: 'LIS-transformer-v2' (the API Gateway) and 'LIS-setting-consumer' (likely handling data persistence/settings). The issue likely involves the gateway (transformer) querying the consumer service and receiving a null/empty result, or failing to map the data correctly before placing the order. Additionally, the 'Cerbo' context implies logic specific to an integration source. While the exact files are inferred from standard NestJS structures, the core issue lies in the interaction between these services. Confidence is Medium because while the component is clear, the exact root cause (data mismatch vs. code logic) is unknown without logs."
+      },
+      "solution": "⚡ Likely solution: Modify LIS-transformer-v2, LIS-setting-consumer. The ticket describes a 'Payment method not found' error during order placement on the 'Cerbo' integration. This indicates a failure in retrieving or validating payment details. I have identified two repositories: 'LIS-transformer-v2' (the API Gateway) and 'LIS-setting-consumer' (likely handling data persistence/settings). The issue likely involves the gateway (transformer) querying the consumer service and receiving a null/empty result, or failing to map the data correctly before placing the order. Additionally, the 'Cerbo' context implies logic specific to an integration source. While the exact files are inferred from standard NestJS structures, the core issue lies in the interaction between these services. Confidence is Medium because while the component is clear, the exact root cause (data mismatch vs. code logic) is unknown without logs.",
+      "code_updates": [
+        {
+          "repo": "LIS-transformer-v2",
+          "files": [
+            "src/modules/order/payment.service.ts",
+            "src/modules/order/order.resolver.ts",
+            "src/modules/order/createOrder.dto.ts"
+          ],
+          "action": "fix_bug"
+        },
+        {
+          "repo": "LIS-setting-consumer",
+          "files": [
+            "src/payment-method/payment-method.controller.ts",
+            "src/payment-method/payment-method.service.ts"
+          ],
+          "action": "fix_bug"
+        }
+      ]
+    },
+    {
+      "ticket": "VP-15935",
+      "summary": "[BE] Support Multi-Vendor EMR Integration Per Practice",
+      "status": "Dev To Do",
+      "type": "Story",
+      "priority": "P1 - High",
+      "analysis": {
+        "ticket": {
+          "key": "VP-15935",
+          "summary": "[BE] Support Multi-Vendor EMR Integration Per Practice",
+          "status": "Dev To Do",
+          "issue_type": "Story",
+          "priority": "P1 - High"
+        },
+        "repos": [
+          "EMR-Backend"
+        ],
+        "files": {
+          "EMR-Backend": [
+            "src/main/java/com/emr/service/integration/EMRRouterService.java",
+            "src/main/java/com/emr/repository/EMRVendorMappingRepository.java",
+            "src/main/java/com/emr/model/EMRConfig.java"
+          ]
+        },
+        "change_type": "feature",
+        "confidence": "high",
+        "reasoning": "The ticket specifically targets the 'EMR push logic' and 'vendor mapping' to support multiple vendors per provider. The available repositories include 'EMR-Backend', which is a Java service explicitly designed for EMR integration. The TypeScript repositories (LIS-transformer-v2, LIS-setting-consumer) appear to be upstream or downstream services (Gateway/Consumer) and are less likely to contain the core logic for routing reports to specific EMR vendors. Therefore, the core changes required by the acceptance criteria (AC1, AC3, AC5) will reside in the Java codebase of EMR-Backend."
+      },
+      "solution": "✅ Clear path forward: Modify EMR-Backend. The ticket specifically targets the 'EMR push logic' and 'vendor mapping' to support multiple vendors per provider. The available repositories include 'EMR-Backend', which is a Java service explicitly designed for EMR integration. The TypeScript repositories (LIS-transformer-v2, LIS-setting-consumer) appear to be upstream or downstream services (Gateway/Consumer) and are less likely to contain the core logic for routing reports to specific EMR vendors. Therefore, the core changes required by the acceptance criteria (AC1, AC3, AC5) will reside in the Java codebase of EMR-Backend.",
+      "code_updates": [
+        {
+          "repo": "EMR-Backend",
+          "files": [
+            "src/main/java/com/emr/service/integration/EMRRouterService.java",
+            "src/main/java/com/emr/repository/EMRVendorMappingRepository.java",
+            "src/main/java/com/emr/model/EMRConfig.java"
+          ],
+          "action": "create_branch"
+        }
+      ]
+    },
+    {
+      "ticket": "VP-15811",
+      "summary": "Optimantra order code issue",
+      "status": "Inactive",
+      "type": "Bug",
+      "priority": "P1 - High",
+      "analysis": {
+        "ticket": {
+          "key": "VP-15811",
+          "summary": "Optimantra order code issue",
+          "status": "Inactive",
+          "issue_type": "Bug",
+          "priority": "P1 - High"
+        },
+        "repos": [
+          "LIS-transformer-v2"
+        ],
+        "files": {
+          "LIS-transformer-v2": [
+            "src/parsers/hl7.ts",
+            "src/parsers/optimantra.ts",
+            "src/utils/stringUtils.ts"
+          ]
+        },
+        "change_type": "bugfix",
+        "confidence": "medium",
+        "reasoning": "The ticket describes an issue where Optimantra orders are received with an incorrect newline character ('M' instead of the standard CRLF or standard HL7 delimiters). The 'LIS-transformer-v2' repository acts as the integration gateway and handles HL7 message parsing. The fix likely involves adjusting the pre-processing logic to handle or replace the 'M' character before standard HL7 parsing occurs. The 'LIS-setting-consumer' consumes Kafka events after processing, so it is unlikely to be the place for raw message format fixes."
+      },
+      "solution": "⚡ Likely solution: Modify LIS-transformer-v2. The ticket describes an issue where Optimantra orders are received with an incorrect newline character ('M' instead of the standard CRLF or standard HL7 delimiters). The 'LIS-transformer-v2' repository acts as the integration gateway and handles HL7 message parsing. The fix likely involves adjusting the pre-processing logic to handle or replace the 'M' character before standard HL7 parsing occurs. The 'LIS-setting-consumer' consumes Kafka events after processing, so it is unlikely to be the place for raw message format fixes.",
+      "code_updates": [
+        {
+          "repo": "LIS-transformer-v2",
+          "files": [
+            "src/parsers/hl7.ts",
+            "src/parsers/optimantra.ts",
+            "src/utils/stringUtils.ts"
+          ],
+          "action": "fix_bug"
+        }
+      ]
+    }
+  ]
+}

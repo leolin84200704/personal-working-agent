@@ -19,7 +19,15 @@ from typing import Any, Callable
 from anthropic import Anthropic
 from rich.console import Console
 
-from src.agent.state import ConversationContext
+from src.auth import resolve_api_key
+from src.agent.state import ConversationContext, Plan, PlanStep
+from src.agent.sub_agent import SubAgentManager
+from src.agent.task_manager import TaskManager
+from src.agent.background import BackgroundRunner
+from src.agent.compaction import CompactionManager
+from src.agent.permissions import PermissionManager
+from src.memory.short_term import ShortTermMemoryManager
+from src.memory.distiller import MemoryDistiller
 from src.config import get_settings
 from src.memory.manager import MemoryManager
 from src.memory.vector_store import VectorStore
@@ -30,7 +38,7 @@ from src.memory.indexer import (
     index_soul_details,
     KNOWLEDGE_COLLECTION,
 )
-from src.tools.definitions import TOOL_DEFINITIONS
+from src.tools.definitions import ALL_TOOL_DEFINITIONS
 from src.tools.executors import execute_tool
 from src.utils.logger import get_logger
 
@@ -45,6 +53,31 @@ TIER2_RESULTS = 5     # Max knowledge sections to retrieve
 
 # Max tool_use iterations per message to prevent infinite loops
 MAX_TOOL_ROUNDS = 25
+
+# Tool categories for plan mode filtering
+READ_ONLY_TOOLS = {
+    "read_file", "search_files", "grep",
+    "git_status", "git_diff", "git_log",
+    "jira_get_ticket", "jira_get_assigned", "jira_search",
+    "memory_search",
+    "web_fetch", "web_search",
+}
+ALWAYS_AVAILABLE = {
+    "task_create", "task_update", "task_get", "task_list",
+    "stm_create", "stm_read", "stm_append", "stm_search", "stm_get_failures",
+}
+PLANNING_ALLOWED = READ_ONLY_TOOLS | ALWAYS_AVAILABLE | {"create_plan", "exit_plan_mode"}
+PLANNING_EXCLUDED = {"create_plan", "exit_plan_mode"}
+
+# Meta tools handled directly by the loop (not dispatched to executors)
+META_TOOLS = {
+    "enter_plan_mode", "create_plan", "exit_plan_mode",
+    "spawn_agent", "list_agents",
+    "task_create", "task_update", "task_get", "task_list",
+    "run_background", "get_background_task", "list_background_tasks",
+    "stm_create", "stm_read", "stm_append", "stm_search", "stm_get_failures",
+    "stm_distill", "cross_ticket_review", "compress_knowledge",
+}
 
 
 class AgentLoop:
@@ -61,7 +94,7 @@ class AgentLoop:
         self.context = ConversationContext(session_id=self.session_id)
 
         self.claude = Anthropic(
-            api_key=settings.anthropic_api_key,
+            api_key=resolve_api_key(settings.anthropic_api_key),
             base_url=settings.anthropic_base_url,
         )
         self.memory_manager = MemoryManager()
@@ -69,6 +102,17 @@ class AgentLoop:
         # Vector store for retrieval
         self._vector_store: VectorStore | None = None
         self._knowledge_indexed = False
+
+        # Managers
+        self.sub_agent_manager = SubAgentManager(self.session_id, claude_client=self.claude)
+        self.task_manager = TaskManager()
+        self.background_runner = BackgroundRunner()
+        self.compaction_manager = CompactionManager(claude_client=self.claude)
+        self.permission_manager = PermissionManager(
+            config_path=settings.agent_root / "permissions.json"
+        )
+        self.stm_manager = ShortTermMemoryManager(vector_store=self._vector_store)
+        self.distiller = MemoryDistiller(claude_client=self.claude)
 
         # Callback for streaming tool events to WebSocket
         self.on_tool_use: Callable[[str, dict], None] | None = None
@@ -169,6 +213,44 @@ class AgentLoop:
 ## Relevant Knowledge (retrieved for this message)
 {retrieved_context}"""
 
+        if self.context.mode == "planning":
+            prompt += """
+
+## 規劃模式（目前啟用）
+你現在處於規劃模式，只能使用唯讀工具進行調查和分析。
+- 先充分了解問題（讀 code、查 ticket、搜尋相關檔案）
+- 然後使用 create_plan 建立結構化的執行計畫
+- 等使用者確認後，使用 exit_plan_mode 退出規劃模式並開始執行"""
+        else:
+            prompt += """
+
+## 規劃模式
+對於複雜任務（多檔案修改、需求不明確、有風險的操作），
+建議先使用 enter_plan_mode 進入規劃模式，調查後制定計畫再執行。
+對於簡單的查詢或單一操作，可以直接執行。
+
+## 子 Agent
+對於可拆分的子任務，可以使用 spawn_agent 生成子 agent 來獨立處理。
+- explore: 唯讀調查（搜檔案、讀 code、看 git history）
+- analyze: 分析（含 Jira ticket 和 memory 查詢）
+- code: 完整工具集，可修改程式碼
+- debate_pro: 正方辯論（為方案辯護）
+- debate_con: 反方辯論（質疑方案、找風險）
+
+## Work Loop（完整工作流程）
+當使用者要求處理 ticket 時，啟動 Work Loop：
+1. Retrieve: stm_search 找類似經驗 + memory_search 找相關知識
+2. Analyze: jira_get_ticket + 讀 code + stm_create 開始記錄
+3. Debate: spawn_agent debate_pro/debate_con 正反辯論
+4. Discuss: 呈現分析和方案，等使用者確認（Man-in-the-loop）
+5. Execute: create branch + 改 code + 測試
+6. Review: 給使用者看 diff 和結果，等 feedback
+7. Complete: commit + push + 總結
+8. Retrospective: spawn_agent analyze 反思 + 記錄到 stm_append
+9. Memory Update: stm_distill 蒸餾到長期記憶
+
+每一步都用 stm_append 記錄過程。失敗時記到 Failures 區段。"""
+
         return prompt
 
     async def process_message(self, message: str) -> dict[str, Any]:
@@ -191,6 +273,9 @@ class AgentLoop:
         # Add user message to conversation history
         self.context.add_message("user", message)
 
+        # Compact old messages if conversation is getting long
+        self.compaction_manager.compact_if_needed(self.context)
+
         # Build messages for Claude API
         api_messages = self._build_api_messages()
         system_prompt = self._build_system_prompt(user_message=message)
@@ -199,12 +284,13 @@ class AgentLoop:
 
         try:
             for round_num in range(MAX_TOOL_ROUNDS):
-                # Call Claude
+                # Call Claude with mode-filtered tools
+                available_tools = self._get_available_tools()
                 response = self.claude.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=settings.default_model,
                     max_tokens=4096,
                     system=system_prompt,
-                    tools=TOOL_DEFINITIONS,
+                    tools=available_tools,
                     messages=api_messages,
                 )
 
@@ -250,8 +336,16 @@ class AgentLoop:
 
                     logger.info(f"Tool: {tool_name}({json.dumps(tool_input, ensure_ascii=False)[:200]})")
 
-                    # Execute the tool
-                    result = execute_tool(tool_name, tool_input)
+                    # Execute: meta tools handled here, others go through permission check + executors
+                    meta_result = self._execute_meta_tool(tool_name, tool_input)
+                    if meta_result is not None:
+                        result = meta_result
+                    else:
+                        allowed, reason = self.permission_manager.check(tool_name, tool_input)
+                        if not allowed:
+                            result = f"Permission denied: {reason}"
+                        else:
+                            result = execute_tool(tool_name, tool_input)
 
                     # Notify callback
                     if self.on_tool_result:
@@ -325,6 +419,160 @@ class AgentLoop:
                 "input": block.input,
             }
         return {"type": block.type}
+
+    def _get_available_tools(self) -> list[dict]:
+        """Return tool definitions filtered by current mode."""
+        if self.context.mode == "planning":
+            return [t for t in ALL_TOOL_DEFINITIONS if t["name"] in PLANNING_ALLOWED]
+        return [t for t in ALL_TOOL_DEFINITIONS if t["name"] not in PLANNING_EXCLUDED]
+
+    def _execute_meta_tool(self, name: str, input_data: dict) -> str | None:
+        """Handle meta tools that modify agent state. Returns None if not a meta tool."""
+        if name == "enter_plan_mode":
+            self.context.mode = "planning"
+            self.context.current_plan = None
+            return "已進入規劃模式。現在只能使用唯讀工具。請先調查問題，然後用 create_plan 建立執行計畫。"
+
+        if name == "create_plan":
+            steps = [
+                PlanStep(
+                    description=s["description"],
+                    tool=s.get("tool", ""),
+                    reasoning=s.get("reasoning", ""),
+                )
+                for s in input_data.get("steps", [])
+            ]
+            self.context.current_plan = Plan(goal=input_data["goal"], steps=steps)
+            return self._format_plan(self.context.current_plan)
+
+        if name == "exit_plan_mode":
+            self.context.mode = "normal"
+            if self.context.current_plan:
+                self.context.current_plan.status = "approved"
+            return "已退出規劃模式，所有工具現在都可以使用。可以開始執行計畫。"
+
+        if name == "spawn_agent":
+            agent_result = self.sub_agent_manager.spawn(
+                task=input_data["task"],
+                agent_type=input_data.get("agent_type", "explore"),
+                context=input_data.get("context", ""),
+            )
+            return json.dumps(agent_result.to_dict(), ensure_ascii=False, indent=2)
+
+        if name == "list_agents":
+            results = self.sub_agent_manager.list_results()
+            if not results:
+                return "目前沒有子 agent 結果。"
+            return json.dumps(results, ensure_ascii=False, indent=2)
+
+        # ── Task tools ──
+        if name == "task_create":
+            task = self.task_manager.create(
+                title=input_data["title"],
+                description=input_data.get("description", ""),
+            )
+            return json.dumps(task.to_dict(), ensure_ascii=False, indent=2)
+
+        if name == "task_update":
+            try:
+                task = self.task_manager.update(
+                    task_id=input_data["task_id"],
+                    status=input_data.get("status"),
+                    title=input_data.get("title"),
+                    description=input_data.get("description"),
+                )
+                return json.dumps(task.to_dict(), ensure_ascii=False, indent=2)
+            except (KeyError, ValueError) as e:
+                return f"Error: {e}"
+
+        if name == "task_get":
+            try:
+                task = self.task_manager.get(input_data["task_id"])
+                return json.dumps(task.to_dict(), ensure_ascii=False, indent=2)
+            except KeyError as e:
+                return f"Error: {e}"
+
+        if name == "task_list":
+            tasks = self.task_manager.list(status_filter=input_data.get("status_filter"))
+            return json.dumps([t.to_dict() for t in tasks], ensure_ascii=False, indent=2)
+
+        # ── Background tools ──
+        if name == "run_background":
+            try:
+                bg_task = self.background_runner.run(
+                    command=input_data["command"],
+                    cwd=input_data.get("cwd"),
+                    timeout=min(input_data.get("timeout", 600), 600),
+                )
+                return json.dumps(bg_task.to_dict(), ensure_ascii=False, indent=2)
+            except ValueError as e:
+                return f"Error: {e}"
+
+        if name == "get_background_task":
+            bg_task = self.background_runner.get(input_data["task_id"])
+            if bg_task is None:
+                return f"Error: Background task '{input_data['task_id']}' not found"
+            return json.dumps(bg_task.to_dict(), ensure_ascii=False, indent=2)
+
+        if name == "list_background_tasks":
+            bg_tasks = self.background_runner.list()
+            return json.dumps([t.to_dict() for t in bg_tasks], ensure_ascii=False, indent=2)
+
+        # ── Short-Term Memory tools ──
+        if name == "stm_create":
+            path = self.stm_manager.create(input_data["ticket_id"])
+            return f"OK: Created short-term memory at {path}"
+
+        if name == "stm_read":
+            return self.stm_manager.read(input_data["ticket_id"])
+
+        if name == "stm_append":
+            result = self.stm_manager.append_section(
+                ticket_id=input_data["ticket_id"],
+                section=input_data["section"],
+                content=input_data["content"],
+            )
+            self.stm_manager.index_ticket(input_data["ticket_id"])
+            return result
+
+        if name == "stm_search":
+            results = self.stm_manager.search(
+                query=input_data["query"],
+                n_results=input_data.get("n_results", 5),
+            )
+            if not results:
+                return "No matching short-term memories found."
+            return json.dumps(results, ensure_ascii=False, indent=2)
+
+        if name == "stm_get_failures":
+            return self.stm_manager.get_failures(input_data["ticket_id"])
+
+        # ── Distill tools ──
+        if name == "stm_distill":
+            return self.distiller.distill_ticket(input_data["ticket_id"])
+
+        if name == "cross_ticket_review":
+            return self.distiller.cross_ticket_review(
+                last_n=input_data.get("last_n", 5),
+            )
+
+        if name == "compress_knowledge":
+            return self.distiller.compress_knowledge(
+                max_chars=input_data.get("max_chars", 50000),
+            )
+
+        return None
+
+    def _format_plan(self, plan: Plan) -> str:
+        lines = [f"執行計畫已建立，等待確認。\n\n目標: {plan.goal}\n"]
+        for i, step in enumerate(plan.steps, 1):
+            lines.append(f"Step {i}: {step.description}")
+            if step.tool:
+                lines.append(f"  工具: {step.tool}")
+            if step.reasoning:
+                lines.append(f"  原因: {step.reasoning}")
+        lines.append("\n請確認是否執行此計畫。確認後會退出規劃模式並開始執行。")
+        return "\n".join(lines)
 
     def _learn(self, user_message: str) -> None:
         """

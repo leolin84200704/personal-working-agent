@@ -16,6 +16,7 @@ import sys
 
 from dotenv import load_dotenv
 
+from src.config import get_settings
 from src.integrations.jira import JiraClient
 from src.core.ticket_processor import TicketProcessor
 from src.memory.manager import MemoryManager
@@ -58,7 +59,7 @@ class SimpleInteractiveAgent:
         memory = self.memory.read_memory()
 
         response = self.processor.claude.messages.create(
-            model="claude-sonnet-4-6",
+            model=get_settings().default_model,
             max_tokens=1000,
             messages=[
                 {

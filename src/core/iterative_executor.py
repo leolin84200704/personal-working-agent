@@ -5,6 +5,8 @@ Iterative Executor - 讓 Agent 能自我修正和快速迭代
 """
 
 from anthropic import Anthropic
+
+from src.config import get_settings
 from .markdown_executor import MarkdownExecutor
 
 
@@ -58,7 +60,7 @@ class IterativeExecutor(MarkdownExecutor):
 
             # 請 LLM 產生執行計畫
             plan_response = self.claude.messages.create(
-                model="claude-sonnet-4-6",
+                model=get_settings().default_model,
                 max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}]
             )

@@ -71,22 +71,16 @@ def _parse_sections(content: str, min_length: int = 50) -> list[dict[str, Any]]:
 
 def index_memory_file(vector_store: VectorStore, agent_root: Path | None = None) -> int:
     """
-    Index MEMORY.md sections into ChromaDB.
+    Index knowledge/*.md files into ChromaDB.
 
-    Returns the number of sections indexed.
+    Scans the knowledge/ directory for topic-specific MD files.
+    Each file is indexed separately with its filename as the source.
+    Falls back to MEMORY.md if knowledge/ directory doesn't exist.
+
+    Returns the total number of sections indexed.
     """
     if agent_root is None:
         agent_root = settings.agent_root
-
-    memory_path = agent_root / "MEMORY.md"
-    if not memory_path.exists():
-        return 0
-
-    content = memory_path.read_text(encoding="utf-8")
-    sections = _parse_sections(content)
-
-    if not sections:
-        return 0
 
     # Ensure collection exists
     collection = vector_store.client.get_or_create_collection(
@@ -94,38 +88,69 @@ def index_memory_file(vector_store: VectorStore, agent_root: Path | None = None)
         metadata={"description": "Indexed knowledge from MD files"},
     )
 
-    # Clear existing entries from this source
-    try:
-        existing = collection.get(where={"source": "MEMORY.md"})
-        if existing["ids"]:
-            collection.delete(ids=existing["ids"])
-    except Exception:
-        pass
+    knowledge_dir = agent_root / "knowledge"
+    if knowledge_dir.exists():
+        md_files = sorted(knowledge_dir.glob("*.md"))
+    else:
+        # Fallback: index MEMORY.md directly
+        memory_path = agent_root / "MEMORY.md"
+        md_files = [memory_path] if memory_path.exists() else []
 
-    # Add sections
-    documents = []
-    metadatas = []
-    ids = []
+    if not md_files:
+        return 0
 
-    for section in sections:
-        documents.append(section["text"])
-        metadatas.append({
-            "source": "MEMORY.md",
-            "title": section["title"],
-            "parent": section["parent"],
-            "relevance_score": 1.0,  # Default score, adjustable by feedback
-        })
-        ids.append(section["id"])
+    total_indexed = 0
 
-    embeddings = vector_store._embed(documents)
-    collection.add(
-        documents=documents,
-        metadatas=metadatas,
-        ids=ids,
-        embeddings=embeddings,
-    )
+    for md_file in md_files:
+        source_name = md_file.name
+        content = md_file.read_text(encoding="utf-8")
+        sections = _parse_sections(content)
 
-    return len(sections)
+        if not sections:
+            continue
+
+        # Clear existing entries from this source
+        try:
+            existing = collection.get(where={"source": source_name})
+            if existing["ids"]:
+                collection.delete(ids=existing["ids"])
+        except Exception:
+            pass
+
+        documents = []
+        metadatas = []
+        ids = []
+
+        for section in sections:
+            documents.append(section["text"])
+            metadatas.append({
+                "source": source_name,
+                "title": section["title"],
+                "parent": section["parent"],
+                "relevance_score": 1.0,
+            })
+            # Prefix with filename to avoid id collision across files
+            ids.append(f"{source_name}_{section['id']}")
+
+        embeddings = vector_store._embed(documents)
+        collection.add(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids,
+            embeddings=embeddings,
+        )
+        total_indexed += len(sections)
+
+    # Also clean up legacy MEMORY.md entries if we migrated to knowledge/
+    if knowledge_dir.exists():
+        try:
+            legacy = collection.get(where={"source": "MEMORY.md"})
+            if legacy["ids"]:
+                collection.delete(ids=legacy["ids"])
+        except Exception:
+            pass
+
+    return total_indexed
 
 
 def index_soul_details(vector_store: VectorStore, agent_root: Path | None = None) -> int:
