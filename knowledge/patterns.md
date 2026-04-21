@@ -32,3 +32,31 @@
 
 ### Environment Variables
 - 各專案用不同的 env var 名稱：`NODE_ENV` / `SERVER_ENVIRONMENT` / `DEPLOY_ENVIRONMENT` / `platform_type`
+
+### gRPC from Standalone Scripts
+- NestJS `createApplicationContext` 不初始化 gRPC `@Client` decorator — migration script 無法透過 NestJS DI 取得 gRPC service
+- 解法：用 `@grpc/grpc-js` + `@grpc/proto-loader` 直接建 client 連 `192.168.60.6:30276`（見 `emr-integration.md`）
+- 需要 OAuth2 metadata: `authorization` (Bearer), `x-request-id`, `internal-user-id`, `service-name`
+- OAuth2 token: client_credentials grant，env vars `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` / `OAUTH2_TOKEN_ENDPOINT`
+- `.env` 裡的 gRPC URL 可能是 Azure 內網 IP（如 `CORE_SAMPLE_V2_RPC`），本機連不到 — **永遠用 knowledge 記載的 endpoint**
+
+### ehr_vendors Legacy Data
+- `ehr_vendors.code` 欄位有 mixed case（`ElationEMR`, `OptimalDX`, `ChARM_EHR`, `HealthMatters`）
+- `CreateEhrVendorDto` 強制 `^[A-Z_]+$` 只對新建的 vendor 有效，legacy data 不受約束
+- 寫 migration SQL 時**必須查實際 DB**，不能只看 repo 的 migration scripts（scripts 只涵蓋部分 vendor）
+- 查 vendor 用 `npx ts-node` script + Prisma `$queryRaw` 最快
+
+### Data Migration 安全模式
+- 新增 boolean filter 欄位時，先 `UPDATE ALL SET col = FALSE`，再 `UPDATE known SET col = TRUE`
+- 比反向（default TRUE + exclude known）安全：避免遺漏未知資料
+
+### lis-backend-emr-v2 Vendor API 架構
+- `EhrVendorService.findAll()` → 只服務 `GET /ehr-vendors` HTTP endpoint（Settings 頁面）
+- `admin-portal/vendor-management.service.ts` → 獨立 service，有自己的 `findAllVendors()`
+- HL7 encoder、result generation、ChARM detection → 直接用 `prisma.ehrVendor.findFirst()` 或 relation include
+- 修改 `findAll()` 的 filter 邏輯**不會影響**內部 vendor lookup
+
+### mysql2 Timezone
+- Legacy MySQL datetime 欄位存 UTC 但無 timezone info
+- mysql2 連線必須加 `timezone: '+00:00'` 才能正確讀取 UTC 值
+- 不加的話預設用本機時區（如 PST）解讀，導致時間偏移

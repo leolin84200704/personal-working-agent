@@ -27,4 +27,6 @@
 - **"New EMR Integration"** → DB 操作：ehr_integrations + order_clients + sftp_folder_mapping
 - **"No results received"** → 先查 `ehr_integrations` 有沒有記錄
 - **"Repush results"** → lis-backend-emr-v2 result 推送邏輯
+- **"Update vendor list"** / **"Settings EMR vendor"** → `ehr_vendors` 表 + `vendor-management/` module
+- **"vendor public/private"** → `ehr_vendors.is_public` 欄位，source of truth 是 Notion EMR Vendor List
 - **永遠用 lis-backend-emr-v2**，EMR-Backend 是 legacy

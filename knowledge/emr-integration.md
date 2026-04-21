@@ -17,6 +17,8 @@
 - **Provider ID ≠ Practice ID** — 永遠不要搞混
 - gRPC endpoint: `192.168.60.6:30276`, Script: `scripts/get-customer-rpc.ts`
 - **不要從 ticket 猜測 provider-clinic 關係**，gRPC 回傳的 clinics 陣列才是正確的
+- **gRPC GetCustomer 是 customer 資料的唯一權威來源** — `crm.contacts` 只有部分 customer（約 53%），不可靠
+- Standalone script 呼叫 gRPC 見 `patterns.md` → "gRPC from Standalone Scripts"
 
 ---
 
@@ -53,6 +55,16 @@
 - 當 DB 已有相同 customer_id 的記錄時（如 PENDING 狀態），script 會拒絕插入
 - **Workaround**: 改用 Prisma update 或 raw SQL 更新現有記錄
 - Script 需要 ehr_vendors 中存在 vendor code，新 vendor 必須先加入 ehr_vendors 才能使用
+- **MDHQ 已知問題**: `sftp_ordering_path` 不會被設定（null）、`sftp_archive_path` 缺尾部 `/`、`sftp_folder_mapping.sftp_source_id` 為 null — 每次需手動修正
+
+---
+
+## Same Practice — Follow Existing Integration
+
+同 practice 新增 provider 時，先查現有 integration 的設定值（如 `report_option`），follow 既有值而非 knowledge 預設。
+```sql
+SELECT report_option, integration_type FROM ehr_integrations WHERE clinic_id = {practice_id}
+```
 
 ---
 
@@ -104,17 +116,40 @@ ticket 有表格列出 Practice ID / Provider ID 時：
 
 ## Vendor Name Mapping
 
-| Ticket 上寫的 | DB Code（`emr_name` 填這個） |
-|--------------|-------------------------------|
-| cerbo, mdhq | **MDHQ** |
-| charm | CHARMEHR |
-| eclinical, ecw | ECW |
-| athena | ATHENA |
-| follow that patient | FOLLOWTHATPATIENT |
-| optimantra | OPTIMANTRA |
-| docvilla | DOCVILLA |
+| Ticket 上寫的 | DB Code（`emr_name` 填這個） | `ehr_vendors.code` |
+|--------------|-------------------------------|---------------------|
+| cerbo, mdhq | **MDHQ** | MDHQ |
+| charm | CHARMEHR | **ChARM_EHR** |
+| eclinical, ecw | ECW | ECW |
+| athena | ATHENA | ATHENA |
+| follow that patient | FOLLOWTHATPATIENT | FOLLOWTHATPATIENT |
+| optimantra | OPTIMANTRA | OPTIMANTRA |
+| docvilla | DOCVILLA | DOCVILLA |
+| elation | — | ElationEMR |
+| practice fusion | — | PF |
+| power2practice | — | POWER2PRACTICE |
+| praxis | — | PRAXISEMR |
+| optimal dx | — | OptimalDX |
+| health matters | — | HealthMatters |
 
-`order_clients.emr_name` 必須填 DB Code，不是 ticket 名稱。
+- `order_clients.emr_name` 必須填 DB Code（第二欄），不是 ticket 名稱
+- `ehr_vendors.code` 有 mixed case（legacy data），**不是全大寫** — 寫 SQL 時用實際值
+- MySQL 預設 collation 是 case-insensitive，WHERE IN 匹配不受大小寫影響
+
+---
+
+## Vendor Public/Private 分類
+
+`ehr_vendors.is_public` 欄位控制 Settings 頁面 dropdown 是否顯示（VP-16014 新增）
+
+- **Source of truth**: Notion EMR Vendor List
+- `is_public = true`（預設）: 新 vendor 自動公開
+- `GET /ehr-vendors` API 預設只回傳 `is_public = true` 的 vendor
+- Admin portal 的 vendor API **不受影響**（獨立 service method）
+
+**Public vendors (18)**: APRIMA, ATHENA, CASCADES, ChARM_EHR, DOCVILLA, ECW, ElationEMR, EPRO, FOLLOWTHATPATIENT, GREENWAY, HARRIS, HF, MDHQ, MEDITAB, OPTIMANTRA, POWER2PRACTICE, PF, PRAXISEMR
+
+**Private vendors**: BREATHERMAE, ELLKAY, GLO, HealthMatters, INSYNC, MARQIMEDICAL, MDHQTEST, NICHOLS, OptimalDX, THM, Unprescribed, VEJO, VEJOEcomm, VEJOPROGRAM, YHL, ZYMEBALANZ
 
 ---
 

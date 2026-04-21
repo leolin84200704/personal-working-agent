@@ -12,6 +12,7 @@
 - **Port**: 3390
 - **Key Areas**: `src/trans/` (orders/patients), `src/calendar/`, `src/setting/`, `src/questionnaire/`
 - **Setup**: `npx prisma generate` for both schemas, then `npm run start:dev`
+- **Migration scripts**: `scripts/` 目錄（standalone ts-node）或 `src/calendar/migration/`（NestJS service，但 gRPC 不可用）
 
 ### LIS-transformer
 - **Purpose**: NestJS backend, REST (3190) + gRPC (3191)
