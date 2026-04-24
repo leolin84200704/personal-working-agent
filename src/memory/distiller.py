@@ -316,10 +316,12 @@ class MemoryDistiller:
         self,
         prompt: str,
         system: str = DISTILL_SYSTEM_PROMPT,
-        model: str = HAIKU_MODEL,
+        model: str | None = None,
         max_tokens: int = 2048,
     ) -> str:
         """Helper to call Claude with a prompt and explicit system prompt."""
+        if model is None:
+            model = _model()
         try:
             response = self.claude.messages.create(
                 model=model,
