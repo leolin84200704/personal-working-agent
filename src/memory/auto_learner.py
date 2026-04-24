@@ -214,20 +214,16 @@ Extract the learning as JSON."""
             skill_path.write_text(new_content, encoding="utf-8")
 
     def _update_multi_practice_pattern(self, problem: str, solution: str):
-        """Update MEMORY.md and SKILL.md for multi-practice provider pattern."""
-        try:
-            get_scanner().scan(
-                f"{problem}\n{solution}",
-                context="auto_learner:_update_multi_practice_pattern",
-            )
-        except SecurityViolation as e:
-            print(
-                f"[SECURITY] Rejected multi-practice learning: "
-                f"{e.category} pattern matched"
-            )
-            return
+        """Update MEMORY.md and SKILL.md for multi-practice provider pattern.
 
-        # Add to MEMORY.md (learn_gotcha runs its own scan as well)
+        Security note: content is scanned by `memory.learn_gotcha()` below
+        (the choke point for all MEMORY.md writes). The SKILL.md section
+        appended here is a hardcoded template, not user-controlled, so it
+        does not need its own scan.
+        """
+        # Add to MEMORY.md (learn_gotcha is the public choke point and
+        # will raise SecurityViolation if problem/solution is suspicious;
+        # we let it propagate so SKILL.md below is also skipped).
         self.memory.learn_gotcha(
             repo="EMR Integration - Multi-Practice Provider",
             gotcha=problem,

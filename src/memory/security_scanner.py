@@ -19,8 +19,11 @@ Design notes:
 - We RAISE on first match (fail-closed) rather than silently strip, so the
   caller always has to make an explicit decision. Silent stripping creates
   a false sense of security and makes auditing harder.
-- All patterns are case-insensitive and operate on a normalized copy of the
-  content (whitespace collapsed in a few patterns where matters).
+- Some patterns carry an optional validator() callable that gets a final
+  say: if the validator returns False the match is treated as a false
+  positive and skipped. This keeps the regex-driven fast path while letting
+  heuristic post-filters (e.g. password placeholder whitelist) live in
+  Python.
 - The scanner is dependency-free (stdlib `re` + `logging`) so it can be
   invoked from any layer of the codebase, including unit tests, without
   pulling in `anthropic` etc.
@@ -30,7 +33,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 logger = logging.getLogger("memory.security_scanner")
 
@@ -45,14 +48,55 @@ CATEGORY_EXFILTRATION = "exfiltration"
 
 
 # ---------------------------------------------------------------------------
-# Patterns
+# Password placeholder whitelist + validator
 # ---------------------------------------------------------------------------
 
-# All patterns are matched with re.IGNORECASE | re.DOTALL by default, except
-# where noted. Order within a category matters only for which pattern is
-# reported first when multiple match the same span.
+# Values that are OBVIOUS placeholders in docs/examples and should NOT
+# trigger a credential_leak violation, even if the regex pattern matches.
+_PASSWORD_WHITELIST = frozenset({
+    "example", "password", "changeme", "redacted", "placeholder",
+    "yourpassword", "yourpasswordhere", "mypassword", "mypasswordhere",
+    "test1234567890", "demo12345678", "secret12345",
+})
 
-_PROMPT_INJECTION_PATTERNS: list[str] = [
+
+def _is_suspicious_password_value(m: "re.Match[str]") -> bool:
+    """Return True if the captured password value looks like a real secret.
+
+    The credential_leak password pattern captures the value in group(2).
+    This post-filter rejects common placeholder patterns that produce
+    false positives in documentation and example config.
+    """
+    value = m.group(2) if (m.lastindex or 0) >= 2 else m.group(0)
+    low = value.lower()
+
+    # Explicit placeholder list.
+    if low in _PASSWORD_WHITELIST:
+        return False
+    # All lowercase letters -> almost certainly a doc/example word.
+    if value.isalpha() and value.islower():
+        return False
+    # Redaction style (xxxxxx, ******, ...).
+    if re.fullmatch(r"[x*.\-_]+", value, re.IGNORECASE):
+        return False
+    # Template-variable syntax: ${FOO}, {{bar}}, $(baz), <password>.
+    if re.search(r"[\$\{\}<>]", value):
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Patterns
+#
+# Each pattern is either a raw regex string (no validator) or a 2-tuple
+# `(pattern, validator)` where validator is called with the regex Match and
+# returns True to keep the match, False to treat it as a false positive.
+# ---------------------------------------------------------------------------
+
+PatternSpec = object  # actually str | tuple[str, Callable[[re.Match], bool]]
+
+
+_PROMPT_INJECTION_PATTERNS: list = [
     r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|commands?|rules?)",
     r"you\s+are\s+now\s+",
     r"new\s+instructions?\s*[:：]",
@@ -63,11 +107,15 @@ _PROMPT_INJECTION_PATTERNS: list[str] = [
     r"jailbreak",
 ]
 
-_CREDENTIAL_LEAK_PATTERNS: list[str] = [
+
+_CREDENTIAL_LEAK_PATTERNS: list = [
     # generic api key / secret key assignments
     r"(api[_\-\s]?key|apikey|secret[_\-\s]?key)\s*[:=]\s*[\"']?[A-Za-z0-9+/=_\-]{16,}",
-    # password / passwd / pwd assignments
-    r"(password|passwd|pwd)\s*[:=]\s*[\"']?[^\s\"']{6,}",
+    # password / passwd / pwd assignments (post-filtered by validator below)
+    (
+        r"(password|passwd|pwd)\s*[:=]\s*[\"']?([^\s\"'`<>{}]{12,})",
+        _is_suspicious_password_value,
+    ),
     # bearer tokens
     r"Bearer\s+[A-Za-z0-9_\-\.=]{20,}",
     # PEM private keys (RSA/DSA/EC/OPENSSH/PGP/plain)
@@ -78,11 +126,19 @@ _CREDENTIAL_LEAK_PATTERNS: list[str] = [
     r"gh[pousr]_[A-Za-z0-9]{36}",
 ]
 
-_EXFILTRATION_PATTERNS: list[str] = [
+
+# Exfiltration patterns below are stricter than a naive `curl.*memory` match:
+# - They require both an HTTP(S) URL AND a data-sending flag.
+# - localhost / 127.x / 0.0.0.0 URLs are explicitly excluded (dev examples).
+# - `[^\n|]` stops a match from jumping across a pipe into an unrelated
+#   command, so `curl --help | grep memory` no longer triggers.
+_EXFILTRATION_PATTERNS: list = [
     # base64 encode/decode targeting memory or secrets
     r"base64.*?(encode|decode).*?(memory|long-term|secret|credential)",
-    # curl POST exfiltrating memory/secrets/tokens
-    r"curl\s+.*?\s+(-d|--data|--data-raw)\s+[\"']?.*?(memory|secret|token)",
+    # curl: URL appears BEFORE the data flag
+    r"curl\s+(?:[^\n|]*?\s)?https?://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)[^\s|]+[^\n|]*?(?:-d|--data(?:-raw|-urlencode|-binary)?|-X\s+POST)\b",
+    # curl: data flag appears BEFORE the URL
+    r"curl\s+(?:[^\n|]*?\s)?(?:-d|--data(?:-raw|-urlencode|-binary)?|-X\s+POST)\s+[^\n|]*?\bhttps?://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)[^\s|]+",
     # fetch / axios / requests.post to suspicious destinations
     r"(fetch|axios|requests\.post).*?(webhook|discord|ngrok)",
 ]
@@ -115,21 +171,28 @@ class SecurityViolation(Exception):
 class _CompiledPattern:
     category: str
     raw: str
-    compiled: re.Pattern[str]
+    compiled: "re.Pattern[str]"
+    validator: Optional[Callable[["re.Match[str]"], bool]] = None
 
 
 # ---------------------------------------------------------------------------
 # Scanner
 # ---------------------------------------------------------------------------
 
-def _compile(patterns: Iterable[str], category: str) -> list[_CompiledPattern]:
-    out: list[_CompiledPattern] = []
-    for p in patterns:
+def _compile(patterns: Iterable, category: str) -> list:
+    """Compile a mixed list of `str` or `(str, validator)` specs."""
+    out: list = []
+    for spec in patterns:
+        if isinstance(spec, tuple):
+            raw, validator = spec
+        else:
+            raw, validator = spec, None
         out.append(
             _CompiledPattern(
                 category=category,
-                raw=p,
-                compiled=re.compile(p, re.IGNORECASE | re.DOTALL),
+                raw=raw,
+                compiled=re.compile(raw, re.IGNORECASE | re.DOTALL),
+                validator=validator,
             )
         )
     return out
@@ -154,7 +217,7 @@ class SecurityScanner:
     EXCERPT_LEN: int = 200
 
     def __init__(self) -> None:
-        self._patterns: list[_CompiledPattern] = (
+        self._patterns: list = (
             _compile(_PROMPT_INJECTION_PATTERNS, CATEGORY_PROMPT_INJECTION)
             + _compile(_CREDENTIAL_LEAK_PATTERNS, CATEGORY_CREDENTIAL_LEAK)
             + _compile(_EXFILTRATION_PATTERNS, CATEGORY_EXFILTRATION)
@@ -165,48 +228,53 @@ class SecurityScanner:
     # ------------------------------------------------------------------
 
     def scan(self, content: str, context: str = "") -> None:
-        """Scan content; raise SecurityViolation on first match.
+        """Scan content; raise SecurityViolation on first real match.
+
+        Matches that fail their validator (e.g. placeholder passwords) are
+        treated as false positives and skipped silently.
 
         Args:
-            content: text to scan (memory snippet, distilled insight, etc.)
-            context: short label for logging, e.g. "ticket:VP-16009" or
-                "auto_update:_update_memory".
+            content: text to scan.
+            context: short label for logging.
         """
         if not content:
             return
 
         for cp in self._patterns:
-            m = cp.compiled.search(content)
-            if m is None:
-                continue
+            for m in cp.compiled.finditer(content):
+                if cp.validator is not None and not cp.validator(m):
+                    continue  # false positive, keep scanning
 
-            excerpt = self._make_excerpt(content, m.start(), m.end())
-            self._log_violation(cp.category, cp.raw, excerpt, context)
-            raise SecurityViolation(
-                category=cp.category,
-                pattern=cp.raw,
-                excerpt=excerpt,
-            )
+                excerpt = self._make_excerpt(content, m.start(), m.end())
+                self._log_violation(cp.category, cp.raw, excerpt, context)
+                raise SecurityViolation(
+                    category=cp.category,
+                    pattern=cp.raw,
+                    excerpt=excerpt,
+                )
 
     def scan_safe(
         self, content: str, context: str = ""
-    ) -> tuple[bool, list[dict[str, str]]]:
+    ) -> "tuple[bool, list[dict[str, str]]]":
         """Scan content without raising.
 
         Returns:
             (is_safe, violations) where violations is a list of dicts with
             keys "category", "pattern", "excerpt". Empty list when safe.
 
-            Unlike `scan()`, this method collects ALL matches across all
-            patterns instead of stopping at the first one, so callers can
-            see the full picture before deciding what to do.
+            Unlike `scan()`, this method collects ALL matches (that survive
+            their validators) across all patterns instead of stopping at
+            the first one, so callers can see the full picture before
+            deciding what to do.
         """
         if not content:
             return True, []
 
-        violations: list[dict[str, str]] = []
+        violations: list = []
         for cp in self._patterns:
             for m in cp.compiled.finditer(content):
+                if cp.validator is not None and not cp.validator(m):
+                    continue
                 excerpt = self._make_excerpt(content, m.start(), m.end())
                 self._log_violation(cp.category, cp.raw, excerpt, context)
                 violations.append(
@@ -240,8 +308,6 @@ class SecurityScanner:
         category: str, pattern: str, excerpt: str, context: str
     ) -> None:
         ctx = context or "<no-context>"
-        # log format requested by spec:
-        # [SECURITY] {category} pattern match in {context}: {excerpt[:80]}...
         truncated = excerpt[:80] + ("..." if len(excerpt) > 80 else "")
         logger.warning(
             "[SECURITY] %s pattern match in %s: %s",
@@ -261,7 +327,7 @@ class SecurityScanner:
 # Module-level singleton + convenience functions
 # ---------------------------------------------------------------------------
 
-_scanner: SecurityScanner | None = None
+_scanner: Optional[SecurityScanner] = None
 
 
 def get_scanner() -> SecurityScanner:
@@ -279,7 +345,7 @@ def scan(content: str, context: str = "") -> None:
 
 def scan_safe(
     content: str, context: str = ""
-) -> tuple[bool, list[dict[str, str]]]:
+) -> "tuple[bool, list[dict[str, str]]]":
     """Convenience wrapper around `get_scanner().scan_safe()`."""
     return get_scanner().scan_safe(content, context=context)
 

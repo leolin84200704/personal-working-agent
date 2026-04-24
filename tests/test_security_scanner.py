@@ -94,7 +94,9 @@ class SecurityScannerPositiveCases(unittest.TestCase):
         self.assertEqual(cm.exception.category, CATEGORY_CREDENTIAL_LEAK)
 
     def test_password_assignment(self) -> None:
-        payload = 'password: "hunter2xyz"'
+        # Must be >= 12 chars AND pass validator (not pure lowercase word,
+        # not placeholder, not template).
+        payload = 'password: "MyStr0ngP@ss123"'
         with self.assertRaises(SecurityViolation) as cm:
             self.scanner.scan(payload, context="test:cred-6")
         self.assertEqual(cm.exception.category, CATEGORY_CREDENTIAL_LEAK)
@@ -155,6 +157,66 @@ class SecurityScannerNegativeCases(unittest.TestCase):
         is_safe, violations = self.scanner.scan_safe("", context="test:empty")
         self.assertTrue(is_safe)
         self.assertEqual(violations, [])
+
+    # --- password regex hardening (post-filter validator) -----------------
+
+    def test_password_placeholder_example_not_flagged(self) -> None:
+        # "example" is in the whitelist even though length >= 7.
+        self.scanner.scan(
+            'password: "examplexxxxxx"', context="test:pwd-placeholder-1"
+        )
+
+    def test_password_all_lowercase_word_not_flagged(self) -> None:
+        # Pure lowercase alpha -> treated as doc example.
+        self.scanner.scan(
+            'password: "somepasswordhere"', context="test:pwd-placeholder-2"
+        )
+
+    def test_password_template_variable_not_flagged(self) -> None:
+        self.scanner.scan(
+            'password: "${DB_PASSWORD}"', context="test:pwd-placeholder-3"
+        )
+        self.scanner.scan(
+            'password: "<REPLACE_ME_1234>"', context="test:pwd-placeholder-4"
+        )
+
+    def test_password_redaction_mask_not_flagged(self) -> None:
+        self.scanner.scan(
+            'password: "xxxxxxxxxxxxxx"', context="test:pwd-placeholder-5"
+        )
+        self.scanner.scan(
+            'password: "**************"', context="test:pwd-placeholder-6"
+        )
+
+    def test_short_password_below_length_threshold(self) -> None:
+        # hunter2 is 7 chars, below the new 12-char threshold.
+        self.scanner.scan(
+            'password: "hunter2"', context="test:pwd-too-short"
+        )
+
+    # --- curl exfiltration regex hardening --------------------------------
+
+    def test_curl_help_with_grep_memory_not_flagged(self) -> None:
+        # The old pattern matched this as exfiltration (curl + memory).
+        # New pattern requires an HTTP URL, and `[^\n|]` prevents the
+        # match from reaching past the pipe.
+        self.scanner.scan(
+            "curl --help | grep memory", context="test:curl-help-1"
+        )
+
+    def test_curl_version_not_flagged(self) -> None:
+        self.scanner.scan("curl --version", context="test:curl-version")
+
+    def test_curl_localhost_not_flagged(self) -> None:
+        # Dev / debug flows hitting localhost should not alert.
+        self.scanner.scan(
+            "curl http://localhost:3000 -d @data.json",
+            context="test:curl-localhost",
+        )
+        self.scanner.scan(
+            "curl -X POST http://127.0.0.1:8080/api",
+            context="test:curl-127",
+        )
 
 
 class SecurityScannerScanSafeBehavior(unittest.TestCase):
