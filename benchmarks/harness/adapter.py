@@ -628,9 +628,16 @@ def _format_context(hits: List[Dict[str, Any]]) -> str:
 
 def _build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
     context = _format_context(hits) or "(no context retrieved)"
+    # Strict short-answer contract so string metrics (F1 / BLEU / ROUGE-L)
+    # reflect correctness rather than verbosity. Full-sentence paraphrases
+    # tank unigram overlap even when the fact is right.
     return (
-        "Based on the following memory, answer the question concisely "
-        "(one short sentence, factual only).\n\n"
+        "Answer the question using ONLY the memory below.\n\n"
+        "Rules for the answer:\n"
+        "- Output the minimum factual phrase (a date, name, number, or short "
+        "noun phrase). No full sentence.\n"
+        "- No explanation, no preamble, no quotes, no trailing period.\n"
+        "- If the memory does not contain the answer, output: unknown\n\n"
         f"MEMORY:\n{context}\n\n"
         f"QUESTION: {question}\n\n"
         "ANSWER:"
