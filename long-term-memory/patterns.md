@@ -1,3 +1,23 @@
+---
+id: patterns
+type: ltm
+category: repo_patterns
+status: active
+score: 0.1089
+base_weight: 0.8
+created: 2026-04-22
+updated: 2026-04-22
+links: []
+tags:
+- patterns
+- build
+- deploy
+- investigation
+summary: Build/deploy patterns, investigation flows, DB connections, known issues
+---
+
+
+
 # Common Patterns & Gotchas
 
 ---
@@ -49,6 +69,11 @@
 ### Data Migration 安全模式
 - 新增 boolean filter 欄位時，先 `UPDATE ALL SET col = FALSE`，再 `UPDATE known SET col = TRUE`
 - 比反向（default TRUE + exclude known）安全：避免遺漏未知資料
+
+### 更新 DB 前先查現有命名慣例
+- 批次 UPDATE 類別（如 calendar name, display label）前，先 `SELECT DISTINCT col FROM table` 看既有格式
+- 不要從 ticket 描述或 API 命名猜測，legacy 資料可能有特殊慣例（如 "{NAME}'s Patient Calendar" vs "{name}'s Provider Calendar"）
+- VP-16232 因未確認命名慣例而誤改 5,027 筆 patient calendar 為 "Provider Calendar"
 
 ### lis-backend-emr-v2 Vendor API 架構
 - `EhrVendorService.findAll()` → 只服務 `GET /ehr-vendors` HTTP endpoint（Settings 頁面）

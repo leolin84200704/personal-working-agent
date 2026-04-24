@@ -2,22 +2,26 @@
 Memory Manager - Handles reading and writing memory files.
 
 The memory system is the core learning mechanism for the agent.
+4-tier architecture: Working → STM → LTM → Archive
 """
 from __future__ import annotations
 
+import yaml
 from pathlib import Path
 from typing import Any
 import re
 
 
 class MemoryManager:
-    """Manages SOUL, IDENTITY, USER, and MEMORY files."""
+    """Manages 4-tier memory: Working, STM, LTM, Archive."""
 
     def __init__(self, agent_root: Path | None = None):
         if agent_root is None:
             agent_root = Path(__file__).parent.parent.parent
         self.agent_root = Path(agent_root)
         self.memory_dir = self.agent_root
+
+    # ── Path properties ───────────────────────────────────────────
 
     @property
     def soul_path(self) -> Path:
@@ -34,6 +38,67 @@ class MemoryManager:
     @property
     def memory_path(self) -> Path:
         return self.agent_root / "MEMORY.md"
+
+    @property
+    def stm_dir(self) -> Path:
+        return self.agent_root / "storage" / "short_term_memory"
+
+    @property
+    def ltm_dir(self) -> Path:
+        return self.agent_root / "long-term-memory"
+
+    @property
+    def archive_dir(self) -> Path:
+        return self.agent_root / "archive"
+
+    @property
+    def stm_index_path(self) -> Path:
+        return self.stm_dir / "_index.md"
+
+    @property
+    def ltm_index_path(self) -> Path:
+        return self.ltm_dir / "_index.md"
+
+    @property
+    def archive_index_path(self) -> Path:
+        return self.archive_dir / "_index.md"
+
+    # ── Frontmatter helpers ───────────────────────────────────────
+
+    @staticmethod
+    def read_frontmatter(path: Path) -> dict[str, Any]:
+        """Parse YAML frontmatter from a markdown file."""
+        if not path.exists():
+            return {}
+        content = path.read_text(encoding="utf-8")
+        if not content.startswith("---\n"):
+            return {}
+        end = content.index("\n---", 3)
+        yaml_str = content[4:end]
+        try:
+            return yaml.safe_load(yaml_str) or {}
+        except yaml.YAMLError:
+            return {}
+
+    @staticmethod
+    def write_frontmatter(path: Path, meta: dict[str, Any]) -> None:
+        """Update YAML frontmatter in a markdown file, preserving body."""
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        if content.startswith("---\n"):
+            end = content.index("\n---", 3)
+            body = content[end + 4:]  # after closing ---\n
+        else:
+            body = content
+        yaml_str = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip()
+        path.write_text(f"---\n{yaml_str}\n---\n{body}", encoding="utf-8")
+
+    def list_tier_files(self, tier: str) -> list[Path]:
+        """List all .md files in a tier directory (excluding _index.md)."""
+        dirs = {"stm": self.stm_dir, "ltm": self.ltm_dir, "archive": self.archive_dir}
+        d = dirs.get(tier)
+        if not d or not d.exists():
+            return []
+        return [f for f in sorted(d.glob("*.md")) if f.name != "_index.md"]
 
     def read_soul(self) -> str:
         """Read SOUL.md - agent's core philosophy."""

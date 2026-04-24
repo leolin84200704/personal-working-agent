@@ -1,6 +1,10 @@
 """
 Auto Memory Update - Automatically update SOUL/IDENTITY/USER/MEMORY.md
 based on conversations and feedback.
+
+DEPRECATED: Conversation extraction is now handled by the dreaming pipeline
+(consolidator.py). This module is kept for backward compatibility but is
+not actively called. Use consolidator.py for new consolidation work.
 """
 from __future__ import annotations
 

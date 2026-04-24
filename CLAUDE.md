@@ -37,12 +37,27 @@
 ### Diff 摘要
 ```
 
-## Knowledge 路由
-業務知識在 `knowledge/` 目錄，按需載入：
-- **EMR / Integration / Provider / Practice / HL7 / SFTP / Bundle** → `knowledge/emr-integration.md`
-- **Code change / bug fix / feature** → `knowledge/ticket-routing.md` → `knowledge/repos.md`
-- **Build / deploy / config / gotchas** → `knowledge/patterns.md`
-- **不確定** → 先讀 `knowledge/ticket-routing.md` 分類
+## Memory 架構
+
+4-tier 記憶系統（詳見 `docs/auto-dream-architecture.md`）：
+
+| Tier | 位置 | 用途 |
+|------|------|------|
+| Working | 對話 context window | 當前 session |
+| STM | `storage/short_term_memory/` | 每 ticket 工作紀錄 |
+| LTM | `long-term-memory/` | 整理過的知識（原 knowledge/） |
+| Archive | `archive/` | 完成且低分的記憶 |
+
+每個 tier 有 `_index.md`（scored routing table），dreaming pipeline 自動維護。
+
+### LTM 路由
+按需載入 `long-term-memory/` 下的檔案：
+- **EMR / Integration / Provider / Practice / HL7 / SFTP / Bundle** → `long-term-memory/emr-integration.md`
+- **Code change / bug fix / feature** → `long-term-memory/ticket-routing.md` → `long-term-memory/repos.md`
+- **Build / deploy / config / gotchas** → `long-term-memory/patterns.md`
+- **不確定** → 先讀 `long-term-memory/ticket-routing.md` 分類
+
+> Note: `knowledge/` 是 `long-term-memory/` 的 symlink，舊路徑仍可用。
 
 ---
 
@@ -54,6 +69,19 @@
 
 **建立**: 用 Write 工具建立新檔案，使用以下模板：
 ```markdown
+---
+id: {ticket_id}
+type: stm
+category: {emr_integration | technical | repo_patterns | pm_patterns | process}
+status: active
+score: 0.00
+base_weight: {1.0 for emr, 0.9 for technical, 0.8 for repo, 0.7 for pm, 0.6 for process}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+links: []
+tags: [{ticket_id 小寫}]
+summary: "{ticket 簡述}"
+---
 # {ticket_id} - Work Loop Record
 
 > Created: {YYYY-MM-DD HH:MM:SS UTC}
@@ -94,9 +122,10 @@ Ticket Analysis, Approaches Considered, Decisions Made, Code Changes, Test Resul
 當收到 ticket 處理請求時，遵循以下 9 步流程。
 
 ### Step 1: Retrieve（檢索經驗）
-1. 用 Grep 搜尋 `storage/short_term_memory/` 找類似的過去 ticket
-2. 用 Grep 搜尋 `knowledge/` 找相關技術知識
-3. 如果有相似 ticket，讀取其 STM 檔案，特別關注 Failures 區段
+1. 讀取 `storage/short_term_memory/_index.md` 和 `long-term-memory/_index.md` 掌握記憶全貌
+2. 用 Grep 搜尋 `storage/short_term_memory/` 找類似的過去 ticket
+3. 用 Grep 搜尋 `long-term-memory/` 找相關技術知識
+4. 如果有相似 ticket，讀取其 STM 檔案，特別關注 Failures 區段
 
 ### Step 2: Analyze（分析理解）
 1. 用 Atlassian MCP 取得 ticket 內容
@@ -152,18 +181,19 @@ Ticket Analysis, Approaches Considered, Decisions Made, Code Changes, Test Resul
 詳細框架見 `skills/work-loop/RETROSPECTIVE.md`
 
 ### Step 9: Memory Update（記憶蒸餾）
-從 STM 提取可重用的知識，寫入長期記憶：
+從 STM 提取可重用的知識，寫入長期記憶（`long-term-memory/`）：
 
 1. **讀取** STM 檔案的 Lessons Learned 和 Retrospective
 2. **提取** 可泛化的 insight，分類為：
-   - `technical` — 技術知識 → 寫入 `knowledge/repos.md` 或 `knowledge/patterns.md`
-   - `pm_patterns` — PM 溝通模式 → 寫入 `knowledge/ticket-routing.md`
-   - `repo_patterns` — Repo 特有 pattern → 寫入 `knowledge/patterns.md`
-   - `process` — 流程改進 → 寫入 `knowledge/patterns.md`
-   - `emr_integration` — EMR 整合知識 → 寫入 `knowledge/emr-integration.md`
+   - `technical` — 技術知識 → 寫入 `long-term-memory/repos.md` 或 `long-term-memory/patterns.md`
+   - `pm_patterns` — PM 溝通模式 → 寫入 `long-term-memory/ticket-routing.md`
+   - `repo_patterns` — Repo 特有 pattern → 寫入 `long-term-memory/patterns.md`
+   - `process` — 流程改進 → 寫入 `long-term-memory/patterns.md`
+   - `emr_integration` — EMR 整合知識 → 寫入 `long-term-memory/emr-integration.md`
 3. **忽略** ticket-specific 的細節（ID、日期、一次性操作）
-4. **避免重複**: 寫入前先 Grep 確認 knowledge 檔案中沒有相同內容
+4. **避免重複**: 寫入前先 Grep 確認 LTM 檔案中沒有相同內容
 5. 每完成 5 個 ticket，跨 ticket review：讀取最近 5 份 STM，找系統性 pattern
+6. **Dreaming pipeline**（每天 6:30 PM 自動執行）會處理 scoring、cross-linking、archive。手動觸發：`./scripts/run-dream.sh`
 
 ### 失敗處理
 任何步驟失敗：

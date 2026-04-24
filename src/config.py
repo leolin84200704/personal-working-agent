@@ -64,7 +64,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_reload: bool = False
 
-    # Vector Store
+    # Vector Store (optional fallback — primary retrieval uses YAML scoring)
+    use_vector_search: bool = False
     vector_store_path: Path = Field(default_factory=lambda: Path("./storage/chroma"))
     embedding_model: str = "all-MiniLM-L6-v2"  # sentence-transformers model
 

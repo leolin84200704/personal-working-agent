@@ -1,3 +1,46 @@
+---
+id: emr-integration
+type: ltm
+category: emr_integration
+status: active
+score: 0.2599
+base_weight: 1.0
+created: 2026-04-22
+updated: 2026-04-22
+links:
+- VP-14787
+- VP-15952
+- VP-16014
+- VP-16175
+- VP-16193
+- VP-16245
+- VP-16251
+- VP-16271
+- VP-16280
+- VP-16289
+tags:
+- emr
+- hl7
+- integration
+- provider
+- practice
+summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle config
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # EMR Integration Rules
 
 > Single source of truth. Consolidated from VP-15874, VP-15979, VP-15791, VP-15980, VP-15955.
@@ -24,9 +67,11 @@
 
 ## MSH Value 判定
 
-- **預設**：`msh06_receiving_facility` = customer_id（Provider ID）
-- **例外**：ticket 明確寫 "MSH value is the Practice ID" → msh06 = Practice ID
+- **新預設（2026-04-23 起）**：`msh06_receiving_facility` = **Practice ID**（clinic_id）
+- **原因**：Kristine 在 VP-16280 comment 確認「Practice IDs as MSH, all customers moving forward — EMR vendors recognize integrations at practice-level and usually require one MSH per practice」
+- **歷史資料**：既有舊 integration MSH 多為 Provider ID，未必回填；bulk update 需獨立 ticket 用 `update-clinic-msh.ts`
 - **BULK UPDATE**：ticket 寫 "update ALL MSH values" → 用 `update-clinic-msh.ts`
+- **Practice-wide alignment**: 當新 ticket 是「add-provider」且 same-practice 既有 MSH 還停留在 Provider ID 時，Leo 傾向一次把該 practice 全部既有 record 也改成 Practice ID，保持一致。Plan 階段主動把這點列為決策點，不要預設「只改新的」
 
 ---
 
@@ -40,6 +85,8 @@
 
 - **ticket 未指定 integration type = FULL_INTEGRATION（預設）**
 - FULL_INTEGRATION 需要 order_clients + sftp_folder_mapping
+- **integration_type 不 follow 既有 same-practice integration** — 即使該 practice 既有 provider 都是 RESULT_ONLY，新 provider 仍套用預設 FULL_INTEGRATION
+- **唯一例外**：該 vendor 本身只提供 result-only 服務時，才用 RESULT_ONLY
 
 ---
 
@@ -61,10 +108,24 @@
 
 ## Same Practice — Follow Existing Integration
 
-同 practice 新增 provider 時，先查現有 integration 的設定值（如 `report_option`），follow 既有值而非 knowledge 預設。
+同 practice 新增 provider 時，下列欄位**必須抄 same-clinic 既有 integration 的值**（不是 knowledge 預設）：
+
+| 欄位 | 所在 table | 預設（fallback） | 備註 |
+|------|-----------|------------------|------|
+| `report_option` | `ehr_integrations` | `PERSONALIZED` | script 已自動處理（`getReportOption(clinicId)`） |
+| `kit_delivery_option` | `ehr_integrations` | `NO_DELIVERY` | **script 未處理，需手動補** |
+| `old_clinic_id` | `order_clients` | `null` | **script 未處理，需手動補**；同 clinic 的既有記錄通常共用同一個 legacy clinic id |
+
 ```sql
-SELECT report_option, integration_type FROM ehr_integrations WHERE clinic_id = {practice_id}
+-- 一次撈齊所有 follow-existing 欄位
+SELECT report_option, kit_delivery_option FROM ehr_integrations WHERE clinic_id = {practice_id} LIMIT 1;
+SELECT old_clinic_id FROM order_clients WHERE clinic_id = {practice_id} AND old_clinic_id IS NOT NULL LIMIT 1;
 ```
+
+- 若 same-clinic 無既有 → 套上表 fallback
+- **注意**: `integration_type` **不** follow 既有，仍套預設 FULL_INTEGRATION（見「Integration Type Rules」）
+
+- **`sftp_folder_mapping` 可能已存在**: 同 practice 的其他 provider 若先建過 integration，ORDER mapping 通常已經在 `sftp_folder_mapping`，insert script 會直接跳過。新增 provider 前先查，避免誤以為 script 失敗。
 
 ---
 
@@ -133,6 +194,7 @@ ticket 有表格列出 Practice ID / Provider ID 時：
 | health matters | — | HealthMatters |
 
 - `order_clients.emr_name` 必須填 DB Code（第二欄），不是 ticket 名稱
+- **case 一致性**: `order_clients.emr_name` 要用**上表 DB Code 的大小寫**（e.g. `MDHQ` 而非 `mdhq`）。`insert-ehr-integration.ts` 以 CLI `--emr-name` 原樣寫入，因此要傳 `MDHQ` 而不是 `mdhq`；若已寫成小寫，事後 `UPDATE order_clients SET emr_name = 'MDHQ' WHERE ...` 修正
 - `ehr_vendors.code` 有 mixed case（legacy data），**不是全大寫** — 寫 SQL 時用實際值
 - MySQL 預設 collation 是 case-insensitive，WHERE IN 匹配不受大小寫影響
 
@@ -181,13 +243,47 @@ ticket 有表格列出 Practice ID / Provider ID 時：
 
 ---
 
+## Auto-Integrate（自助整合請求系統）
+
+PRD: Confluence「Automated New EHR Integrations」(page 1781628967)
+
+**目的:** 讓 provider 透過 Provider Portal > Settings > Third-Party Integrations 自助提交 EHR 整合請求，取代手動 ticket 流程。
+
+**三大元件:**
+1. Integration Request Form — provider 填表（supported vendor 或 "Not on the list"）
+2. Integration Status Tracker — provider 查看請求狀態
+3. Admin Review Dashboard — Unimod Panel 新 tab，Sales/TPM/PM 審核
+
+**程式碼位置（lis-backend-emr-v2）:**
+- Controller: `src/modules/integration-management/auto-integrate/controllers/integration-request.controller.ts`
+- Service: `src/modules/integration-management/auto-integrate/services/integration-request.service.ts`
+- Create DTO: `src/modules/integration-management/auto-integrate/dto/create-integration-request.dto.ts`
+- API: `POST /integration-management/auto-integrate/requests`
+
+**已存在的 PRD 表單欄位（DTO + DB）:**
+- `businessModel` → `business_model` (VarChar 100)
+- `businessJustification` → `business_justification` (Text)
+- `serviceProvided` → `service_provided` (Text)
+- `expectedVolumeRange` → `expected_volume_range` (Enum)
+- `integrationType` → `integration_type` (含 OTHER option)
+- `ehrVendorId` → `ehr_vendor_id` (Optional, null = 未選或 not on list)
+
+**"Not on the list" 缺少的欄位（VP-14787）:**
+- custom_vendor_name / company_name
+- custom_ehr_name
+- custom_ehr_website (URL)
+
+**VP-14873（獨立 ticket）:** 將 unsupported vendor 請求分離到獨立 table + API
+
+---
+
 ## 插入後驗證 Checklist
 
 ### ehr_integrations
-customer_id, clinic_name, clinic_id, msh06, sftp_host, sftp_port, sftp_result_path, sftp_archive_path, sftp_ordering_path, requested_by, status, ehr_vendor_id, legacy_emr_service
+customer_id, clinic_name, clinic_id, msh06, sftp_host, sftp_port, sftp_result_path, sftp_archive_path, sftp_ordering_path, requested_by, status, ehr_vendor_id, legacy_emr_service, **report_option（same-clinic follow）**, **kit_delivery_option（same-clinic follow）**
 
 ### order_clients
-customer_name（gRPC）, customer_id, customer_provider_NPI, customer_practice_name, clinic_id, emr_name（DB Code）, remote_folder_path
+customer_name（gRPC）, customer_id, customer_provider_NPI, customer_practice_name, clinic_id, emr_name（**DB Code 原始大小寫**，如 `MDHQ` 非 `mdhq`）, remote_folder_path, **old_clinic_id（same-clinic follow）**
 
 ### sftp_folder_mapping
 server_folder, local_folder, emrName

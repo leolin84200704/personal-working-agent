@@ -43,3 +43,6 @@ output/reports/
 
 # Logs
 *.log
+
+# macOS
+.DS_Store
