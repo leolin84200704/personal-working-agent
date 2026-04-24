@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 import re
 
+from src.memory.security_scanner import get_scanner
+
 
 class MemoryManager:
     """Manages 4-tier memory: Working, STM, LTM, Archive."""
@@ -218,6 +220,12 @@ class MemoryManager:
 
     def learn_repo_pattern(self, repo: str, pattern: str, description: str):
         """Add a learned pattern to MEMORY.md."""
+        # Security guard BEFORE any mutation.
+        get_scanner().scan(
+            f"{repo}\n{pattern}\n{description}",
+            context=f"manager:learn_repo_pattern:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Find or create Patterns section
@@ -241,6 +249,11 @@ class MemoryManager:
 
     def learn_gotcha(self, repo: str, gotcha: str, solution: str):
         """Add a learned gotcha to MEMORY.md."""
+        get_scanner().scan(
+            f"{repo}\n{gotcha}\n{solution}",
+            context=f"manager:learn_gotcha:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Find or create Gotchas section
@@ -260,6 +273,11 @@ class MemoryManager:
 
     def learn_qa(self, question: str, answer: str):
         """Add a Q&A to MEMORY.md."""
+        get_scanner().scan(
+            f"{question}\n{answer}",
+            context="manager:learn_qa",
+        )
+
         memory = self.read_memory()
 
         # Find or create Questions section
@@ -278,6 +296,11 @@ class MemoryManager:
 
     def update_repo_knowledge(self, repo: str, key: str, value: str):
         """Update knowledge about a specific repo in MEMORY.md."""
+        get_scanner().scan(
+            f"{repo}\n{key}\n{value}",
+            context=f"manager:update_repo_knowledge:{repo}",
+        )
+
         memory = self.read_memory()
 
         section_header = f"### {repo}"
@@ -373,6 +396,11 @@ class MemoryManager:
 
     def _add_to_gotchas(self, repo: str, problem: str, solution: str):
         """Add an entry to the Gotchas section, avoiding duplicates."""
+        get_scanner().scan(
+            f"{repo}\n{problem}\n{solution}",
+            context=f"manager:_add_to_gotchas:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Check if Gotchas section exists
