@@ -43,3 +43,10 @@ output/reports/
 
 # Logs
 *.log
+
+# Benchmarks — downloaded data and scratch dirs stay out of git
+benchmarks/datasets/locomo/*.json
+benchmarks/results/_chroma_sandbox/
+benchmarks/results/*.json
+benchmarks/results/*.md
+
