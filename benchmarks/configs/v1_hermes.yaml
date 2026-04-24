@@ -1,0 +1,30 @@
+# v1 Hermes — placeholder.
+#
+# TODO: fill this in once the Hermes technique is merged into
+# src/memory/. Expected axes that will change versus v0:
+#   - different embedding / scorer
+#   - re-ranking stage
+#   - consolidator / dreaming-pipeline involvement at ingest time
+#   - possibly a real LLM call at query time
+#
+# Until then, running this config should error out loudly rather than
+# silently behaving like v0.
+
+name: v1_hermes
+description: |
+  Placeholder for the post-Hermes version. Do not run until the harness
+  and src/memory/ code supports the new pipeline.
+
+status: not_implemented
+
+# When ready, mirror the v0 schema and override the relevant keys. For
+# example (sketch, not yet valid):
+# memory:
+#   collection: conversations
+#   top_k: 10
+# retrieval:
+#   rerank: true
+#   time_decay: true
+# scoring:
+#   llm_judge_enabled: true
+#   llm_judge_model: claude-opus-4-6

@@ -1,0 +1,28 @@
+# v0 baseline — current lis-code-agent memory settings, pre-Hermes.
+# Values mirror src/config.py defaults.
+
+name: v0_baseline
+description: |
+  Retrieval-only baseline. Injects LoCoMo dialogue turns into a fresh
+  ChromaDB collection per sample and returns the top-k retrieved turns as
+  the "answer". No LLM call, no agent loop, no scoring/re-ranking.
+  Purpose: lower-bound measurement so later runs (v1) can show lift.
+
+memory:
+  # which VectorStore collection the adapter writes dialogue turns into
+  collection: conversations
+  # matches Settings.max_retrieved_memories default
+  top_k: 5
+  # embedding model used by src.memory.vector_store.VectorStore
+  embedding_model: all-MiniLM-L6-v2
+
+retrieval:
+  # v0 has no re-ranking; placeholder so v1 config can override cleanly.
+  rerank: false
+  time_decay: false
+
+scoring:
+  # Judge configuration. LLM judge stays off in v0.
+  string_metrics: [f1, bleu1, rougeL]
+  llm_judge_enabled: false
+  llm_judge_model: null
