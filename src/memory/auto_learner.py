@@ -13,6 +13,7 @@ from anthropic import Anthropic
 
 from src.config import get_settings
 from .manager import MemoryManager, get_memory_manager
+from .security_scanner import SecurityViolation, get_scanner
 
 
 class AutoLearner:
@@ -156,13 +157,19 @@ Extract the learning as JSON."""
 
         # Update based on category
         if category in ["pattern", "gotcha"]:
-            # Add to MEMORY.md
-            self.memory.learn_gotcha(
-                repo=title,
-                gotcha=problem,
-                solution=solution
-            )
-            updated_files.append("MEMORY.md")
+            # Add to MEMORY.md (learn_gotcha scans internally and may raise)
+            try:
+                self.memory.learn_gotcha(
+                    repo=title,
+                    gotcha=problem,
+                    solution=solution
+                )
+                updated_files.append("MEMORY.md")
+            except SecurityViolation as e:
+                print(
+                    f"[SECURITY] Rejected MEMORY.md gotcha: "
+                    f"{e.category} pattern matched"
+                )
 
         if category == "ms-rule":
             # Update SKILL.md
@@ -181,6 +188,18 @@ Extract the learning as JSON."""
 
     def _update_skill_md(self, title: str, content: str):
         """Update SKILL.md with new content."""
+        try:
+            get_scanner().scan(
+                f"{title}\n{content}",
+                context="auto_learner:_update_skill_md",
+            )
+        except SecurityViolation as e:
+            # Fail-closed: refuse to write and let the caller notice via log.
+            print(
+                f"[SECURITY] Rejected SKILL.md learning: {e.category} pattern matched"
+            )
+            return
+
         skill_path = self.agent_root / "skills" / "emr-integration" / "SKILL.md"
 
         if not skill_path.exists():
@@ -196,7 +215,19 @@ Extract the learning as JSON."""
 
     def _update_multi_practice_pattern(self, problem: str, solution: str):
         """Update MEMORY.md and SKILL.md for multi-practice provider pattern."""
-        # Add to MEMORY.md
+        try:
+            get_scanner().scan(
+                f"{problem}\n{solution}",
+                context="auto_learner:_update_multi_practice_pattern",
+            )
+        except SecurityViolation as e:
+            print(
+                f"[SECURITY] Rejected multi-practice learning: "
+                f"{e.category} pattern matched"
+            )
+            return
+
+        # Add to MEMORY.md (learn_gotcha runs its own scan as well)
         self.memory.learn_gotcha(
             repo="EMR Integration - Multi-Practice Provider",
             gotcha=problem,
