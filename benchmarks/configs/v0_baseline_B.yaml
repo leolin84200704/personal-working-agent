@@ -1,0 +1,39 @@
+# v0 baseline B — A + scorer-based rerank.
+#
+# Same retrieval path as v0_baseline_A, but with an extra re-ranking stage
+# that applies `src/memory/scorer.py::score_file` to the top_k=10 hits
+# and keeps final_k=5 for the LLM prompt.
+#
+# Note on rerank: scorer.score_file is designed for memory-file scoring
+# (YAML frontmatter on disk). The adapter writes each retrieval hit to a
+# temp MD with synthetic frontmatter so score_file runs unchanged.
+
+name: v0_baseline_B
+description: |
+  A + scorer-based rerank. After retrieve_relevant_knowledge produces
+  top_k=10 hits, the adapter applies scorer.score_file to each (via
+  temp files with synthetic frontmatter) and keeps final_k=5 before
+  handing the context to `claude -p`.
+
+memory:
+  collection: conversations
+  top_k: 10            # fetch more for rerank
+  embedding_model: all-MiniLM-L6-v2
+
+retrieval:
+  api: retrieve_relevant_knowledge
+
+rerank:
+  enabled: true
+  method: scorer_formula    # uses src/memory/scorer.py::MemoryScorer.score_file
+  final_k: 5
+
+answer:
+  method: claude_cli
+  model: claude-sonnet-4-6
+  timeout: 60
+
+scoring:
+  string_metrics: [f1, bleu1, rougeL]
+  llm_judge_enabled: false
+  llm_judge_model: null
