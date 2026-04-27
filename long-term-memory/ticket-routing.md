@@ -1,3 +1,21 @@
+---
+id: ticket-routing
+type: ltm
+category: pm_patterns
+status: active
+score: 0.0866
+base_weight: 0.7
+created: 2026-04-22
+updated: 2026-04-22
+links: []
+tags:
+- routing
+- ticket
+- pm
+summary: Ticket keyword to repo/module routing table
+---
+
+
 # Ticket → Repo Routing
 
 > 根據 ticket 關鍵字判斷目標 repo 和模組

@@ -1,0 +1,44 @@
+# v0 baseline A — retrieval via retrieve_relevant_knowledge + LLM answer via claude CLI.
+#
+# Upgrade over the original v0_baseline.yaml (which returned concatenated
+# top-k turns as the "answer"). A reads through the full retrieval path
+# that the agent actually uses (`src/memory/indexer.py::retrieve_relevant_knowledge`)
+# and then funnels the retrieved context into a `claude -p` subprocess
+# for answer extraction.
+#
+# No re-ranking — that's v0 baseline B.
+
+name: v0_baseline_A
+description: |
+  retrieve_relevant_knowledge + LLM extraction (no rerank). Injects LoCoMo
+  dialogue turns into a fresh ChromaDB collection per sample, retrieves
+  top-k via the indexer's combined (distance x relevance_score) formula,
+  and hands the context to `claude -p` for free-form answer extraction.
+
+memory:
+  # Collection the adapter writes dialogue turns into. This mirrors the
+  # real agent sandbox ("conversations") so retrieve_relevant_knowledge
+  # sees the same data layout the agent would.
+  collection: conversations
+  # top_k handed to the retrieval API.
+  top_k: 5
+  embedding_model: all-MiniLM-L6-v2
+
+retrieval:
+  # Switch: raw_vector (old v0) vs retrieve_relevant_knowledge (A/B).
+  api: retrieve_relevant_knowledge
+
+rerank:
+  enabled: false
+
+answer:
+  # claude_cli = subprocess.run(["claude", "-p", ...]); offline concat = "concat"
+  method: claude_cli
+  model: claude-sonnet-4-6
+  # subprocess timeout per call (seconds)
+  timeout: 60
+
+scoring:
+  string_metrics: [f1, bleu1, rougeL]
+  llm_judge_enabled: false
+  llm_judge_model: null

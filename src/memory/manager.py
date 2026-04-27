@@ -2,22 +2,81 @@
 Memory Manager - Handles reading and writing memory files.
 
 The memory system is the core learning mechanism for the agent.
+4-tier architecture: Working → STM → LTM → Archive
 """
 from __future__ import annotations
 
+import logging
+import yaml
 from pathlib import Path
 from typing import Any
 import re
 
+from src.memory.security_scanner import get_scanner
+from src.memory.session_index import SessionIndex
+
+logger = logging.getLogger("memory.manager")
+
+# ---------------------------------------------------------------------------
+# Production SessionIndex singleton (FTS5 conversation log).
+#
+# Lazy-initialised on first use so that:
+#   - Test environments that never touch session search don't pay the
+#     SQLite open cost.
+#   - A broken settings / filesystem doesn't blow up MemoryManager() ctor
+#     (which is hit by many unrelated code paths and tests).
+#
+# Storage location is derived from Settings.storage_path (NOT hardcoded) so
+# overrides via env / monkeypatch propagate.
+# ---------------------------------------------------------------------------
+
+_session_index: SessionIndex | None = None
+
+
+def _get_session_index() -> SessionIndex:
+    """Return the process-wide SessionIndex, creating it on first call.
+
+    The DB lives at ``Settings.storage_path / 'conversations.db'``. The
+    SessionIndex constructor handles ``mkdir(parents=True, exist_ok=True)``
+    on the parent directory.
+    """
+    global _session_index
+    if _session_index is None:
+        # Local import to avoid circular import at module load (config has no
+        # cycle with manager today, but this is the safer pattern).
+        from src.config import get_settings
+
+        settings = get_settings()
+        db_path = Path(settings.storage_path) / "conversations.db"
+        _session_index = SessionIndex(db_path)
+    return _session_index
+
+
+def _reset_session_index_for_tests() -> None:
+    """Test-only helper: drop the cached singleton so the next call rebuilds.
+
+    Used by tests that monkeypatch the storage path. Closes the existing
+    handle if one exists to avoid leaking SQLite file descriptors.
+    """
+    global _session_index
+    if _session_index is not None:
+        try:
+            _session_index.close()
+        except Exception:
+            pass
+    _session_index = None
+
 
 class MemoryManager:
-    """Manages SOUL, IDENTITY, USER, and MEMORY files."""
+    """Manages 4-tier memory: Working, STM, LTM, Archive."""
 
     def __init__(self, agent_root: Path | None = None):
         if agent_root is None:
             agent_root = Path(__file__).parent.parent.parent
         self.agent_root = Path(agent_root)
         self.memory_dir = self.agent_root
+
+    # ── Path properties ───────────────────────────────────────────
 
     @property
     def soul_path(self) -> Path:
@@ -34,6 +93,67 @@ class MemoryManager:
     @property
     def memory_path(self) -> Path:
         return self.agent_root / "MEMORY.md"
+
+    @property
+    def stm_dir(self) -> Path:
+        return self.agent_root / "storage" / "short_term_memory"
+
+    @property
+    def ltm_dir(self) -> Path:
+        return self.agent_root / "long-term-memory"
+
+    @property
+    def archive_dir(self) -> Path:
+        return self.agent_root / "archive"
+
+    @property
+    def stm_index_path(self) -> Path:
+        return self.stm_dir / "_index.md"
+
+    @property
+    def ltm_index_path(self) -> Path:
+        return self.ltm_dir / "_index.md"
+
+    @property
+    def archive_index_path(self) -> Path:
+        return self.archive_dir / "_index.md"
+
+    # ── Frontmatter helpers ───────────────────────────────────────
+
+    @staticmethod
+    def read_frontmatter(path: Path) -> dict[str, Any]:
+        """Parse YAML frontmatter from a markdown file."""
+        if not path.exists():
+            return {}
+        content = path.read_text(encoding="utf-8")
+        if not content.startswith("---\n"):
+            return {}
+        end = content.index("\n---", 3)
+        yaml_str = content[4:end]
+        try:
+            return yaml.safe_load(yaml_str) or {}
+        except yaml.YAMLError:
+            return {}
+
+    @staticmethod
+    def write_frontmatter(path: Path, meta: dict[str, Any]) -> None:
+        """Update YAML frontmatter in a markdown file, preserving body."""
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        if content.startswith("---\n"):
+            end = content.index("\n---", 3)
+            body = content[end + 4:]  # after closing ---\n
+        else:
+            body = content
+        yaml_str = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip()
+        path.write_text(f"---\n{yaml_str}\n---\n{body}", encoding="utf-8")
+
+    def list_tier_files(self, tier: str) -> list[Path]:
+        """List all .md files in a tier directory (excluding _index.md)."""
+        dirs = {"stm": self.stm_dir, "ltm": self.ltm_dir, "archive": self.archive_dir}
+        d = dirs.get(tier)
+        if not d or not d.exists():
+            return []
+        return [f for f in sorted(d.glob("*.md")) if f.name != "_index.md"]
 
     def read_soul(self) -> str:
         """Read SOUL.md - agent's core philosophy."""
@@ -153,6 +273,12 @@ class MemoryManager:
 
     def learn_repo_pattern(self, repo: str, pattern: str, description: str):
         """Add a learned pattern to MEMORY.md."""
+        # Security guard BEFORE any mutation.
+        get_scanner().scan(
+            f"{repo}\n{pattern}\n{description}",
+            context=f"manager:learn_repo_pattern:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Find or create Patterns section
@@ -176,6 +302,11 @@ class MemoryManager:
 
     def learn_gotcha(self, repo: str, gotcha: str, solution: str):
         """Add a learned gotcha to MEMORY.md."""
+        get_scanner().scan(
+            f"{repo}\n{gotcha}\n{solution}",
+            context=f"manager:learn_gotcha:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Find or create Gotchas section
@@ -195,6 +326,11 @@ class MemoryManager:
 
     def learn_qa(self, question: str, answer: str):
         """Add a Q&A to MEMORY.md."""
+        get_scanner().scan(
+            f"{question}\n{answer}",
+            context="manager:learn_qa",
+        )
+
         memory = self.read_memory()
 
         # Find or create Questions section
@@ -213,6 +349,11 @@ class MemoryManager:
 
     def update_repo_knowledge(self, repo: str, key: str, value: str):
         """Update knowledge about a specific repo in MEMORY.md."""
+        get_scanner().scan(
+            f"{repo}\n{key}\n{value}",
+            context=f"manager:update_repo_knowledge:{repo}",
+        )
+
         memory = self.read_memory()
 
         section_header = f"### {repo}"
@@ -306,8 +447,55 @@ class MemoryManager:
                     solution="**Migration in progress**: EMR-Backend (Java, legacy) → lis-backend-emr-v2 (NestJS, current). Always prefer lis-backend-emr-v2 for new work."
                 )
 
+    # ── Session index (FTS5) — additive, does NOT affect default retrieval ──
+
+    def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
+        """Keyword full-text search across persisted conversation turns.
+
+        Hybrid-friendly companion to vector retrieval: BM25 ranks lexical /
+        temporal matches that vector embeddings often miss (names, dates,
+        numbers, exact phrases).
+
+        Returns turn-level matches with keys::
+
+            session_id, turn_index, speaker, turn_date, text, metadata, rank
+
+        Failures (DB missing, schema corrupt, etc.) are swallowed and an
+        empty list is returned — the agent must never crash because the
+        side-channel index is misbehaving.
+        """
+        try:
+            idx = _get_session_index()
+            return idx.search(query, limit=limit)
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("search_sessions failed: %s", e)
+            return []
+
+    def record_session_turns(
+        self, session_id: str, turns: list[dict]
+    ) -> int:
+        """Best-effort write of conversation turns into the FTS5 index.
+
+        Uses :meth:`SessionIndex.add_safe` so security-pattern hits are
+        logged-and-skipped rather than raising. Returns the number of rows
+        actually inserted (0 on any failure or if every turn was filtered).
+        """
+        if not turns:
+            return 0
+        try:
+            idx = _get_session_index()
+            return idx.add_safe(session_id, turns)
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("record_session_turns failed: %s", e)
+            return 0
+
     def _add_to_gotchas(self, repo: str, problem: str, solution: str):
         """Add an entry to the Gotchas section, avoiding duplicates."""
+        get_scanner().scan(
+            f"{repo}\n{problem}\n{solution}",
+            context=f"manager:_add_to_gotchas:{repo}",
+        )
+
         memory = self.read_memory()
 
         # Check if Gotchas section exists
@@ -341,3 +529,13 @@ def get_memory_manager() -> MemoryManager:
     if _memory_manager is None:
         _memory_manager = MemoryManager()
     return _memory_manager
+
+
+def search_sessions(query: str, limit: int = 10) -> list[dict]:
+    """Module-level convenience wrapper around the singleton manager."""
+    return get_memory_manager().search_sessions(query, limit=limit)
+
+
+def record_session_turns(session_id: str, turns: list[dict]) -> int:
+    """Module-level convenience wrapper around the singleton manager."""
+    return get_memory_manager().record_session_turns(session_id, turns)

@@ -15,6 +15,7 @@ from anthropic import Anthropic
 
 from src.config import get_settings
 from src.memory.manager import MemoryManager, get_memory_manager
+from src.memory.security_scanner import SecurityViolation, get_scanner
 from src.utils.logger import get_logger
 
 logger = get_logger("memory.distiller")
@@ -279,10 +280,20 @@ class MemoryDistiller:
                 )
                 new_content = self._compress_file(content, "MEMORY.md", max_chars)
                 if new_content and len(new_content) < len(content):
-                    memory_path.write_text(new_content, encoding="utf-8")
-                    compressed_files.append(
-                        f"MEMORY.md: {len(content)} -> {len(new_content)} chars"
-                    )
+                    try:
+                        get_scanner().scan(
+                            new_content,
+                            context="distiller:compress_knowledge:MEMORY.md",
+                        )
+                    except SecurityViolation as e:
+                        logger.warning(
+                            "Rejected compressed MEMORY.md: %s", e.category
+                        )
+                    else:
+                        memory_path.write_text(new_content, encoding="utf-8")
+                        compressed_files.append(
+                            f"MEMORY.md: {len(content)} -> {len(new_content)} chars"
+                        )
 
         # 2. Check each knowledge/*.md file
         knowledge_dir = self.settings.agent_root / "knowledge"
@@ -296,10 +307,22 @@ class MemoryDistiller:
                     )
                     new_content = self._compress_file(content, md_file.name, max_chars)
                     if new_content and len(new_content) < len(content):
-                        md_file.write_text(new_content, encoding="utf-8")
-                        compressed_files.append(
-                            f"{md_file.name}: {len(content)} -> {len(new_content)} chars"
-                        )
+                        try:
+                            get_scanner().scan(
+                                new_content,
+                                context=f"distiller:compress_knowledge:{md_file.name}",
+                            )
+                        except SecurityViolation as e:
+                            logger.warning(
+                                "Rejected compressed %s: %s",
+                                md_file.name,
+                                e.category,
+                            )
+                        else:
+                            md_file.write_text(new_content, encoding="utf-8")
+                            compressed_files.append(
+                                f"{md_file.name}: {len(content)} -> {len(new_content)} chars"
+                            )
 
         if not compressed_files:
             return f"All files are within the {max_chars}-char limit. No compression needed."
@@ -316,10 +339,12 @@ class MemoryDistiller:
         self,
         prompt: str,
         system: str = DISTILL_SYSTEM_PROMPT,
-        model: str = HAIKU_MODEL,
+        model: str | None = None,
         max_tokens: int = 2048,
     ) -> str:
         """Helper to call Claude with a prompt and explicit system prompt."""
+        if model is None:
+            model = _model()
         try:
             response = self.claude.messages.create(
                 model=model,
@@ -356,6 +381,19 @@ class MemoryDistiller:
 
     def _append_to_knowledge(self, file_name: str, section: str, content: str) -> None:
         """Append content to a knowledge file under a section header."""
+        # Security guard: reject distilled content that contains prompt
+        # injection, credentials, or exfiltration payloads before writing.
+        try:
+            get_scanner().scan(
+                f"{section}\n{content}",
+                context=f"distiller:_append_to_knowledge:{file_name}",
+            )
+        except SecurityViolation as e:
+            logger.warning(
+                "Rejected distilled insight for %s: %s", file_name, e.category
+            )
+            return
+
         knowledge_dir = self.settings.agent_root / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
         file_path = knowledge_dir / file_name
@@ -384,6 +422,17 @@ class MemoryDistiller:
 
     def _append_to_memory_md(self, section: str, content: str) -> None:
         """Append content to MEMORY.md under a section header."""
+        try:
+            get_scanner().scan(
+                f"{section}\n{content}",
+                context="distiller:_append_to_memory_md",
+            )
+        except SecurityViolation as e:
+            logger.warning(
+                "Rejected distilled insight for MEMORY.md: %s", e.category
+            )
+            return
+
         memory_path = self.settings.agent_root / "MEMORY.md"
         existing = ""
         if memory_path.exists():

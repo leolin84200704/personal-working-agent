@@ -39,7 +39,20 @@ VALID_SECTIONS = [
 
 STM_COLLECTION = "short_term_memory"
 
-TICKET_TEMPLATE = """# {ticket_id} - Work Loop Record
+TICKET_TEMPLATE = """---
+id: {ticket_id}
+type: stm
+category: technical
+status: active
+score: 0.00
+base_weight: 0.9
+created: {created_date}
+updated: {created_date}
+links: []
+tags: [{ticket_id_lower}]
+summary: "Work loop record for {ticket_id}"
+---
+# {ticket_id} - Work Loop Record
 
 > Created: {created_at}
 > Status: active
@@ -47,31 +60,14 @@ TICKET_TEMPLATE = """# {ticket_id} - Work Loop Record
 ---
 
 ## Ticket Analysis
-<!-- 需求分析、影響範圍、相關程式碼位置 -->
-
 ## Approaches Considered
-<!-- 考慮過的做法、各自的 trade-off -->
-
 ## Decisions Made
-<!-- 最終決策及原因 -->
-
 ## Code Changes
-<!-- 修改的檔案、變更摘要、branch 資訊 -->
-
 ## Test Results
-<!-- 測試結果、驗證方式 -->
-
 ## User Feedback
-<!-- Leo 的回饋、review 意見 -->
-
 ## Failures
-<!-- 失敗紀錄：錯誤訊息、root cause、修復方式 -->
-
 ## Retrospective
-<!-- 回顧：哪些做得好、哪些可以改進 -->
-
 ## Lessons Learned
-<!-- 學到的經驗，可提煉到長期記憶 -->
 """
 
 # ---------------------------------------------------------------------------
@@ -236,8 +232,13 @@ class ShortTermMemoryManager:
             logger.info(f"STM file already exists for {ticket_id}: {path}")
             return str(path)
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        content = TICKET_TEMPLATE.format(ticket_id=ticket_id, created_at=now)
+        now = datetime.now(timezone.utc)
+        content = TICKET_TEMPLATE.format(
+            ticket_id=ticket_id,
+            ticket_id_lower=ticket_id.lower(),
+            created_at=now.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            created_date=now.strftime("%Y-%m-%d"),
+        )
         path.write_text(content, encoding="utf-8")
         logger.info(f"Created STM file: {path}")
         return str(path)

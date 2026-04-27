@@ -1,6 +1,10 @@
 """
 Auto Memory Update - Automatically update SOUL/IDENTITY/USER/MEMORY.md
 based on conversations and feedback.
+
+DEPRECATED: Conversation extraction is now handled by the dreaming pipeline
+(consolidator.py). This module is kept for backward compatibility but is
+not actively called. Use consolidator.py for new consolidation work.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from anthropic import Anthropic
 
 from src.config import get_settings
 from src.memory.manager import MemoryManager
+from src.memory.security_scanner import SecurityViolation, get_scanner
 
 
 class MemoryAutoUpdater:
@@ -164,6 +169,12 @@ Be conservative - only extract clear, factual information. Do not extract opinio
                     elif file_type == "memory":
                         self._update_memory(item.get("category", "qa"), item.get("content", ""))
                         applied["memory"] += 1
+                except SecurityViolation as e:
+                    # Reject the write but keep going for other items.
+                    print(
+                        f"[SECURITY] Rejected {file_type} update: "
+                        f"{e.category} pattern matched"
+                    )
                 except Exception as e:
                     print(f"Failed to apply update to {file_type}: {e}")
 
@@ -178,6 +189,12 @@ Be conservative - only extract clear, factual information. Do not extract opinio
         if content in current:
             return
 
+        # Security guard: scan extracted content before persisting.
+        get_scanner().scan(
+            f"{section}\n{content}",
+            context="auto_update:_update_soul",
+        )
+
         # Append with section header
         with open(path, "a", encoding="utf-8") as f:
             timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -191,6 +208,11 @@ Be conservative - only extract clear, factual information. Do not extract opinio
         if content in current:
             return
 
+        get_scanner().scan(
+            f"{section}\n{content}",
+            context="auto_update:_update_identity",
+        )
+
         with open(path, "a", encoding="utf-8") as f:
             timestamp = datetime.now().strftime("%Y-%m-%d")
             f.write(f"\n\n## {section} (Learned {timestamp})\n\n{content}\n")
@@ -203,6 +225,11 @@ Be conservative - only extract clear, factual information. Do not extract opinio
         if content in current:
             return
 
+        get_scanner().scan(
+            f"{section}\n{content}",
+            context="auto_update:_update_user",
+        )
+
         with open(path, "a", encoding="utf-8") as f:
             timestamp = datetime.now().strftime("%Y-%m-%d")
             f.write(f"\n\n## {section} (Learned {timestamp})\n\n{content}\n")
@@ -214,6 +241,11 @@ Be conservative - only extract clear, factual information. Do not extract opinio
 
         if content in current:
             return
+
+        get_scanner().scan(
+            f"{category}\n{content}",
+            context="auto_update:_update_memory",
+        )
 
         # Use existing memory manager methods
         if category == "qa":

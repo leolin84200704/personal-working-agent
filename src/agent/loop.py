@@ -13,6 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any, Callable
 
@@ -50,6 +51,16 @@ settings = get_settings()
 TIER1_BUDGET = 6000   # ~1500 tokens for core rules
 TIER2_BUDGET = 8000   # ~2000 tokens for retrieved knowledge
 TIER2_RESULTS = 5     # Max knowledge sections to retrieve
+
+# Past-session injection budget (Item 2: auto Step 1 retrieve via SessionIndex)
+SESSION_TOP_K = 3        # Max past-session turn excerpts injected
+SESSION_MAX_CHARS = 1500 # Hard cap on injected text length
+SESSION_EXCERPT_CHARS = 150  # Per-excerpt truncation
+
+# Heuristic ticket-id pattern (Item 1 auto-detect). Covers Jira-style
+# tickets we actually use (VP-, LIS-, HL7-…). 2+ uppercase letters + dash
+# + digits — restrictive enough to avoid common words.
+_TICKET_ID_RE = re.compile(r"\b([A-Z]{2,}-\d+)\b")
 
 # Max tool_use iterations per message to prevent infinite loops
 MAX_TOOL_ROUNDS = 25
@@ -90,8 +101,13 @@ class AgentLoop:
     """
 
     def __init__(self, session_id: str | None = None):
-        self.session_id = session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Default session_id is a timestamp form; ticket-aware callers can
+        # later switch via ``set_ticket(ticket_id)``. Keep the default form
+        # so unrelated debug/chat sessions (no ticket) keep their grouping.
+        self._default_session_id = session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.session_id = self._default_session_id
         self.context = ConversationContext(session_id=self.session_id)
+        self.current_ticket_id: str | None = None
 
         self.claude = Anthropic(
             api_key=resolve_api_key(settings.anthropic_api_key),
@@ -118,6 +134,49 @@ class AgentLoop:
         self.on_tool_use: Callable[[str, dict], None] | None = None
         self.on_tool_result: Callable[[str, str], None] | None = None
 
+    # ------------------------------------------------------------------
+    # Ticket / session_id binding (Item 1)
+    # ------------------------------------------------------------------
+
+    def set_ticket(self, ticket_id: str | None) -> str:
+        """Bind this AgentLoop instance to a ticket so SessionIndex writes
+        are grouped per-ticket instead of per-process-timestamp.
+
+        Behaviour:
+        - ``ticket_id`` non-empty → ``session_id`` becomes ``ticket_<ID>``.
+        - ``ticket_id`` falsy (None / "") → fall back to the original
+          timestamp form captured at ctor time.
+        - ConversationContext.session_id is updated in lockstep so
+          downstream consumers (tests, sub-agent) see the new value.
+
+        Returns the resulting ``session_id`` for caller convenience.
+
+        This is best-effort: invalid input is normalised to the fallback
+        rather than raising — the same agent instance may legitimately
+        process several tickets in sequence (or none at all).
+        """
+        try:
+            if ticket_id:
+                ticket_id = str(ticket_id).strip()
+            if ticket_id:
+                self.current_ticket_id = ticket_id
+                self.session_id = f"ticket_{ticket_id}"
+            else:
+                self.current_ticket_id = None
+                self.session_id = self._default_session_id
+            # Keep context + sub-agent in sync so anything keyed off
+            # session_id (logs, sub-agent IDs) reflects the change.
+            self.context.session_id = self.session_id
+            try:
+                self.sub_agent_manager.parent_session_id = self.session_id
+            except Exception:
+                # Sub-agent manager is non-critical here; never block.
+                pass
+            return self.session_id
+        except Exception as e:
+            logger.warning("set_ticket failed: %s", e)
+            return self.session_id
+
     @property
     def vector_store(self) -> VectorStore:
         if self._vector_store is None:
@@ -141,6 +200,59 @@ class AgentLoop:
         except Exception as e:
             logger.warning(f"Knowledge indexing failed: {e}")
             self._knowledge_indexed = True  # Don't retry every message
+
+    def _load_relevant_sessions(self, query: str, top_k: int = SESSION_TOP_K) -> str:
+        """Item 2: pull top-K past conversation turns matching ``query`` from
+        the FTS5 SessionIndex and format them as a markdown block ready to
+        append to the system prompt.
+
+        Behaviour contract:
+        - Empty / falsy query → return "" (don't waste a search call).
+        - Empty index / no hits → return "".
+        - Any exception → log at warning, return "" (the side-channel is
+          additive — it must NEVER break the agent flow).
+        - Total returned text is capped at ``SESSION_MAX_CHARS`` to keep the
+          system prompt budget predictable.
+        - Each excerpt itself is truncated to ``SESSION_EXCERPT_CHARS`` so
+          one chatty turn cannot starve the rest.
+        """
+        if not query:
+            return ""
+        try:
+            hits = self.memory_manager.search_sessions(query, limit=top_k)
+        except Exception as e:
+            logger.warning("session_index lookup failed: %s", e)
+            return ""
+
+        if not hits:
+            return ""
+
+        lines: list[str] = ["## Relevant past sessions"]
+        total = len(lines[0])
+        for h in hits:
+            try:
+                sid = h.get("session_id", "?")
+                tdate = h.get("turn_date", "") or "?"
+                speaker = h.get("speaker", "") or "?"
+                text = (h.get("text", "") or "").replace("\n", " ").strip()
+                if len(text) > SESSION_EXCERPT_CHARS:
+                    text = text[:SESSION_EXCERPT_CHARS].rstrip() + "…"
+                line = f"- [{sid}|{tdate}|{speaker}] {text}"
+            except Exception:
+                # One malformed row should not abort the whole block.
+                continue
+
+            # Enforce the global cap (line + leading newline).
+            if total + len(line) + 1 > SESSION_MAX_CHARS:
+                break
+            lines.append(line)
+            total += len(line) + 1
+
+        # If the cap left us with only the header, return empty so the
+        # caller doesn't inject a useless heading.
+        if len(lines) <= 1:
+            return ""
+        return "\n".join(lines)
 
     def _build_system_prompt(self, user_message: str = "") -> str:
         """
@@ -213,6 +325,13 @@ class AgentLoop:
 ## Relevant Knowledge (retrieved for this message)
 {retrieved_context}"""
 
+        # ── Item 2: auto-inject past session turns from SessionIndex ──
+        # Treated as Step-1 Retrieve, runtime-side. Failures are silent.
+        if user_message:
+            sessions_block = self._load_relevant_sessions(user_message)
+            if sessions_block:
+                prompt += "\n\n" + sessions_block
+
         if self.context.mode == "planning":
             prompt += """
 
@@ -270,6 +389,18 @@ class AgentLoop:
         Returns:
             Dict with response text and metadata
         """
+        # Best-effort ticket auto-detection: if the user mentions a Jira-style
+        # ID and we are not yet bound to a ticket, switch session_id so the
+        # rest of this conversation is grouped per-ticket in the index.
+        # Failures are silent — the agent flow must not depend on this.
+        if self.current_ticket_id is None:
+            try:
+                m = _TICKET_ID_RE.search(message or "")
+                if m:
+                    self.set_ticket(m.group(1))
+            except Exception as e:
+                logger.debug("ticket auto-detect failed: %s", e)
+
         # Add user message to conversation history
         self.context.add_message("user", message)
 
@@ -578,7 +709,8 @@ class AgentLoop:
         """
         Learn from this interaction:
         1. Store conversation in vector store
-        2. Detect corrections and adjust knowledge relevance scores
+        2. Persist turn into the FTS5 session index (best-effort)
+        3. Detect corrections and adjust knowledge relevance scores
         """
         if not settings.auto_update_memory:
             return
@@ -597,10 +729,78 @@ class AgentLoop:
         except Exception as e:
             logger.debug(f"Failed to store conversation: {e}")
 
+        # Persist turn into FTS5 session index — additive, never blocks.
+        self._record_turn_to_session_index(user_message)
+
         # Detect corrections: if user's message looks like negative feedback,
         # decrease relevance of knowledge that was loaded for the previous turn.
         # If it looks like acceptance, increase relevance.
         self._update_feedback_scores(user_message)
+
+    def _record_turn_to_session_index(self, user_message: str) -> None:
+        """Best-effort write of the just-completed turn into the FTS5 index.
+
+        Hook point: this is called from ``_learn`` after the model returns a
+        final text response (i.e. one full user→agent turn). We capture both
+        sides of the exchange in a single ``add_safe`` call so they share a
+        timestamp and stay correlated by ``turn_index``.
+
+        Failure handling: any exception is logged and swallowed. The index
+        is a side-channel — it must never block agent execution.
+        """
+        try:
+            # Find the most recent assistant reply in conversation history.
+            # ``_learn`` runs AFTER ``add_message("assistant", final_text)`` so
+            # the last message is the agent's response we just produced.
+            agent_reply = ""
+            for msg in reversed(self.context.messages):
+                if msg.role == "assistant":
+                    agent_reply = msg.content or ""
+                    break
+
+            now_iso = datetime.now().isoformat()
+            today = datetime.now().date().isoformat()
+            base_index = len(self.context.messages)
+
+            turns: list[dict] = []
+            if user_message:
+                turns.append({
+                    "text": user_message,
+                    "speaker": "user",
+                    "turn_date": today,
+                    "turn_index": base_index,
+                    "metadata": {
+                        "session_id": self.session_id,
+                        "timestamp": now_iso,
+                        "role": "user",
+                    },
+                })
+            if agent_reply:
+                turns.append({
+                    "text": agent_reply,
+                    "speaker": "agent",
+                    "turn_date": today,
+                    "turn_index": base_index + 1,
+                    "metadata": {
+                        "session_id": self.session_id,
+                        "timestamp": now_iso,
+                        "role": "assistant",
+                    },
+                })
+
+            if not turns:
+                return
+
+            from src.memory.manager import record_session_turns
+            inserted = record_session_turns(self.session_id, turns)
+            if inserted:
+                logger.debug(
+                    "session_index: persisted %d turn(s) for session %s",
+                    inserted,
+                    self.session_id,
+                )
+        except Exception as e:
+            logger.warning("session_index write failed: %s", e)
 
     def _update_feedback_scores(self, user_message: str) -> None:
         """
