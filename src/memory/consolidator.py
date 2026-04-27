@@ -162,6 +162,19 @@ class MemoryConsolidator:
         op.details = f"Extracted to {target_name}"
         op.success = True
         logger.info("Extracted insights from %s to %s", ticket_id, target_name)
+
+        # Hermes-style procedural-memory hook: try to generate a reusable
+        # skill markdown from this completed STM. Failures (LLM error or
+        # security scan reject) are non-fatal -- log and continue.
+        try:
+            from src.memory.skill_generator import get_skill_generator
+            gen = get_skill_generator()
+            skill_path = gen.generate_from_ticket(ticket_id)
+            if skill_path:
+                op.details = f"Extracted to {target_name}; skill -> {skill_path}"
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("Skill generation hook failed for %s: %s", ticket_id, e)
+
         return op
 
     def merge_files(self, file_a: Path, file_b: Path) -> ConsolidationOp:
