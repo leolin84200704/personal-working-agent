@@ -578,7 +578,8 @@ class AgentLoop:
         """
         Learn from this interaction:
         1. Store conversation in vector store
-        2. Detect corrections and adjust knowledge relevance scores
+        2. Persist turn into the FTS5 session index (best-effort)
+        3. Detect corrections and adjust knowledge relevance scores
         """
         if not settings.auto_update_memory:
             return
@@ -597,10 +598,78 @@ class AgentLoop:
         except Exception as e:
             logger.debug(f"Failed to store conversation: {e}")
 
+        # Persist turn into FTS5 session index — additive, never blocks.
+        self._record_turn_to_session_index(user_message)
+
         # Detect corrections: if user's message looks like negative feedback,
         # decrease relevance of knowledge that was loaded for the previous turn.
         # If it looks like acceptance, increase relevance.
         self._update_feedback_scores(user_message)
+
+    def _record_turn_to_session_index(self, user_message: str) -> None:
+        """Best-effort write of the just-completed turn into the FTS5 index.
+
+        Hook point: this is called from ``_learn`` after the model returns a
+        final text response (i.e. one full user→agent turn). We capture both
+        sides of the exchange in a single ``add_safe`` call so they share a
+        timestamp and stay correlated by ``turn_index``.
+
+        Failure handling: any exception is logged and swallowed. The index
+        is a side-channel — it must never block agent execution.
+        """
+        try:
+            # Find the most recent assistant reply in conversation history.
+            # ``_learn`` runs AFTER ``add_message("assistant", final_text)`` so
+            # the last message is the agent's response we just produced.
+            agent_reply = ""
+            for msg in reversed(self.context.messages):
+                if msg.role == "assistant":
+                    agent_reply = msg.content or ""
+                    break
+
+            now_iso = datetime.now().isoformat()
+            today = datetime.now().date().isoformat()
+            base_index = len(self.context.messages)
+
+            turns: list[dict] = []
+            if user_message:
+                turns.append({
+                    "text": user_message,
+                    "speaker": "user",
+                    "turn_date": today,
+                    "turn_index": base_index,
+                    "metadata": {
+                        "session_id": self.session_id,
+                        "timestamp": now_iso,
+                        "role": "user",
+                    },
+                })
+            if agent_reply:
+                turns.append({
+                    "text": agent_reply,
+                    "speaker": "agent",
+                    "turn_date": today,
+                    "turn_index": base_index + 1,
+                    "metadata": {
+                        "session_id": self.session_id,
+                        "timestamp": now_iso,
+                        "role": "assistant",
+                    },
+                })
+
+            if not turns:
+                return
+
+            from src.memory.manager import record_session_turns
+            inserted = record_session_turns(self.session_id, turns)
+            if inserted:
+                logger.debug(
+                    "session_index: persisted %d turn(s) for session %s",
+                    inserted,
+                    self.session_id,
+                )
+        except Exception as e:
+            logger.warning("session_index write failed: %s", e)
 
     def _update_feedback_scores(self, user_message: str) -> None:
         """

@@ -6,12 +6,65 @@ The memory system is the core learning mechanism for the agent.
 """
 from __future__ import annotations
 
+import logging
 import yaml
 from pathlib import Path
 from typing import Any
 import re
 
 from src.memory.security_scanner import get_scanner
+from src.memory.session_index import SessionIndex
+
+logger = logging.getLogger("memory.manager")
+
+# ---------------------------------------------------------------------------
+# Production SessionIndex singleton (FTS5 conversation log).
+#
+# Lazy-initialised on first use so that:
+#   - Test environments that never touch session search don't pay the
+#     SQLite open cost.
+#   - A broken settings / filesystem doesn't blow up MemoryManager() ctor
+#     (which is hit by many unrelated code paths and tests).
+#
+# Storage location is derived from Settings.storage_path (NOT hardcoded) so
+# overrides via env / monkeypatch propagate.
+# ---------------------------------------------------------------------------
+
+_session_index: SessionIndex | None = None
+
+
+def _get_session_index() -> SessionIndex:
+    """Return the process-wide SessionIndex, creating it on first call.
+
+    The DB lives at ``Settings.storage_path / 'conversations.db'``. The
+    SessionIndex constructor handles ``mkdir(parents=True, exist_ok=True)``
+    on the parent directory.
+    """
+    global _session_index
+    if _session_index is None:
+        # Local import to avoid circular import at module load (config has no
+        # cycle with manager today, but this is the safer pattern).
+        from src.config import get_settings
+
+        settings = get_settings()
+        db_path = Path(settings.storage_path) / "conversations.db"
+        _session_index = SessionIndex(db_path)
+    return _session_index
+
+
+def _reset_session_index_for_tests() -> None:
+    """Test-only helper: drop the cached singleton so the next call rebuilds.
+
+    Used by tests that monkeypatch the storage path. Closes the existing
+    handle if one exists to avoid leaking SQLite file descriptors.
+    """
+    global _session_index
+    if _session_index is not None:
+        try:
+            _session_index.close()
+        except Exception:
+            pass
+    _session_index = None
 
 
 class MemoryManager:
@@ -394,6 +447,48 @@ class MemoryManager:
                     solution="**Migration in progress**: EMR-Backend (Java, legacy) → lis-backend-emr-v2 (NestJS, current). Always prefer lis-backend-emr-v2 for new work."
                 )
 
+    # ── Session index (FTS5) — additive, does NOT affect default retrieval ──
+
+    def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
+        """Keyword full-text search across persisted conversation turns.
+
+        Hybrid-friendly companion to vector retrieval: BM25 ranks lexical /
+        temporal matches that vector embeddings often miss (names, dates,
+        numbers, exact phrases).
+
+        Returns turn-level matches with keys::
+
+            session_id, turn_index, speaker, turn_date, text, metadata, rank
+
+        Failures (DB missing, schema corrupt, etc.) are swallowed and an
+        empty list is returned — the agent must never crash because the
+        side-channel index is misbehaving.
+        """
+        try:
+            idx = _get_session_index()
+            return idx.search(query, limit=limit)
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("search_sessions failed: %s", e)
+            return []
+
+    def record_session_turns(
+        self, session_id: str, turns: list[dict]
+    ) -> int:
+        """Best-effort write of conversation turns into the FTS5 index.
+
+        Uses :meth:`SessionIndex.add_safe` so security-pattern hits are
+        logged-and-skipped rather than raising. Returns the number of rows
+        actually inserted (0 on any failure or if every turn was filtered).
+        """
+        if not turns:
+            return 0
+        try:
+            idx = _get_session_index()
+            return idx.add_safe(session_id, turns)
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning("record_session_turns failed: %s", e)
+            return 0
+
     def _add_to_gotchas(self, repo: str, problem: str, solution: str):
         """Add an entry to the Gotchas section, avoiding duplicates."""
         get_scanner().scan(
@@ -434,3 +529,13 @@ def get_memory_manager() -> MemoryManager:
     if _memory_manager is None:
         _memory_manager = MemoryManager()
     return _memory_manager
+
+
+def search_sessions(query: str, limit: int = 10) -> list[dict]:
+    """Module-level convenience wrapper around the singleton manager."""
+    return get_memory_manager().search_sessions(query, limit=limit)
+
+
+def record_session_turns(session_id: str, turns: list[dict]) -> int:
+    """Module-level convenience wrapper around the singleton manager."""
+    return get_memory_manager().record_session_turns(session_id, turns)

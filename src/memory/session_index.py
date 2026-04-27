@@ -29,6 +29,7 @@ credential / exfiltration payloads cannot land in the FTS index.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from pathlib import Path
@@ -37,6 +38,8 @@ from typing import Any, Dict, Iterable, List, Optional
 from src.memory.security_scanner import get_scanner
 
 __all__ = ["SessionIndex", "escape_fts5_query"]
+
+logger = logging.getLogger("memory.session_index")
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +195,71 @@ class SessionIndex:
                 text,
                 context=f"session_index:add:{session_id}:{i}",
             )
+
+            turn_index = int(turn.get("turn_index", i))
+            rows.append(
+                (session_id, turn_index, speaker, text, turn_date, metadata_json)
+            )
+
+        if not rows:
+            return 0
+
+        with self._conn:
+            self._conn.executemany(
+                """
+                INSERT INTO sessions
+                    (session_id, turn_index, speaker, text, turn_date, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+        return len(rows)
+
+    def add_safe(self, session_id: str, turns: Iterable[Dict[str, Any]]) -> int:
+        """Same contract as :meth:`add` but uses ``security_scanner.scan_safe``.
+
+        Production agent runtime needs lenient ingestion: a real user can
+        innocuously type "forget your dreams" or paste a config sample with
+        ``password = ...`` in it, and we still want to capture the turn for
+        retrieval. ``add_safe`` therefore:
+
+        - Logs (does NOT raise) when a turn matches a security pattern.
+        - Drops the offending turn but keeps the rest.
+        - Never throws ``SecurityViolation`` — callers can rely on it for
+          best-effort ingestion in agent loops.
+
+        The strict :meth:`add` API is intentionally untouched so the
+        benchmark / fail-closed callers keep their guarantees.
+
+        Returns: number of rows inserted (skipped + offending turns excluded).
+        """
+        scanner = get_scanner()
+        rows: List[tuple] = []
+
+        for i, turn in enumerate(turns):
+            text = str(turn.get("text", "")).strip()
+            if not text:
+                continue
+            speaker = str(turn.get("speaker", "") or "")
+            turn_date = str(turn.get("date", turn.get("turn_date", "")) or "")
+            dia_id = str(turn.get("dia_id", "") or "")
+
+            meta = dict(turn.get("metadata") or {})
+            if dia_id and "dia_id" not in meta:
+                meta["dia_id"] = dia_id
+            metadata_json = json.dumps(meta, ensure_ascii=False) if meta else None
+
+            ctx = f"session_index:add_safe:{session_id}:{i}"
+            is_safe, violations = scanner.scan_safe(text, context=ctx)
+            if not is_safe:
+                logger.warning(
+                    "session_index: skipping turn %s due to %d security violation(s); "
+                    "categories=%s",
+                    ctx,
+                    len(violations),
+                    sorted({v["category"] for v in violations}),
+                )
+                continue
 
             turn_index = int(turn.get("turn_index", i))
             rows.append(
