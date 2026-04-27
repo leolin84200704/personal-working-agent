@@ -105,6 +105,14 @@ async def chat_websocket(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
             user_message = data.get("message", "")
+            # Optional ticket_id from client. When present, bind this agent
+            # instance to the ticket so SessionIndex writes group per-ticket.
+            ticket_id = data.get("ticket_id")
+            if ticket_id:
+                try:
+                    agent.set_ticket(ticket_id)
+                except Exception as e:
+                    console.print(f"[yellow]set_ticket failed: {e}[/yellow]")
 
             if not user_message:
                 continue

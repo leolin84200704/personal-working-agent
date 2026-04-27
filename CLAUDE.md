@@ -126,6 +126,7 @@ Ticket Analysis, Approaches Considered, Decisions Made, Code Changes, Test Resul
 2. 用 Grep 搜尋 `storage/short_term_memory/` 找類似的過去 ticket
 3. 用 Grep 搜尋 `long-term-memory/` 找相關技術知識
 4. 如果有相似 ticket，讀取其 STM 檔案，特別關注 Failures 區段
+5. 過去類似對話片段會由 SessionIndex.search_sessions 自動注入 context（runtime 處理，無需手動呼叫）
 
 ### Step 2: Analyze（分析理解）
 1. 用 Atlassian MCP 取得 ticket 內容
