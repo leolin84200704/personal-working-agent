@@ -1,30 +1,45 @@
-# v1 Hermes — placeholder.
+# v1 Hermes — vector + FTS5 hybrid retrieval + claude-cli LLM answer.
 #
-# TODO: fill this in once the Hermes technique is merged into
-# src/memory/. Expected axes that will change versus v0:
-#   - different embedding / scorer
-#   - re-ranking stage
-#   - consolidator / dreaming-pipeline involvement at ingest time
-#   - possibly a real LLM call at query time
-#
-# Until then, running this config should error out loudly rather than
-# silently behaving like v0.
+# Hybrid retrieval rationale: v0 vector-only retrieval scored well on
+# multi-hop / open-domain (semantic paraphrases help) but tanked on
+# temporal / single-hop questions where the answer is literally a date,
+# name, or number. SQLite FTS5 with BM25 ranking handles those keyword-
+# exact lookups much better. Union-dedup keeps both signals and lets the
+# downstream LLM pick.
 
 name: v1_hermes
 description: |
-  Placeholder for the post-Hermes version. Do not run until the harness
-  and src/memory/ code supports the new pipeline.
+  Hermes-flavored config — vector + FTS5 hybrid retrieval + claude-cli
+  LLM answer. Per-sample sandboxes for both Chroma and SQLite ensure no
+  cross-sample leakage. Merge strategy is union+dedup (no weighting) so
+  we avoid premature score-tuning before we have signal.
 
-status: not_implemented
+memory:
+  collection: conversations
+  top_k: 5
+  embedding_model: all-MiniLM-L6-v2
 
-# When ready, mirror the v0 schema and override the relevant keys. For
-# example (sketch, not yet valid):
-# memory:
-#   collection: conversations
-#   top_k: 10
-# retrieval:
-#   rerank: true
-#   time_decay: true
-# scoring:
-#   llm_judge_enabled: true
-#   llm_judge_model: claude-opus-4-6
+retrieval:
+  api: hybrid_chroma_fts5
+  collection: conversations
+  top_k_vector: 5
+  top_k_fts: 5
+  merge_strategy: union_dedup    # 兩邊結果去重 union
+
+rerank:
+  enabled: false
+
+answer:
+  method: claude_cli
+  model: claude-sonnet-4-6
+  max_tokens: 100
+  timeout: 60
+
+judge:
+  metrics: [f1, bleu1, rougeL]
+  llm_judge_enabled: false   # 後續用 re_judge.py 補
+
+scoring:
+  string_metrics: [f1, bleu1, rougeL]
+  llm_judge_enabled: false
+  llm_judge_model: null

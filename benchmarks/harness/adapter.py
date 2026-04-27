@@ -85,8 +85,14 @@ try:
 except Exception:  # pragma: no cover - import guard
     MemoryScorer = None  # type: ignore
 
+try:
+    from src.memory.session_index import SessionIndex  # type: ignore
+except Exception:  # pragma: no cover - import guard
+    SessionIndex = None  # type: ignore
+
 
 DEFAULT_PERSIST_ROOT = _REPO_ROOT / "benchmarks" / "results" / "_chroma_sandbox"
+DEFAULT_FTS_ROOT = _REPO_ROOT / "benchmarks" / "results" / "_fts_sandbox"
 
 logger = logging.getLogger("benchmarks.adapter")
 
@@ -184,6 +190,7 @@ class LoCoMoAdapter:
         persist_root: Path = DEFAULT_PERSIST_ROOT,
         collection: str = "conversations",
         top_k: int = 5,
+        fts_root: Path = DEFAULT_FTS_ROOT,
     ):
         if VectorStore is None:  # pragma: no cover - import guard
             raise RuntimeError(
@@ -191,9 +198,13 @@ class LoCoMoAdapter:
             )
         self.persist_root = Path(persist_root)
         self.persist_root.mkdir(parents=True, exist_ok=True)
+        self.fts_root = Path(fts_root)
+        self.fts_root.mkdir(parents=True, exist_ok=True)
         self.collection = collection
         self.top_k = top_k
         self._stores: Dict[str, "VectorStore"] = {}
+        # Per-sample SQLite FTS5 indexes (Hermes-style lexical retrieval).
+        self._fts_indexes: Dict[str, "SessionIndex"] = {}
         # Latest-session date per sample, used as "today" for scorer rerank.
         self._reference_dates: Dict[str, date] = {}
         # Count of claude CLI failures per session (exposed for the runner).
@@ -205,13 +216,22 @@ class LoCoMoAdapter:
     # ------------------------------------------------------------------
 
     def prepare_memory(self, sample: LoCoMoSample) -> str:
-        """Inject *sample*'s sessions into a fresh per-sample memory store."""
+        """Inject *sample*'s sessions into a fresh per-sample memory store.
+
+        Writes the same data into TWO sandboxes:
+          - Chroma (vector) — already used by raw_vector / retrieve_relevant_knowledge
+          - SQLite + FTS5 (lexical) — used by hybrid_chroma_fts5 (v1)
+
+        Both stores are per-sample so independent samples never overlap.
+        """
         session_id = f"locomo-{sample.sample_id}"
         store = self._make_store(session_id)
+        fts_index = self._make_fts_index(session_id)
 
         documents: List[str] = []
         metadatas: List[Dict[str, Any]] = []
         ids: List[str] = []
+        fts_turns: List[Dict[str, Any]] = []
 
         latest_date: Optional[date] = None
 
@@ -227,20 +247,33 @@ class LoCoMoAdapter:
                     continue
                 doc = f"[{session_name}] [{date_str}] {speaker}: {text}"
                 documents.append(doc)
-                metadatas.append(
+                metadata = {
+                    "sample_id": sample.sample_id,
+                    "session_name": session_name,
+                    "session_date": date_str,
+                    "turn_index": i,
+                    "speaker": speaker,
+                    "dia_id": str(turn.get("dia_id", "")),
+                    # Default relevance_score so retrieve_relevant_knowledge
+                    # fusion matches the agent's production path.
+                    "relevance_score": 1.0,
+                }
+                metadatas.append(metadata)
+                ids.append(f"{sample.sample_id}::{session_name}::{i}")
+
+                # Mirror to FTS5: store the raw turn text (not the doc
+                # prefix) so BM25 keyword matching is not biased by the
+                # repeated "[session] [date]" boilerplate.
+                fts_turns.append(
                     {
-                        "sample_id": sample.sample_id,
-                        "session_name": session_name,
-                        "session_date": date_str,
-                        "turn_index": i,
+                        "text": text,
                         "speaker": speaker,
+                        "date": date_str,
                         "dia_id": str(turn.get("dia_id", "")),
-                        # Default relevance_score so retrieve_relevant_knowledge
-                        # fusion matches the agent's production path.
-                        "relevance_score": 1.0,
+                        "turn_index": i,
+                        "metadata": dict(metadata),
                     }
                 )
-                ids.append(f"{sample.sample_id}::{session_name}::{i}")
 
         if documents:
             store.add(
@@ -249,6 +282,14 @@ class LoCoMoAdapter:
                 metadatas=metadatas,
                 ids=ids,
             )
+
+        if fts_turns and fts_index is not None:
+            # Use a single FTS session_id per sample so search() returns the
+            # full LoCoMo session set in one go.
+            try:
+                fts_index.add(session_id, fts_turns)
+            except Exception as e:
+                logger.warning("FTS5 sandbox add failed for %s: %r", session_id, e)
 
         # Reference date for scorer recency; fallback to today if the
         # sample has no parseable session dates.
@@ -287,6 +328,20 @@ class LoCoMoAdapter:
         # 1. Retrieve.
         if retrieval_api == "retrieve_relevant_knowledge":
             hits = self._retrieve_relevant_knowledge(store, question, n_results=top_k)
+        elif retrieval_api == "hybrid_chroma_fts5":
+            top_k_vector = int(retrieval_cfg.get("top_k_vector", top_k))
+            top_k_fts = int(retrieval_cfg.get("top_k_fts", top_k))
+            merge_strategy = (
+                retrieval_cfg.get("merge_strategy") or "union_dedup"
+            ).strip()
+            hits = self._retrieve_hybrid_chroma_fts5(
+                store=store,
+                session_id=session_id,
+                question=question,
+                top_k_vector=top_k_vector,
+                top_k_fts=top_k_fts,
+                merge_strategy=merge_strategy,
+            )
         else:
             hits = self._retrieve_raw_vector(store, question, n_results=top_k)
 
@@ -341,13 +396,22 @@ class LoCoMoAdapter:
         }
 
     def cleanup(self, session_id: str) -> None:
-        """Drop the per-sample Chroma directory. Safe to call repeatedly."""
+        """Drop the per-sample Chroma + FTS5 directories. Safe to call repeatedly."""
         store = self._stores.pop(session_id, None)
+        fts_idx = self._fts_indexes.pop(session_id, None)
         self._reference_dates.pop(session_id, None)
         del store
+        if fts_idx is not None:
+            try:
+                fts_idx.close()
+            except Exception:
+                pass
         sample_dir = self.persist_root / session_id
         if sample_dir.exists():
             shutil.rmtree(sample_dir, ignore_errors=True)
+        fts_sample_dir = self.fts_root / session_id
+        if fts_sample_dir.exists():
+            shutil.rmtree(fts_sample_dir, ignore_errors=True)
 
     def cleanup_all(self) -> None:
         for sid in list(self._stores.keys()):
@@ -570,6 +634,136 @@ class LoCoMoAdapter:
         store = VectorStore(persist_path=str(persist_path))  # type: ignore[arg-type]
         self._stores[session_id] = store
         return store
+
+    def _make_fts_index(self, session_id: str) -> Optional["SessionIndex"]:
+        """Create a per-sample SQLite + FTS5 sandbox.
+
+        Returns ``None`` if SessionIndex failed to import (graceful degrade
+        — the chroma path keeps working, just without lexical hybrid).
+        """
+        if SessionIndex is None:  # pragma: no cover - import guard
+            logger.warning("SessionIndex unavailable; FTS5 sandbox disabled.")
+            return None
+        db_path = self.fts_root / session_id / "sessions.db"
+        try:
+            idx = SessionIndex(db_path)
+        except Exception as e:
+            logger.warning("Failed to init SessionIndex at %s: %r", db_path, e)
+            return None
+        self._fts_indexes[session_id] = idx
+        return idx
+
+    # ------------------------------------------------------------------
+    # Hybrid retrieval (vector + FTS5)
+    # ------------------------------------------------------------------
+
+    def _retrieve_hybrid_chroma_fts5(
+        self,
+        store: "VectorStore",
+        session_id: str,
+        question: str,
+        top_k_vector: int,
+        top_k_fts: int,
+        merge_strategy: str = "union_dedup",
+    ) -> List[Dict[str, Any]]:
+        """Vector top-k UNION FTS5 top-k, deduped on dia_id|text-hash.
+
+        Strategy choices considered:
+          - ``union_dedup`` (this MVP): keep both lists, drop duplicates.
+            Simple, no weighting tuning, and avoids the trap where a
+            misweighted score dominates one side.
+          - ``weighted_merge``: combine BM25 with cosine sim into one
+            ranked list. Better in theory but requires per-dataset
+            tuning; deferred until we have signal that union_dedup
+            underperforms.
+
+        For union_dedup we keep BOTH hits' scores in the dict so the
+        downstream LLM context formatter can render either. The order is
+        vector-first then FTS-only-extras, which is a deliberate bias:
+        when both retrievers agree, vector wins ties because semantic
+        match implies higher recall on paraphrases.
+        """
+        vector_hits = self._retrieve_relevant_knowledge(
+            store, question, n_results=top_k_vector
+        )
+
+        fts_index = self._fts_indexes.get(session_id)
+        fts_hits_raw: List[Dict[str, Any]] = []
+        if fts_index is not None:
+            try:
+                fts_hits_raw = fts_index.search(question, limit=top_k_fts)
+            except Exception as e:
+                logger.warning("FTS5 search failed for %s: %r", session_id, e)
+                fts_hits_raw = []
+
+        # Normalise FTS hits to the shape the rest of the pipeline expects.
+        fts_hits: List[Dict[str, Any]] = []
+        for h in fts_hits_raw:
+            md = dict(h.get("metadata") or {})
+            # Ensure session_date / speaker / turn_index keys exist so
+            # _format_context works without special-casing.
+            md.setdefault("session_date", h.get("turn_date", ""))
+            md.setdefault("speaker", h.get("speaker", ""))
+            md.setdefault("turn_index", h.get("turn_index", -1))
+            md.setdefault("session_name", md.get("session_name", h.get("session_id", "")))
+            md.setdefault("dia_id", md.get("dia_id", ""))
+            md.setdefault("relevance_score", 1.0)
+            # FTS5 bm25 returns negative scores; flip sign so larger ==
+            # better, matching combined_score semantics elsewhere.
+            bm25 = float(h.get("rank", 0.0))
+            fts_score = -bm25
+            fts_hits.append(
+                {
+                    "text": h.get("text", ""),
+                    "metadata": md,
+                    "distance": None,
+                    "relevance_score": 1.0,
+                    "combined_score": fts_score,
+                    "fts_score": fts_score,
+                    "source": "fts5",
+                }
+            )
+
+        # Tag vector hits for downstream traceability.
+        for v in vector_hits:
+            v.setdefault("source", "vector")
+
+        if merge_strategy != "union_dedup":
+            # Unknown strategy → log and fall through to union_dedup so
+            # the run produces SOMETHING rather than silently empty.
+            logger.warning(
+                "Unknown merge_strategy %r; falling back to union_dedup.",
+                merge_strategy,
+            )
+
+        # Dedup key: prefer dia_id (stable, comes from the dataset);
+        # fallback to a hash of normalised text.
+        seen: set = set()
+        merged: List[Dict[str, Any]] = []
+
+        def _dedup_key(hit: Dict[str, Any]) -> str:
+            md = hit.get("metadata") or {}
+            dia_id = str(md.get("dia_id") or "").strip()
+            if dia_id:
+                return f"dia:{dia_id}"
+            text = (hit.get("text") or "").strip()
+            return f"txt:{hash(text)}"
+
+        for hit in vector_hits:
+            key = _dedup_key(hit)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(hit)
+
+        for hit in fts_hits:
+            key = _dedup_key(hit)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(hit)
+
+        return merged
 
 
 # ---------------------------------------------------------------------------
