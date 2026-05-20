@@ -63,8 +63,13 @@ print('indexes rebuilt')
 step "eval-snapshot"     python3 scripts/eval.py --label "weekly-$DATE"
 step "retrieval-test"    python3 scripts/test-retrieval.py --label "weekly-$DATE"
 
-# Build the human-readable report: diff against the previous weekly snapshot.
-prev=$(ls -1 eval-output/*-weekly-*.json 2>/dev/null | grep -v "^.*$DATE-weekly" | sort | tail -1)
+# Build the human-readable report: diff against the previous weekly eval
+# snapshot. Exclude *retrieval* files (they have their own diff below) and
+# today's own snapshot so we land on a true prior-week file.
+prev=$(ls -1 eval-output/*-weekly-*.json 2>/dev/null \
+        | grep -v retrieval \
+        | grep -v "eval-output/${DATE}-weekly-" \
+        | sort | tail -1)
 prev_label=""
 if [[ -n "$prev" ]]; then
     prev_label=$(basename "$prev" .json | sed 's/.*-weekly-//')
