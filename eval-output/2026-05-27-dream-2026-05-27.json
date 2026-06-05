@@ -1,0 +1,63 @@
+{
+  "coverage": {
+    "completed_without_retro": [
+      "VP-16157"
+    ],
+    "failures_pct": 44.4,
+    "retrospective_pct": 74.1
+  },
+  "cross_links": 1141,
+  "date": "2026-05-27",
+  "last_dream": {
+    "log": "dream-2026-05-27.md",
+    "ops": {
+      "archived": 0,
+      "extracted": 0,
+      "forgotten": 0,
+      "merged": 0,
+      "promoted": 0
+    }
+  },
+  "ltm_lines": {
+    "emr-integration": 735,
+    "failures": 398,
+    "patterns": 839,
+    "repos": 178,
+    "rules": 359,
+    "ticket-routing": 70
+  },
+  "tiers": {
+    "archive": {
+      "count": 0
+    },
+    "ltm": {
+      "archive_candidates": 0,
+      "by_category": {
+        "emr_integration": 1,
+        "pm_patterns": 2,
+        "repo_patterns": 1,
+        "technical": 2
+      },
+      "count": 6,
+      "highest": 0.4488,
+      "lowest": 0.1039,
+      "mean": 0.2678,
+      "median": 0.2499,
+      "stdev": 0.1502
+    },
+    "stm": {
+      "archive_candidates": 0,
+      "by_category": {
+        "emr_integration": 25,
+        "pm_patterns": 1,
+        "technical": 28
+      },
+      "count": 54,
+      "highest": 0.3938,
+      "lowest": 0.035,
+      "mean": 0.1782,
+      "median": 0.1606,
+      "stdev": 0.0796
+    }
+  }
+}

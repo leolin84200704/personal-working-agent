@@ -2,7 +2,7 @@
   "corpus_size": 45,
   "retrievers": [
     {
-      "avg_ms": 10.03,
+      "avg_ms": 10.11,
       "hit@1": 0.511,
       "hit@3": 0.733,
       "hit@5": 0.778,
@@ -22,7 +22,7 @@
       "zero_recall_pct": 0.0
     },
     {
-      "avg_ms": 2120.35,
+      "avg_ms": 1938.44,
       "hit@1": 0.0,
       "hit@3": 0.0,
       "hit@5": 0.0,
@@ -32,7 +32,7 @@
       "zero_recall_pct": 100.0
     },
     {
-      "avg_ms": 0.31,
+      "avg_ms": 0.35,
       "hit@1": 0.0,
       "hit@3": 0.0,
       "hit@5": 0.0,

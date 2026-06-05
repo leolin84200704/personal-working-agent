@@ -3,61 +3,182 @@ id: failures
 type: ltm
 category: technical
 status: active
-score: 0.1448
+score: 0.0
 base_weight: 0.9
 urgency: 3
-created: 2026-05-20
-updated: 2026-05-20
+created: 2026-06-02
+updated: 2026-06-02
 links:
 - INCIDENT-20260518
+- INCIDENT-20260601-sftp-hang
 - VP-15460
 - VP-16337
 - VP-16410
+- VP-16520
+- VP-16521
+- INCIDENT-20260528
 - LBS-1487
 - VP-16165
 - VP-16424
 - VP-16474
 - VP-16476
+- VP-16766
+- VP-16784-87
+- VP-16164
 - VP-16251
 - VP-16280
 - VP-16289
 - VP-16423
 - VP-16463
 - VP-16502
+- VP-16713
+- VP-16720
+- INCIDENT-2604156666
 - VP-16154
 - VP-16612
+- VP-16617
 - VP-16193
 - VP-16232
 - VP-16329
 - VP-16664
-- VP-16617
+- VP-16734
 tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 36 entries across STM
+summary: Auto-aggregated failure index from 55 entries across STM
 ---
-
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-05-20 — total 36 entries
+> Last updated: 2026-06-02 — total 55 entries
 
 ## Themes
 
-- [DB / migration / backfill](#db-migration) — 8 entries
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 7 entries
-- [Build / TypeScript / Tooling](#build-tooling) — 5 entries
-- [Other / uncategorized](#other) — 5 entries
-- [Redis / cache / pending list](#redis-cache) — 2 entries
-- [Deploy / commit / push coordination](#deploy-coordination) — 2 entries
-- [Test / mock / spec](#test-mocking) — 2 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 13 entries
+- [DB / migration / backfill](#db-migration) — 10 entries
+- [Other / uncategorized](#other) — 9 entries
+- [Build / TypeScript / Tooling](#build-tooling) — 7 entries
+- [Redis / cache / pending list](#redis-cache) — 3 entries
+- [Deploy / commit / push coordination](#deploy-coordination) — 3 entries
+- [Test / mock / spec](#test-mocking) — 3 entries
+- [Auth / permission / role](#auth-permission) — 2 entries
 - [Scope / requirement / PM communication](#scope-communication) — 2 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
 - [Error handling / throw vs log](#error-handling) — 1 entries
-- [Auth / permission / role](#auth-permission) — 1 entries
+- [gRPC / network / timeout](#grpc-network) — 1 entries
+
+---
+
+## Production side-effects (Kafka / email / SFTP) <a id='prod-side-effects'></a>
+
+### **[[INCIDENT-20260528]]** — `2026-05-28` — Dead-host 假設錯誤、本地 TCP test 沒驗 actual port
+
+我本機 `nc -z host 22` 測 PF + Breathermae 兩個 vendor 都 FAIL → 結論「dead host = hang 元凶」。實際 PF=2222、Breathermae=2222、MDHQ=2210。**用 port 22 測非標準 port 的 vendor 等於沒測**。VP-16180 STM 早就有「PF SFTP 45.24.217.150:2222」、我沒看。Leo 一句「我能連到」才回頭抓 `emr_sftp_source.port` 重測。
+
+預防：任何 host reachability test 都先 `SELECT host, port FROM emr_sftp_source WHERE emrName=...` 取真實 port、別 hardcode 22。
+
+### **[[VP-15460]]** — `2026-04-28` — redlock Lock API confusion (#90)
+
+Picked `lock.release()` from redlock@5 docs while installing redlock@4. The two versions have different Lock prototypes (`unlock` vs `release`). Cosmetic in production (TTL covered the leak) but log noise + would have been a real bug if TTL was raised.
+
+### **[[VP-16164]]** — `2026-05-27` — v1 schema 過度簡化（照 PRD 沒做完整盤點）
+
+- v1 只給 practice 單一 sftp_path，漏掉 order/result pipeline 真正會用的十幾個欄位（傳輸方式/分開的 order/result path/enabled flags/legacy fields）。沒考慮 CharmEMR HTTP 模式。
+- Root cause：照 PRD 的精簡 schema 直接做，沒先盤點「pipeline 實際讀 ehr_integrations 哪些欄位」。
+- 修法：Leo 質疑後派 explore 做完整 pipeline 欄位盤點 + 真實資料 COUNT(DISTINCT) per-group 一致性分析，才知道哪些該 practice / 哪些 per-provider。
+- **教訓**：要「取代既有表」的 schema，先盤點既有表在所有 pipeline 被讀的完整欄位清單，再設計。不要信 PRD 的精簡 schema。
+
+### **[[VP-16164]]** — `2026-05-27` — COUNT(DISTINCT) 把 null 當一致的陷阱
+
+一致性分析說 legacy_result_send_type「always consistent」，但 pipeline parity 抓到 1 個 group 有 [null, SFTP]。COUNT(DISTINCT) 忽略 null，所以判為一致。實際 backfill 把 null 正規化成 group 值。本案 pipeline 等價（null→SFTP）無害，但要記得 null 在一致性分析會被低估。
+
+### **[[VP-16251]]** — `2026-04-21 21:50` — Script 產出的資料有 3 個問題需手動修正:
+
+1. sftp_ordering_path = null（script 未設定）
+2. sftp_archive_path 缺尾部 /
+3. sftp_folder_mapping sftp_source_id = null（已修正）
+4. 誤插 sftp_folder_mapping result mapping — sftp_folder_mapping 僅用於 ORDER（已刪除）
+
+### **[[VP-16280]]** — `2026-04-23 18:05` — 兩個遺漏（both caught by Leo at review, not by agent）:
+
+- 沒查 `kit_delivery_option` same-clinic 既有 → 預設 `NO_DELIVERY` 與 practice 實際 `BOTH_BLOOD_AND_NON_BLOOD` 不一致
+- 沒查 `order_clients.old_clinic_id` → 新 record null，既有皆 1002859
+Root cause: Step 5c 只查了 integration-level 欄位（report_option / integration_type / sftp paths），沒把 `kit_delivery_option` 和 order_clients 的 `old_clinic_id` 納入 same-practice-follow-existing 檢查清單。
+
+### **[[VP-16289]]** — `2026-04-23` — - insert-ehr-integration.ts 第一次用錯參數格式 → 看 usage 後修正
+
+- MDHQ 已知問題: sftp_archive_path 缺尾部 `/`、emr_name 小寫 → 手動 SQL 修正
+
+### **[[VP-16423]]** — `2026-05-04` — kit_delivery_option 錯誤對齊 PENDING stub
+
+- 錯誤決定：Phase 2 把 7 筆 ehr_integrations.kit_delivery_option 對齊 17412 PENDING stub 的 BOTH_BLOOD_AND_NON_BLOOD
+- Root cause：誤把 PENDING stub（4/23 internal staff 預建、business 欄位全空）當「same-clinic 既有 LIVE」可 follow。實際 stub 的 kit_delivery_option 是 schema default（`@default(BOTH_BLOOD_AND_NON_BLOOD)`），不是真實設定
+- prod 驗證：(kits_options=0, kit_delivery_option=NO_DELIVERY) 配對有 112 筆全部一致；其餘 (kits_options=0, BOTH) 579 筆是 schema default 沒明確覆蓋
+- 正確規則：**kit_delivery_option 應對齊 order_clients.kits_options（runtime source of truth）**，0 → NO_DELIVERY
+- 處理：`_apply-vp16423-kit-fix.ts` UPDATE 7 筆 → NO_DELIVERY（pre-check 通過）
+- 預防：(a) PENDING / stub record 不算 same-clinic 既有可 follow；(b) 任何 ehr_integrations.kit_delivery_option 決策都先 check 對應 order_clients.kits_options 對齊
+
+### **[[VP-16463]]** — `2026-05-13 15:46` — v2 NO_NPI parity break (RED FLAG, awaiting user decision)
+
+Two post-expansion files stuck on v2 path with behavioral divergence from v1:
+
+| file id | folder | received | customer_not_found | parse_finished | sample_id | retry_num | pod_name |
+|---|---|---|---|---|---|---|---|
+| 6053 | parsley-la | 2026-05-13 11:45 | NO_NPI | 0 | NULL | 5 | NULL |
+| 6058 | ravelhealth | 2026-05-13 15:30 | NO_NPI | 0 | NULL | 5 | NULL |
+
+**Past 7d MDHQ baseline** (31 success + 9 `no payment method` flags): ALL 40 v1-processed files have `last_update_pod_name='lis-emr-prod-*'` and `parse_finished=1` (even with non-success flags). NO files in entire 7d have `NO_NPI` flag — these 2 are unique.
+
+**Three suspected v2 regressions**:
+1. **NPI-check parity break**: v1 either skips NPI lookup or uses a different fallback. v2 explicitly rejects on missing NPI.
+2. **Terminal-state retry bug**: v2 detected customer_not_found but didn't set parse_finished=1, so worker keeps retrying (5 attempts). v1 sets parse_finished=1 even with flag.
+3. **Audit gap**: v2 worker not persisting `last_update_pod_name` on error path — cannot prove provenance.
+
+**Cutover monitor cadence tightened to 30min** while red flag active.
+
+**User decision options pending**:
+- A: Rollback id=78/201 to use_v2_pipeline=0 (let v1 reprocess)
+- B: Inspect HL7 file content for NPI presence (rule out data vs logic)
+- C: Keep observing
+
+DO NOT auto-rollback without explicit user approval.
+
+### **[[VP-16502]]** — `2026-05-07` — AC4 過度字面化 PRD #3
+
+- **錯誤推理**: PRD #3 寫 "Reminder 48h/24h/15m (To Provider)" 我直接讀為 "only Provider"，加 filter 後破壞 VP-16391 deployed 的「reminder 發所有 participant」設計
+- **正確意思**: PRD 字面是「at minimum Provider」— Lab Team 也要收
+- **Leo 糾正**: 「需要給 provider + clinician」
+- **教訓**: PRD wording 沒 explicit "only X" 時不要加 filter，先確認語意；deployed prod 行為是 evidence，AC 跟既有 test 衝突優先 raise 再決定，不要「先加 filter 等 test 改」
+
+### **[[VP-16713]]** — [2026-05-21 ~19:50] Calendar DB schema 混淆（critical insight）
+
+- 我給的 audit query 在 Leo 的 client 跑出 0 列，因 client 連的是 `calendar_dev_new` schema（沒有這批 prod 資料）
+- Wasted ~2 輪 query 嘗試，直到讓 Leo 跑 `current_schema()` 才確認
+- Root cause: 我預設 Leo 連的就是 prod，沒先要求 enumerate schema
+- 防範：calendar DB 操作**第一步**永遠先 `SELECT current_database(), current_schema()` 或 `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'calendar%'`，這跟 repos.md 既有規則一致
+
+### **[[VP-16713]]** — `2026-05-21 20:05` — 對 event 9509 的 query 邏輯誤判
+
+- Leo 給 event 9509 raw data（明明有 clinicadmin participant 30789 Brooke）
+- 我前面 query 用 `c.role IN ('provider','clinicadmin')` 邏輯**應該**返回 Brooke
+- 我錯誤推測「event 沒有 clinician participant」，提議 creator-path fallback
+- Root cause: 連 dev schema 而 prod schema 才有資料，是 schema 問題不是 query 邏輯問題
+- Lesson: query 跑出空時，先驗證**連線 / schema / 資料存在性**，再懷疑 query 邏輯
+
+### **[[VP-16720]]** — `2026-06-01` — order_clients 重複 INSERT（Anna 43262 ×4）
+
+**症狀**：我 INSERT 24 order_clients（per pair），但 Anna 43262 跨 4 clinic 同 customer_id → 4 個重複 oc rows（ids 2303/2306/2309/2312）。
+
+**Root cause**：[[VP-16766]] 是 single (cust, clinic) pair，沒呈現「跨 clinic 同 customer」場景，所以 STM 沒明確標 `order_clients` 是 **per-customer not per (cust, clinic) pair**。我直接按 pair × 1 INSERT 24 筆。
+
+**Verify confirmed**：prod 「跨 2+ clinic 的 provider」全部都是 1 個 order_clients row（包含我 INSERT 前的 Anna 43262 應該也只有 1 row）—— 慣例明確。
+
+**修法**：事後 deleteMany ids 2306/2309/2312，保留 2303。21 distinct customers / 21 oc rows ✓。
+
+**Preventable**：是。pre-check 階段應該偵測 PAIRS 內重複 customer_id + 對 INSERT 邏輯 dedupe by customer。
 
 ---
 
@@ -136,71 +257,75 @@ At Step 4 I proposed `role === 'provider'` (strict). Leo refined to "exclude (cl
 
 I added `*_timezone` paired fields to both YAML files at Step 5 start, planning to use them in templateModel. Leo immediately reverted with "不能改 yaml file 啊". Root cause: I conflated "BE config describing template variables" with "Postmark template body in Postmark cloud" — Leo treats the YAML AS the template-end contract; adding fields there is an API change even if Postmark template body doesn't reference them. Lesson: when spec says "embed timezone", default to enriching existing values, NOT adding paired fields.
 
+### **[[VP-16720]]** — `2026-06-01` — INSERT 新 row 漏借 same-customer NPI
+
+**症狀**：3 個新建 Anna pair (2930/8003/36290) customer_npi 寫 null（理由：ticket 表沒列 NPI 欄）。Leo 指出 144510 既有 Anna row 的 customer_npi=1073000691 — 同 customer 跨 clinic NPI 應一致，3 個新 row 該借這個值。
+
+**Root cause**：我的 sibling-borrow 邏輯只從 **same-clinic sibling** 取（borrow clinic_name / address / contact 等 clinic-level 欄位），沒考慮 **same-customer sibling**（不同 clinic 但同 customer_id）—— 那裡有 customer-level 欄位（customer_npi）。
+
+**修法**：事後 `UPDATE customer_npi + effective_npi WHERE customer_id='43262' AND clinic_id IN (2930,8003,36290)`。3 row 補上。
+
+**Preventable**：是。INSERT new pair 前應該分兩個 sibling lookup：
+- same-clinic（任一）→ borrow clinic_name, address, contact_*
+- same-customer 任一 LIVE row → borrow customer_npi, clinic_npi, effective_npi（如果有）
+
+### **[[VP-16734]]**
+
+（無實作層失敗）
+
+**Minor procedural slip**:
+- Probe script `_vp16734-check.ts` 初版查 `ehr_integration_status_history` 用 column `ehr_integration_id`（推測），實際是 `integration_id` — 一次 retry 後補上 information_schema 查欄位名再改。教訓：跨表的 FK column 命名不要憑猜，先 `SHOW COLUMNS` / information_schema 看 schema
+
 ---
 
-## Production side-effects (Kafka / email / SFTP) <a id='prod-side-effects'></a>
+## Other / uncategorized <a id='other'></a>
 
-### **[[VP-15460]]** — `2026-04-28` — redlock Lock API confusion (#90)
+### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
 
-Picked `lock.release()` from redlock@5 docs while installing redlock@4. The two versions have different Lock prototypes (`unlock` vs `release`). Cosmetic in production (TTL covered the leak) but log noise + would have been a real bug if TTL was raised.
+Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
 
-### **[[VP-16251]]** — `2026-04-21 21:50` — Script 產出的資料有 3 個問題需手動修正:
+預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
 
-1. sftp_ordering_path = null（script 未設定）
-2. sftp_archive_path 缺尾部 /
-3. sftp_folder_mapping sftp_source_id = null（已修正）
-4. 誤插 sftp_folder_mapping result mapping — sftp_folder_mapping 僅用於 ORDER（已刪除）
+### **[[LBS-1487]]**
 
-### **[[VP-16280]]** — `2026-04-23 18:05` — 兩個遺漏（both caught by Leo at review, not by agent）:
+無。
 
-- 沒查 `kit_delivery_option` same-clinic 既有 → 預設 `NO_DELIVERY` 與 practice 實際 `BOTH_BLOOD_AND_NON_BLOOD` 不一致
-- 沒查 `order_clients.old_clinic_id` → 新 record null，既有皆 1002859
-Root cause: Step 5c 只查了 integration-level 欄位（report_option / integration_type / sftp paths），沒把 `kit_delivery_option` 和 order_clients 的 `old_clinic_id` 納入 same-practice-follow-existing 檢查清單。
+### **[[VP-16165]]**
 
-### **[[VP-16289]]** — `2026-04-23` — - insert-ehr-integration.ts 第一次用錯參數格式 → 看 usage 後修正
+_(尚未 execute)_
 
-- MDHQ 已知問題: sftp_archive_path 缺尾部 `/`、emr_name 小寫 → 手動 SQL 修正
+---
 
-### **[[VP-16423]]** — `2026-05-04` — kit_delivery_option 錯誤對齊 PENDING stub
+### **[[VP-16424]]**
 
-- 錯誤決定：Phase 2 把 7 筆 ehr_integrations.kit_delivery_option 對齊 17412 PENDING stub 的 BOTH_BLOOD_AND_NON_BLOOD
-- Root cause：誤把 PENDING stub（4/23 internal staff 預建、business 欄位全空）當「same-clinic 既有 LIVE」可 follow。實際 stub 的 kit_delivery_option 是 schema default（`@default(BOTH_BLOOD_AND_NON_BLOOD)`），不是真實設定
-- prod 驗證：(kits_options=0, kit_delivery_option=NO_DELIVERY) 配對有 112 筆全部一致；其餘 (kits_options=0, BOTH) 579 筆是 schema default 沒明確覆蓋
-- 正確規則：**kit_delivery_option 應對齊 order_clients.kits_options（runtime source of truth）**，0 → NO_DELIVERY
-- 處理：`_apply-vp16423-kit-fix.ts` UPDATE 7 筆 → NO_DELIVERY（pre-check 通過）
-- 預防：(a) PENDING / stub record 不算 same-clinic 既有可 follow；(b) 任何 ehr_integrations.kit_delivery_option 決策都先 check 對應 order_clients.kits_options 對齊
+（無實作層失敗）
 
-### **[[VP-16463]]** — `2026-05-13 15:46` — v2 NO_NPI parity break (RED FLAG, awaiting user decision)
+**記憶層 failure**：Step 4 呈報時引 VP-16423 STM line 173「kit_delivery_option=BOTH_BLOOD_AND_NON_BLOOD（follow 17412 既有值）」當作 same-practice follow 範例 — 但實際 DB query 17412 與其他 6 provider 全部都是 NO_DELIVERY。Root cause：VP-16423 STM Decisions 區段是早期決策草稿，最終 Leo 在 Step 6 review 時把全部 7 筆改 NO_DELIVERY 但 STM Decisions 沒同步 update（LTM `emr-integration.md` line 436 反而有寫對）。教訓：**引 STM 的決策內容前先用 DB 實際值 cross-check**，特別是時間久的 STM。
 
-Two post-expansion files stuck on v2 path with behavioral divergence from v1:
+### **[[VP-16474]]**
 
-| file id | folder | received | customer_not_found | parse_finished | sample_id | retry_num | pod_name |
-|---|---|---|---|---|---|---|---|
-| 6053 | parsley-la | 2026-05-13 11:45 | NO_NPI | 0 | NULL | 5 | NULL |
-| 6058 | ravelhealth | 2026-05-13 15:30 | NO_NPI | 0 | NULL | 5 | NULL |
+_None._
 
-**Past 7d MDHQ baseline** (31 success + 9 `no payment method` flags): ALL 40 v1-processed files have `last_update_pod_name='lis-emr-prod-*'` and `parse_finished=1` (even with non-success flags). NO files in entire 7d have `NO_NPI` flag — these 2 are unique.
+### **[[VP-16476]]**
 
-**Three suspected v2 regressions**:
-1. **NPI-check parity break**: v1 either skips NPI lookup or uses a different fallback. v2 explicitly rejects on missing NPI.
-2. **Terminal-state retry bug**: v2 detected customer_not_found but didn't set parse_finished=1, so worker keeps retrying (5 attempts). v1 sets parse_finished=1 even with flag.
-3. **Audit gap**: v2 worker not persisting `last_update_pod_name` on error path — cannot prove provenance.
+_(無 execution failure。Mistakes 在 Retrospective)_
 
-**Cutover monitor cadence tightened to 30min** while red flag active.
+---
 
-**User decision options pending**:
-- A: Rollback id=78/201 to use_v2_pipeline=0 (let v1 reprocess)
-- B: Inspect HL7 file content for NPI presence (rule out data vs logic)
-- C: Keep observing
+### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
 
-DO NOT auto-rollback without explicit user approval.
+- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
+- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
+- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
+- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
 
-### **[[VP-16502]]** — `2026-05-07` — AC4 過度字面化 PRD #3
+### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
 
-- **錯誤推理**: PRD #3 寫 "Reminder 48h/24h/15m (To Provider)" 我直接讀為 "only Provider"，加 filter 後破壞 VP-16391 deployed 的「reminder 發所有 participant」設計
-- **正確意思**: PRD 字面是「at minimum Provider」— Lab Team 也要收
-- **Leo 糾正**: 「需要給 provider + clinician」
-- **教訓**: PRD wording 沒 explicit "only X" 時不要加 filter，先確認語意；deployed prod 行為是 evidence，AC 跟既有 test 衝突優先 raise 再決定，不要「先加 filter 等 test 改」
+
+
+### **[[VP-16784-87]]**
+
+（無 — verification-only session）
 
 ---
 
@@ -243,35 +368,22 @@ Production NestFactory crash at startup: `TypeError: redlock_1.default is not a 
   2. 跟 tsc/nest build 路徑解析有關的 bug：先看 `dist/` **頂層結構**（有沒有多/少一層），比 grep import path 更快
   3. user 強調「之前能跑」+ `git diff` 空時，要把搜尋範圍擴到 **untracked .ts 檔可能改變 tsc include scope** 這條軸
 
----
+### **[[VP-16520]]** — `2026-05-28` — 把自己造成的 prisma client drift 誤判為「stale 假象」
 
-## Other / uncategorized <a id='other'></a>
+- 現象:LIS-transformer-v2 我的 branch 上 `npm run build` 跑出 18 個 `specialties` 型別錯誤(node_modules/.prisma/client v2_calendar.specialties)。schema.prisma 沒 specialties、Calendar GraphQL model 沒、我 diff 也沒。
+- 我下了「stale generated client 假象,build prebuild `prisma generate` 後就 0」的結論。
+- Leo 糾正:「不可能,npm run start:dev 100% 要過,鐵律」「以前也有過以為是別人的問題,後來是自己創的」「找,找到為止」。
+- 真因:之前在 `feature/leo/VP-16499` branch 工作時(那邊 schema 有 specialties)跑過 `prisma generate` → client 寫進 node_modules → 切到 VP-16521 branch(schema 沒 specialties)後 **client 沒重生成** → drift。**本 repo `npm run build` 的 prebuild 只是 `rimraf dist`,根本不會跑 prisma generate**(我先前以為會,完全錯)。
+- 修法:`npx prisma generate` + `npx prisma generate --schema=prisma2/schema2.prisma`(雙 client)→ build 0 → start:dev 啟動成功。
+- 教訓:已寫進 user memory `feedback_start_dev_iron_rule.md` + LTM repos.md。**「壞掉 = 自己造成的」要當預設假設**;切 branch 後不同 schema 必跑 generate 對齊雙 client。
 
-### **[[LBS-1487]]**
+### **[[VP-16521]]** — `2026-05-28 17:50` — 分析 start:dev 走錯一輪 quick-fix（VP-16410 lesson 沒第一時間 retrieve）
 
-無。
-
-### **[[VP-16165]]**
-
-_(尚未 execute)_
-
----
-
-### **[[VP-16424]]**
-
-（無實作層失敗）
-
-**記憶層 failure**：Step 4 呈報時引 VP-16423 STM line 173「kit_delivery_option=BOTH_BLOOD_AND_NON_BLOOD（follow 17412 既有值）」當作 same-practice follow 範例 — 但實際 DB query 17412 與其他 6 provider 全部都是 NO_DELIVERY。Root cause：VP-16423 STM Decisions 區段是早期決策草稿，最終 Leo 在 Step 6 review 時把全部 7 筆改 NO_DELIVERY 但 STM Decisions 沒同步 update（LTM `emr-integration.md` line 436 反而有寫對）。教訓：**引 STM 的決策內容前先用 DB 實際值 cross-check**，特別是時間久的 STM。
-
-### **[[VP-16474]]**
-
-_None._
-
-### **[[VP-16476]]**
-
-_(無 execution failure。Mistakes 在 Retrospective)_
-
----
+- **症狀**：merge 完跑 `npm run start:dev` 報 `Cannot find module '../../prisma2/generated/client2'`
+- **誤判**：第一波先做 dist 結構分析 → 提出 nest-cli assets / path-alias 等 4 個 option 問 Leo
+- **真正根因**：scripts/_send-reschedule-preview-emails.ts（VP-16521 上一輪留下的 untracked .ts）讓 tsc include 抓到 scripts/，dist 變 `dist/src/...` 嵌套（**完全跟 VP-16410 incident 同一個雷**）
+- **可預防**：Step 1 Retrieve 時 grep `failures.md` for `start:dev|MODULE_NOT_FOUND|prisma2.*client2` 應該秒中
+- **教訓**：start:dev 失敗時，**第一動作是 `ls dist/` 看頂層結構**（有沒有多/少一層 `src/`），不是 grep import path 或 prisma generate
 
 ---
 
@@ -291,6 +403,28 @@ _(無 execution failure。Mistakes 在 Retrospective)_
 
 ---
 
+### **[[INCIDENT-20260601-sftp-hang]]**
+
+- 5/30 INCIDENT-20260528: identified same symptom but only documented "Required pod rollout restart". Root cause was not traced into the singleton/await chain. Recurrence on 6/1 demanded deeper investigation.
+
+### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04` — INCIDENT-20260601 patch 解了 pod hang 但留 peer-side leak
+
+INCIDENT-20260601 patch 的 timeout fallback 是 `client.end(); _sock.destroy();`：
+- `client.end()` async，queue SSH_MSG_DISCONNECT bytes 還沒寫到 socket
+- 立刻 `_sock.destroy()` → kernel close(fd) → queue bytes 丟掉
+- `socket.destroy()` 不保證送 FIN（per buffer state / SO_LINGER）
+- 結果：MDHQ Bitvise WinSSHD 在 application layer tracking session — 沒收到 SSH_MSG_DISCONNECT 就把 session 標 "abandoned" 留幾小時等 idle reaper
+
+3 天後 MDHQ 報「20 stale sessions/day」— 因為 v2 pod uptime 上升後 cron 跑滿 172 MDHQ folders/15min = 16,512 sessions/day，即使 0.12% fallback rate 也累積 ~20 leak/day。
+
+**Root cause of root cause**：60601 retro 的 success criterion 只有「pod 不再 hang」。沒問「peer 看到什麼」。我方 log 印 "force-destroying socket" warning 還以為 "OK，沒卡了" — 沒 grep MDHQ session count，沒從 pod netstat 看 ESTABLISHED 是否累積。
+
+**Preventable**：是。修 network lifecycle bug 的 verify plan 永遠應該分「我方」+「peer 方」兩條 axis。peer 方無法直接觀測也至少從 pod 內 netstat 看 connections to peer over time。
+
+20260604 修：3-stage `forciblyClose()` 保證 peer 收到 SSH_MSG_DISCONNECT / FIN / RST 至少一個。2h 觀測 1939 graceful + 10 econnreset + 1 fin_then_rst = 0 leak-equivalent outcome。詳見 [[patterns]] 「3-stage clean close」段。
+
+---
+
 ---
 
 ## Deploy / commit / push coordination <a id='deploy-coordination'></a>
@@ -300,6 +434,12 @@ _(無 execution failure。Mistakes 在 Retrospective)_
 Leo 急著補發、不想 build。我多次 commit + push 沒先問是否需要 deploy。後來 Leo 主動講「現在不用 build」才停下。
 **Preventable**：是。緊急 incident 過程中 commit ↔ deploy 是兩個分離決策，要先確認再做。
 
+### **[[INCIDENT-20260528]]** — `2026-05-28` — Migration apply 漏 staging DB
+
+VP-16760 創 `ehr_vendor_inquiry_status_history` table、migration SQL commit 進 repo、但只 apply 到 prod DB (`lisportalprod2`)、漏 apply staging DB (`192.168.60.11`)。今天 staging 部署後 FE call reject endpoint 才爆 P2021 500。
+
+LTM patterns.md 304-308 行早就有「兩 DB 都要 apply」、但實際上線時還是踩了 — 因為**沒有自動化驗證機制**、純靠人記得。已建議寫進 Jenkinsfile pre-deploy。
+
 ### **[[VP-15460]]** — `2026-04-28` — Migration not applied automatically
 
 Agent committed migration SQL to repo and assumed release pipeline would `prisma migrate deploy` it. Leo had to remind: "你 sftp_folder_mapping 的改動還沒真的上傳到 database". Then `prisma migrate deploy` failed with P3005 (DB never baselined for prisma migrations) → fell back to `prisma db execute --file <sql>` (raw SQL apply). Then "192.168.60.11:3306 也要 apply" — second DB. Lesson: this repo has two MySQL instances + Prisma is not the migration source-of-truth in prod.
@@ -307,6 +447,16 @@ Agent committed migration SQL to repo and assumed release pipeline would `prisma
 ---
 
 ## Test / mock / spec <a id='test-mocking'></a>
+
+### **[[INCIDENT-2604156666]]** — `2026-05-21` — spec 在 HEAD 已壞（pre-existing，Leo 要求併本 hotfix 修）
+
+- `sample-test-result.service.spec.ts` HEAD 是 6/6 fail，多層 stale：
+  1. **DI 缺 provider**：service constructor 注入 AbnormalFlagCalculatorService + ResultStatusMapperService，spec 從來沒提供 mock → `Nest can't resolve dependencies` → 全部 test setup 階段 fail
+  2. **4b10e1a 後 Step 5 primary 變 cloud**：spec 只 mock 了 `getTestResultsDetailedData`（on-prem fallback），`getTestResultsDetailedDataCloud` 沒 mock → 4 個跑 full flow 的 test 在 Step 5 拿到 undefined
+  3. **referenceRange mock shape 過期**：service buildTestResults 讀 `result.normalRange.referenceRange`，spec 寫的是舊 `result.allList[i].referenceRange`
+  4. **`getPatientReferenceRange` 真實 payload 是 snake_case + 帶 `result_value`**，spec 期望 camelCase 不帶 result_value
+  5. **「無 reference range」`abnormalFlag` 預期錯**：Service 對齊 Java `getMasterListInfo()==null` 返回 `''`，但 spec 期望 `'N'`
+- 全部本 commit 一次修齊，6/6 pass
 
 ### **[[VP-16154]]** — `2026-05-11 19:00` — - `event.service.spec.ts` 跟 `meeting-request.service.spec.ts` 用 `new ServiceClass(...)` 直接 instantiate（不走 DI），baseline 上已經缺一個 arg（pre-existing），加 settingTool inject 後 spec compile error 浮現。修法：spec 補 mock arg。
 
@@ -317,6 +467,21 @@ Agent committed migration SQL to repo and assumed release pipeline would `prisma
 `runReminders` test broke during local jest run because Leo's shell `.env` has `platform_type=local`, triggering early-return in `runReminders()`. This wasn't related to my changes but the existing test was env-dependent. Fixed with 1-line `delete process.env.platform_type` in `beforeEach`.
 
 Root cause: VP-16391's test was written assuming `process.env.platform_type` undefined in jest. Works in clean CI/CD, breaks under `.env`-aware shell.
+
+---
+
+## Auth / permission / role <a id='auth-permission'></a>
+
+### **[[INCIDENT-2604156666]]** — Lessons for testing
+
+- `.spec.ts` 文件不能信賴 — 跟 service code 不同步演進（4b10e1a + 多次 service refactor 都沒同步 spec），可能長期沒人跑
+- 應該每個 PR 跑該 service spec；或者 CI gate 上有 spec 必過要求
+
+### **[[VP-16617]]** — `2026-05-14` — kit_delivery_option mis-set on first finalize
+
+Set `kit_delivery_option=NO_DELIVERY` + `kits_options=0` following LTM line 454 and `_apply-vp16424-finalize.ts` template. Both sources were wrong (LTM bug + VP-16424 template propagated the same bug). Caught only after live-applied via cross-check with ParseHL7.java source.
+
+Root cause: LTM had two conflicting statements (mapping table at line 173-176 correct, stub finalize default at line 454 wrong). I followed line 454 without spotting the conflict. Lesson: when LTM has two statements that should agree, verify against authoritative source (Java code here).
 
 ---
 
@@ -348,12 +513,11 @@ After `cd /Users/hung.l/src/EMR-Backend && gh pr view 156`, subsequent Bash call
 
 ---
 
-## Auth / permission / role <a id='auth-permission'></a>
+## gRPC / network / timeout <a id='grpc-network'></a>
 
-### **[[VP-16617]]** — `2026-05-14` — kit_delivery_option mis-set on first finalize
+### **[[VP-16521]]** — `2026-05-28 17:53` — IDE diagnostics 不穩（mcp__ide__getDiagnostics 連續 timeout）
 
-Set `kit_delivery_option=NO_DELIVERY` + `kits_options=0` following LTM line 454 and `_apply-vp16424-finalize.ts` template. Both sources were wrong (LTM bug + VP-16424 template propagated the same bug). Caught only after live-applied via cross-check with ParseHL7.java source.
-
-Root cause: LTM had two conflicting statements (mapping table at line 173-176 correct, stub finalize default at line 454 wrong). I followed line 454 without spotting the conflict. Lesson: when LTM has two statements that should agree, verify against authoritative source (Java code here).
+- 試 2 次都 timeout，改跑 `npx eslint <file>` CLI 直接拿同樣結果
+- 教訓：WebStorm 抓 lint 等於 eslint + prettier；agent 端不要等 IDE diagnostics，CLI 更快更穩
 
 ---

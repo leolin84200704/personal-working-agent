@@ -3,32 +3,33 @@ id: rules
 type: ltm
 category: pm_patterns
 status: active
-score: 0.1287
+score: 0.1544
 base_weight: 0.8
 urgency: 3
 created: 2026-05-20
 updated: 2026-05-20
 links:
 - INCIDENT-20260518
+- LBS-1487
+- VP-15460
+- VP-16165
 - VP-16245
+- VP-16280
+- VP-16329
+- VP-16337
+- VP-16361
 - VP-16391
+- VP-16396
+- VP-16410
 - VP-16416
+- VP-16474
 - VP-16476
+- VP-16502
 - VP-16612
 - VP-16617
 - VP-16629
-- VP-16337
 - VP-16664
-- VP-16396
-- VP-15460
-- VP-16361
-- VP-16410
-- VP-16502
-- LBS-1487
-- VP-16329
-- VP-16165
-- VP-16280
-- VP-16474
+- ticket-routing
 tags:
 - rules
 - constitution
@@ -36,6 +37,8 @@ tags:
 - auto-generated
 summary: Auto-aggregated constitution from 34 rule-bearing paragraphs across STM
 ---
+
+
 
 
 # Rules / Constitution
