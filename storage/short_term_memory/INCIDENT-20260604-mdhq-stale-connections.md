@@ -1,3 +1,49 @@
+---
+id: INCIDENT-20260604
+type: stm
+category: technical
+status: resolved
+score: 0.3656
+base_weight: 0.9
+urgency: 5
+created: 2026-06-04
+updated: 2026-06-04
+links:
+- INCIDENT-20260528
+- INCIDENT-20260529
+- INCIDENT-20260601-followup-sftp-verify
+- INCIDENT-20260601-sftp-hang
+- VP-15460
+- VP-16232
+- VP-16391
+- VP-16410
+- VP-16521
+- VP-16859
+- failures
+- repos
+tags:
+- incident-20260604
+- sftp
+- mdhq
+- stale-connection
+- socket-teardown
+- nestjs-shutdown
+summary: 'MDHQ reports 20 stale SFTP connections/day from v2 prod pod. Root cause
+  = INCIDENT-20260601 fallback socket.destroy() never sends peer-visible teardown;
+  cron hammers MDHQ 172 sessions/15min. Fix = 3-stage forciblyClose (end→FIN→RST)
+  + enableShutdownHooks. 2h prod verify: 1939 graceful + 1 fin_then_rst = 0 leaks.'
+---
+
+
+
+
+
+
+
+
+
+
+
 # INCIDENT-20260604 - MDHQ Stale Connections Recurrence
 
 > Created: 2026-06-04 21:00 UTC

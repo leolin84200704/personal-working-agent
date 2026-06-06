@@ -6,8 +6,8 @@ status: active
 score: 0.0
 base_weight: 0.9
 urgency: 3
-created: 2026-06-02
-updated: 2026-06-02
+created: 2026-06-05
+updated: 2026-06-05
 links:
 - INCIDENT-20260518
 - INCIDENT-20260601-sftp-hang
@@ -18,12 +18,14 @@ links:
 - VP-16521
 - INCIDENT-20260528
 - LBS-1487
+- LBS-1541
 - VP-16165
 - VP-16424
 - VP-16474
 - VP-16476
 - VP-16766
 - VP-16784-87
+- INCIDENT-20260604-mdhq-stale-connections
 - VP-16164
 - VP-16251
 - VP-16280
@@ -33,33 +35,33 @@ links:
 - VP-16502
 - VP-16713
 - VP-16720
-- INCIDENT-2604156666
-- VP-16154
-- VP-16612
-- VP-16617
 - VP-16193
 - VP-16232
 - VP-16329
+- VP-16612
 - VP-16664
 - VP-16734
+- INCIDENT-2604156666
+- VP-16154
+- VP-16617
 tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 55 entries across STM
+summary: Auto-aggregated failure index from 58 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-06-02 — total 55 entries
+> Last updated: 2026-06-05 — total 58 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 13 entries
-- [DB / migration / backfill](#db-migration) — 10 entries
-- [Other / uncategorized](#other) — 9 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 14 entries
+- [DB / migration / backfill](#db-migration) — 11 entries
+- [Other / uncategorized](#other) — 10 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 7 entries
 - [Redis / cache / pending list](#redis-cache) — 3 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 3 entries
@@ -79,6 +81,12 @@ summary: Auto-aggregated failure index from 55 entries across STM
 我本機 `nc -z host 22` 測 PF + Breathermae 兩個 vendor 都 FAIL → 結論「dead host = hang 元凶」。實際 PF=2222、Breathermae=2222、MDHQ=2210。**用 port 22 測非標準 port 的 vendor 等於沒測**。VP-16180 STM 早就有「PF SFTP 45.24.217.150:2222」、我沒看。Leo 一句「我能連到」才回頭抓 `emr_sftp_source.port` 重測。
 
 預防：任何 host reachability test 都先 `SELECT host, port FROM emr_sftp_source WHERE emrName=...` 取真實 port、別 hardcode 22。
+
+### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04 22:00` — First monitor.sh run mis-identified pod label
+
+- Used `app=lis-emr-v2-deployment-prod` (deployment name) as label selector — actual label is `app=lis-emr-v2-prod` (`-deployment-` not in label).
+- Tick 1 returned `FAIL pod_not_found`. Fixed by checking `--show-labels` and re-running.
+- Lesson: always confirm label keys with `kubectl get pod ... --show-labels` before selecting; deployment-name ≠ pod-label.
 
 ### **[[VP-15460]]** — `2026-04-28` — redlock Lock API confusion (#90)
 
@@ -183,6 +191,12 @@ DO NOT auto-rollback without explicit user approval.
 ---
 
 ## DB / migration / backfill <a id='db-migration'></a>
+
+### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04 22:00` — expect spawn syntax error with `{...}` jsonpath
+
+- `kubectl get pods -o jsonpath='{.items[0].metadata.name}'` inside expect's `spawn` argument: expect interprets `{...}` as Tcl array.
+- Fixed by switching to `--no-headers -o custom-columns=NAME:.metadata.name`.
+- Lesson: avoid `jsonpath` with Tcl-significant chars in expect scripts; prefer custom-columns output for single-field extraction.
 
 ### **[[VP-16193]]** — `2026-04-17 18:30` — **insert-order-client.ts script bug: customer_id 設為 clinic_id 值**
 
@@ -289,6 +303,10 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[LBS-1487]]**
 
 無。
+
+### **[[LBS-1541]]**
+
+(none yet)
 
 ### **[[VP-16165]]**
 
@@ -406,22 +424,6 @@ Production NestFactory crash at startup: `TypeError: redlock_1.default is not a 
 ### **[[INCIDENT-20260601-sftp-hang]]**
 
 - 5/30 INCIDENT-20260528: identified same symptom but only documented "Required pod rollout restart". Root cause was not traced into the singleton/await chain. Recurrence on 6/1 demanded deeper investigation.
-
-### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04` — INCIDENT-20260601 patch 解了 pod hang 但留 peer-side leak
-
-INCIDENT-20260601 patch 的 timeout fallback 是 `client.end(); _sock.destroy();`：
-- `client.end()` async，queue SSH_MSG_DISCONNECT bytes 還沒寫到 socket
-- 立刻 `_sock.destroy()` → kernel close(fd) → queue bytes 丟掉
-- `socket.destroy()` 不保證送 FIN（per buffer state / SO_LINGER）
-- 結果：MDHQ Bitvise WinSSHD 在 application layer tracking session — 沒收到 SSH_MSG_DISCONNECT 就把 session 標 "abandoned" 留幾小時等 idle reaper
-
-3 天後 MDHQ 報「20 stale sessions/day」— 因為 v2 pod uptime 上升後 cron 跑滿 172 MDHQ folders/15min = 16,512 sessions/day，即使 0.12% fallback rate 也累積 ~20 leak/day。
-
-**Root cause of root cause**：60601 retro 的 success criterion 只有「pod 不再 hang」。沒問「peer 看到什麼」。我方 log 印 "force-destroying socket" warning 還以為 "OK，沒卡了" — 沒 grep MDHQ session count，沒從 pod netstat 看 ESTABLISHED 是否累積。
-
-**Preventable**：是。修 network lifecycle bug 的 verify plan 永遠應該分「我方」+「peer 方」兩條 axis。peer 方無法直接觀測也至少從 pod 內 netstat 看 connections to peer over time。
-
-20260604 修：3-stage `forciblyClose()` 保證 peer 收到 SSH_MSG_DISCONNECT / FIN / RST 至少一個。2h 觀測 1939 graceful + 10 econnreset + 1 fin_then_rst = 0 leak-equivalent outcome。詳見 [[patterns]] 「3-stage clean close」段。
 
 ---
 
