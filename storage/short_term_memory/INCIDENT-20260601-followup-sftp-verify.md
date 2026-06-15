@@ -3,7 +3,7 @@ id: INCIDENT-20260601-followup-sftp-verify
 type: stm
 category: technical
 status: pending
-score: 0.1181
+score: 0.1
 base_weight: 0.9
 created: 2026-06-01
 updated: 2026-06-01
@@ -19,6 +19,9 @@ summary: 'A+B follow-up: keep SFTP_UPLOAD_OP_TIMEOUT_MS=10min, add stat() verify
   timeout to fix false-negative ERROR records (e.g. sample 2560935 9MB Athena upload
   succeeded but DB marked ERROR)'
 ---
+
+
+
 
 
 

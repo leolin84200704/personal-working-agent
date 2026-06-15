@@ -6,8 +6,8 @@ status: active
 score: 0.0
 base_weight: 0.9
 urgency: 3
-created: 2026-06-05
-updated: 2026-06-05
+created: 2026-06-10
+updated: 2026-06-10
 links:
 - INCIDENT-20260518
 - INCIDENT-20260601-sftp-hang
@@ -16,6 +16,8 @@ links:
 - VP-16410
 - VP-16520
 - VP-16521
+- VP-16934
+- feedback_start_dev_iron_rule
 - INCIDENT-20260528
 - LBS-1487
 - LBS-1541
@@ -32,9 +34,9 @@ links:
 - VP-16289
 - VP-16423
 - VP-16463
-- VP-16502
 - VP-16713
 - VP-16720
+- VP-16921
 - VP-16193
 - VP-16232
 - VP-16329
@@ -48,21 +50,21 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 58 entries across STM
+summary: Auto-aggregated failure index from 60 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-06-05 — total 58 entries
+> Last updated: 2026-06-10 — total 60 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 14 entries
-- [DB / migration / backfill](#db-migration) — 11 entries
-- [Other / uncategorized](#other) — 10 entries
-- [Build / TypeScript / Tooling](#build-tooling) — 7 entries
+- [Other / uncategorized](#other) — 11 entries
+- [DB / migration / backfill](#db-migration) — 10 entries
+- [Build / TypeScript / Tooling](#build-tooling) — 9 entries
 - [Redis / cache / pending list](#redis-cache) — 3 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 3 entries
 - [Test / mock / spec](#test-mocking) — 3 entries
@@ -154,13 +156,6 @@ Two post-expansion files stuck on v2 path with behavioral divergence from v1:
 
 DO NOT auto-rollback without explicit user approval.
 
-### **[[VP-16502]]** — `2026-05-07` — AC4 過度字面化 PRD #3
-
-- **錯誤推理**: PRD #3 寫 "Reminder 48h/24h/15m (To Provider)" 我直接讀為 "only Provider"，加 filter 後破壞 VP-16391 deployed 的「reminder 發所有 participant」設計
-- **正確意思**: PRD 字面是「at minimum Provider」— Lab Team 也要收
-- **Leo 糾正**: 「需要給 provider + clinician」
-- **教訓**: PRD wording 沒 explicit "only X" 時不要加 filter，先確認語意；deployed prod 行為是 evidence，AC 跟既有 test 衝突優先 raise 再決定，不要「先加 filter 等 test 改」
-
 ### **[[VP-16713]]** — [2026-05-21 ~19:50] Calendar DB schema 混淆（critical insight）
 
 - 我給的 audit query 在 Leo 的 client 跑出 0 列，因 client 連的是 `calendar_dev_new` schema（沒有這批 prod 資料）
@@ -187,6 +182,77 @@ DO NOT auto-rollback without explicit user approval.
 **修法**：事後 deleteMany ids 2306/2309/2312，保留 2303。21 distinct customers / 21 oc rows ✓。
 
 **Preventable**：是。pre-check 階段應該偵測 PAIRS 內重複 customer_id + 對 INSERT 邏輯 dedupe by customer。
+
+### **[[VP-16921]]**
+
+- F1: Concluded "not a bug, customer misremembered" from a clean prod DB — WRONG. The bug (cancel cascade + a second producer) had erased/never-wrote the prod evidence. Corrected only after reading the customer's actual reminder screenshot (Leo supplied).
+- F2: Theorized "zombie from 5/22 cancel-and-rebook left is_canceled=false" — WRONG (git showed rescheduleClinicalConsult sets is_canceled=true, and it was deployed 6/2 anyway). The real producer was a different env entirely.
+- F3: Assumed the local `.env` calendar_prod = the only/authoritative prod DB and that all senders write there. Missed that a separate cluster could send to the same prod email topic without touching prod's DB.
+
+---
+
+## Other / uncategorized <a id='other'></a>
+
+### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
+
+Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
+
+預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
+
+### **[[LBS-1487]]**
+
+無。
+
+### **[[LBS-1541]]**
+
+(none yet)
+
+### **[[VP-16165]]**
+
+_(尚未 execute)_
+
+---
+
+### **[[VP-16424]]**
+
+（無實作層失敗）
+
+**記憶層 failure**：Step 4 呈報時引 VP-16423 STM line 173「kit_delivery_option=BOTH_BLOOD_AND_NON_BLOOD（follow 17412 既有值）」當作 same-practice follow 範例 — 但實際 DB query 17412 與其他 6 provider 全部都是 NO_DELIVERY。Root cause：VP-16423 STM Decisions 區段是早期決策草稿，最終 Leo 在 Step 6 review 時把全部 7 筆改 NO_DELIVERY 但 STM Decisions 沒同步 update（LTM `emr-integration.md` line 436 反而有寫對）。教訓：**引 STM 的決策內容前先用 DB 實際值 cross-check**，特別是時間久的 STM。
+
+### **[[VP-16474]]**
+
+_None._
+
+### **[[VP-16476]]**
+
+_(無 execution failure。Mistakes 在 Retrospective)_
+
+---
+
+### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
+
+- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
+- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
+- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
+- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
+
+### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
+
+
+
+### **[[VP-16784-87]]**
+
+（無 — verification-only session）
+
+### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
+
+- endpoint no-auth → 401（route live + guard）。
+- 簽 JWT(staging JWT_SECRET, HS256, payload 需 userId + 未過期；JwtStrategy 不檢 issuer) 打 dry-run（`scripts/_vp16934-staging-test.js`）：
+  - 假 provider → `201 {rejected, customer_not_found}`（auth/dryrun/富化都跑）。
+  - 缺 testCodes → `400`。
+  - **真客戶 5794 → `201 {rejected, unrecognized_test_codes:[VACP1001]}`** = customer 解析成功 + 代碼分類有跑（VACP1001 是假 code 才被擋）。
+- **結論：order intake 在 staging dry-run 全程跑通**（auth/gating/validation/customer 查詢/代碼分類）。差「完整成功單(sampleId:-1)」需對 staging 客戶有效的真 test code。
+- staging order_intake 留了 2 筆 VP16934-TEST-* rejected 測試列（無害，可清）。
 
 ---
 
@@ -256,13 +322,6 @@ Root cause: 第一次跑時我用 `tail -50` 截取 output，後段顯示 record
 - 處理：Phase 2 raw SQL 繞過 check，ehr_integrations 用 cuid library 自生 ID，order_clients 直接 INSERT。
 - 預防：未來 ticket 若 provider list 有 same-NPI 重複，先警告 script 對 25467 case 的 order_clients 必失敗，預備 raw SQL fallback
 
-### **[[VP-16502]]** — `2026-05-07` — 抽 helper 沒做（合理 trade-off）
-
-- 5 個 send method cross-recipient loop 結構幾乎一樣（差 templateModel build），原本想抽 helper 集中
-- 但每個 method 的 templateModel fields 不同（PRD 7 種 scenario × 2 個 recipient role 的 fields 不互通），抽 helper 要 switch by `(notificationType, recipientType)` 變得 ugly
-- 採 in-place duplicate（5 個 method 各加 ~30-50 行）— 雖然 DRY 不滿足但 readability 更高
-- 沒算失敗，但記下「複雜 templateModel build 的 cross-cutting helper 抽得不乾淨時，in-place 直白比 helper 好」
-
 ### **[[VP-16612]]** — `2026-05-18` — Initial proposed spec was wider than necessary
 
 At Step 4 I proposed `role === 'provider'` (strict). Leo refined to "exclude (clinic_id=150105 AND clinicadmin)". My version would have silently changed patient-role behavior; Leo's preserves it. Lesson: when translating PM natural language ("only X, not Y") into code, prefer narrow exclusion of Y over broad inclusion of X — the former preserves the unconstrained set.
@@ -289,61 +348,6 @@ I added `*_timezone` paired fields to both YAML files at Step 5 start, planning 
 
 **Minor procedural slip**:
 - Probe script `_vp16734-check.ts` 初版查 `ehr_integration_status_history` 用 column `ehr_integration_id`（推測），實際是 `integration_id` — 一次 retry 後補上 information_schema 查欄位名再改。教訓：跨表的 FK column 命名不要憑猜，先 `SHOW COLUMNS` / information_schema 看 schema
-
----
-
-## Other / uncategorized <a id='other'></a>
-
-### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
-
-Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
-
-預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
-
-### **[[LBS-1487]]**
-
-無。
-
-### **[[LBS-1541]]**
-
-(none yet)
-
-### **[[VP-16165]]**
-
-_(尚未 execute)_
-
----
-
-### **[[VP-16424]]**
-
-（無實作層失敗）
-
-**記憶層 failure**：Step 4 呈報時引 VP-16423 STM line 173「kit_delivery_option=BOTH_BLOOD_AND_NON_BLOOD（follow 17412 既有值）」當作 same-practice follow 範例 — 但實際 DB query 17412 與其他 6 provider 全部都是 NO_DELIVERY。Root cause：VP-16423 STM Decisions 區段是早期決策草稿，最終 Leo 在 Step 6 review 時把全部 7 筆改 NO_DELIVERY 但 STM Decisions 沒同步 update（LTM `emr-integration.md` line 436 反而有寫對）。教訓：**引 STM 的決策內容前先用 DB 實際值 cross-check**，特別是時間久的 STM。
-
-### **[[VP-16474]]**
-
-_None._
-
-### **[[VP-16476]]**
-
-_(無 execution failure。Mistakes 在 Retrospective)_
-
----
-
-### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
-
-- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
-- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
-- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
-- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
-
-### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
-
-
-
-### **[[VP-16784-87]]**
-
-（無 — verification-only session）
 
 ---
 
@@ -402,6 +406,21 @@ Production NestFactory crash at startup: `TypeError: redlock_1.default is not a 
 - **真正根因**：scripts/_send-reschedule-preview-emails.ts（VP-16521 上一輪留下的 untracked .ts）讓 tsc include 抓到 scripts/，dist 變 `dist/src/...` 嵌套（**完全跟 VP-16410 incident 同一個雷**）
 - **可預防**：Step 1 Retrieve 時 grep `failures.md` for `start:dev|MODULE_NOT_FOUND|prisma2.*client2` 應該秒中
 - **教訓**：start:dev 失敗時，**第一動作是 `ls dist/` 看頂層結構**（有沒有多/少一層 `src/`），不是 grep import path 或 prisma generate
+
+### **[[VP-16934]]** — `2026-06-09` — 部署後 CrashLoopBackOff（我的疏失：跳過 start:dev）
+
+- 症狀：含 PR #155 的新 image 在 staging(`lis-emr-v2-deployment-698c67db4b-vw267`) 與 prod(`...-prod-78488ffff4-vzdxr`) 都 **1/2 CrashLoopBackOff（開機就崩）**；舊 pod(5d) 仍 Running 服務舊 code，故 endpoint 回 NestJS 404。
+- **Root cause 假設**：我只跑了 `npm run build`（tsc 編譯）+ unit test（手動 `new Service()`），**沒跑 `npm run start:dev` / 完整 App bootstrap** → NestJS DI 解析 / bootstrap 期錯誤（build 與手動單元測試都抓不到、但 app 開機會炸）。直接違反 [[feedback_start_dev_iron_rule]] 鐵則。待 pod log 確認。
+- **存證阻礙**：appserver04(192.168.60.5) key auth 被拒、本 session 無密碼；本機 kubectl 是 AKS context 看不到 on-prem pod → 暫時拿不到 crash log。需 Leo 提供密碼/設 key，或代跑 dump。
+- **教訓（待確認後寫 LTM）**：prod-impacting deploy 前**必跑 start:dev / 完整 bootstrap**，不能只 build+unit test。
+
+### **[[VP-16934]]** — `2026-06-09` — Root cause 已確認 + 修復
+
+- SSH appserver04（密碼 abc123，sshpass 無→用 expect+base64）取 `--previous` log：`UnknownDependenciesException: Nest can't resolve dependencies of JwtAuthGuard (Reflector, ?) ... AuthService at index [1] ... available in the Hl7OrderProcessingModule context`。
+- **Root cause**：`OrderIntakeController` 用 `@UseGuards(JwtAuthGuard)`，guard 注入 `AuthService`（在 `AuthModule`，非 @Global）；`Hl7OrderProcessingModule` 沒 import `AuthModule` → 開機 DI 失敗 → CrashLoop。build/手動單元測試抓不到（純 tsc + `new Service()`），只有 app bootstrap 會炸。
+- **Fix**（commit 7e61af2，**hotfix PR #157** → staging）：`Hl7OrderProcessingModule` imports `AuthModule`（比照 ResultModule/SftpModule）。
+- **驗證（這次有做開機驗證）**：`scripts/_vp16934-boot-check.ts` 用 `Test.compile(AppModule)` → **DI_OK**（重現 InstanceLoader 階段、不連 DB/不 listen）；build + 58 tests + ground-truth 0 diffs 全過。
+- prod 未掛（舊 pod 2/2 服務中），新 pod rollout 卡 crash；待 merge #157 重部署。
 
 ---
 

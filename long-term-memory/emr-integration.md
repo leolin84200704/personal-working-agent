@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 0.5321
+score: 0.7301
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-05-04
@@ -11,12 +11,23 @@ links:
 - HL7-TRIAGE-20260427
 - INCIDENT-2604156666
 - LBS-1541
+- QH-1660
+- QH-2257
+- QH-2577
+- QH-3752
+- QH-4350
+- QH-4352
+- QH-4608
+- QH-5840
 - VP-14787
+- VP-15279
 - VP-15952
 - VP-16014
 - VP-16157
+- VP-16166
 - VP-16175
 - VP-16180
+- VP-16186
 - VP-16193
 - VP-16233
 - VP-16245
@@ -40,6 +51,9 @@ links:
 - VP-16784-87
 - VP-16832
 - VP-16881
+- VP-16885
+- VP-16934
+- fhir-api
 tags:
 - emr
 - hl7
@@ -103,9 +117,27 @@ summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle co
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # EMR Integration Rules
 
 > Single source of truth. Consolidated from VP-15874, VP-15979, VP-15791, VP-15980, VP-15955.
+> **FHIR / 新 API 版本 / non-SFTP inbound order 前門相關 → 見 [[fhir-api]]**（HL7v2↔FHIR 比較、reuse map、難度排序、Epic/Story/Ticket 拆解）。
 
 ---
 
