@@ -3,7 +3,7 @@ id: INCIDENT-20260604
 type: stm
 category: technical
 status: resolved
-score: 0.3656
+score: 0.3684
 base_weight: 0.9
 urgency: 5
 created: 2026-06-04
@@ -13,13 +13,17 @@ links:
 - INCIDENT-20260529
 - INCIDENT-20260601-followup-sftp-verify
 - INCIDENT-20260601-sftp-hang
+- QH-862
 - VP-15460
+- VP-16169
+- VP-16172
 - VP-16232
 - VP-16391
 - VP-16410
 - VP-16521
 - VP-16859
 - failures
+- repo-catalog
 - repos
 tags:
 - incident-20260604
@@ -44,11 +48,18 @@ summary: 'MDHQ reports 20 stale SFTP connections/day from v2 prod pod. Root caus
 
 
 
+
+
+
+
+
+
+
 # INCIDENT-20260604 - MDHQ Stale Connections Recurrence
 
 > Created: 2026-06-04 21:00 UTC
-> Updated: 2026-06-04 23:55 UTC (post-deploy 2h verify done)
-> Status: code-fix verified prod-side; awaiting MDHQ 24-48h confirmation
+> Updated: 2026-06-08 (MDHQ peer-side confirmed clean, fully closed)
+> Status: **DONE** — Leo confirmed 2026-06-08 stale connection issue resolved end-to-end (pod-side + MDHQ-side)
 
 ---
 

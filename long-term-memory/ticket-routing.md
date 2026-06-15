@@ -3,7 +3,7 @@ id: ticket-routing
 type: ltm
 category: pm_patterns
 status: active
-score: 0.1039
+score: 0.1126
 base_weight: 0.7
 created: 2026-04-22
 updated: 2026-04-22
@@ -15,6 +15,7 @@ tags:
 - pm
 summary: Ticket keyword to repo/module routing table
 ---
+
 
 
 

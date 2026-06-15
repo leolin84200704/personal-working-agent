@@ -3,7 +3,7 @@ id: patterns
 type: ltm
 category: repo_patterns
 status: active
-score: 0.1386
+score: 0.1782
 base_weight: 0.8
 created: 2026-04-22
 updated: 2026-06-02
@@ -31,6 +31,8 @@ tags:
 - investigation
 summary: Build/deploy patterns, investigation flows, DB connections, known issues
 ---
+
+
 
 
 
@@ -67,6 +69,11 @@ summary: Build/deploy patterns, investigation flows, DB connections, known issue
 ### TypeScript
 - 大部分專案 `strictNullChecks: false`, `noImplicitAny: false`
 - 不要主動引入 strict typing
+
+### class-validator `@IsOptional` 不跳過空字串（VP-16955 教訓）
+- `@IsOptional()` **只**在值為 `null` / `undefined` 時跳過後續驗證；空字串 `""` 視為「有提供值」仍會跑 `@Length` / `@Matches` 等 → 前端送 `field: ""` 會炸 400。
+- 修法（最小改動）：欄位加 `@Transform(({ value }) => typeof value === 'string' && value.trim() === '' ? undefined : value)`（class-transformer，NestJS ValidationPipe 在 plainToInstance 階段即執行，驗證前生效），非空值仍受格式驗證保護。
+- 條件式驗證（某 vendor/type 才必填）若判斷依據需查 DB（DTO 只有 id），**不要**在 DTO 塞 async custom validator——留在已載入該 record 的 service 層，DTO 只負責放行空值。
 
 ### Environment Variables
 - 各專案用不同的 env var 名稱：`NODE_ENV` / `SERVER_ENVIRONMENT` / `DEPLOY_ENVIRONMENT` / `platform_type`
@@ -1053,3 +1060,29 @@ LIS-transformer-v2 calendar：customer 預約「能不能 book」要與「getLab
 **反例/已移除的 bug**：舊 `MeetingRequestService.isWithinWorkingHours` 用 `start.getDay()`/`start.toISOString()`（server TZ，非 calendar TZ）算星期/日期，且無排程時 fallback「9AM-5PM 可預約」→ 週末/未排程日可被預約 = outside availability。改 code 時若看到「沒排程就 default 9-5」幾乎一定是 bug。
 
 **陷阱**：同一驗證邏輯散落多份（meeting-request 有一套、provider-availability 有一套），且 `isTimeSlotAvailable` 多做了 recurring(rrule) 衝突而 `validateSlotAvailability` 原本沒有——統一/替換前務必逐項比對兩套的涵蓋範圍（recurring、min_notice、max_advance），缺的要補進閘門再替換，否則靜默漏檢。
+
+---
+
+## Clinical Consult Reminder — 「Postmark 有寄但 prod DB 查無」的排查鏈 + 多環境共用 prod 寄信管線陷阱 (INCIDENT-20260608)
+
+**症狀通則**：客戶/PM 回報「取消後仍收到 reminder（或收到不該收的 email）」，但 prod calendar DB(`calendar_prod`)查無對應 event、`v2_reminder_audit_log` 也查無該 recipient 的 row。
+
+**關鍵認知：`prod DB 乾淨` ≠ `沒 bug`。** 會抹掉/繞過 prod 證據的兩大來源：
+1. **`v2_reminder_audit_log.event_id` FK 是 `ON DELETE CASCADE`** — event 一被 hard-delete(`deleteEventByPatient` 的 `is_canceled=false` 分支),reminder 稽核紀錄連同 event 一起消失。audit log 本應在刪除後存活,這是 observability 缺陷。
+2. **另一個「環境」直接 publish 到 *prod 的* notification Event Hub,卻不寫 prod 的 DB**。reminder email 真正寄出與否，看的是有沒有訊息進 `notification-email-template` topic，不是 prod calendar DB。
+
+**多 transv2 部署都共用同一個 PROD 寄信管線（治理破口）**：
+- `notification-email-template` @ `vibrant-notification-events.servicebus.windows.net:9093`(env var `Azure_notification_topic` / `Azure_kafka_notification_url`)被 **prod、staging、甚至 test 環境** 共用。對照組:appointment events 有正確隔離成 `general-sample-events-staging`,唯獨 **email topic 沒隔離**。
+- reminder `@Cron`(`reminder.service.ts`,每 2 分)**只被 `platform_type==='local'` 擋**。任何 `platform_type≠local` + 讀到「有 due event 的 calendar DB」的 transv2,就會寄**真信給真客戶**。
+- idempotency(`idempotency_key` UNIQUE)是**各 DB 各一張 audit 表** → 不同環境/DB 不互相去重。
+- 已知環境：AKS `transv2/lis-transv2-deployment`(→`calendar_prod`)、`-st`(→`calendar_dev_new`)、on-prem `lis-calendar-dev`(另一套舊 `TasksService` app)、**AKS cluster `listest`**(見下)。
+
+**隱藏的 `listest` cluster**：sub `4dbf30e2-...` / rg `lisportalprod` 有一個 AKS cluster **`listest`**,多數帳號(含 Leo)**無 Azure RBAC**(`az aks list` 會把它濾掉、`az aks show`/`get-credentials` 回 AuthorizationFailed,但 cluster 真實存在)。它曾跑 `lis-transformer-v2`(env=test、未 push 的本地 build)連 **prod** notification Event Hub + 讀**陳舊 calendar 資料**(prod 的取消沒同步過去 → event 仍 `is_canceled=false`)→ 對真 provider 持續寄真 reminder。**當 prod 證據缺失但 email 是真的,優先懷疑 `listest` / 其他 subscription 的 cluster。**
+
+**Forensic chain（鎖定「是誰寄的」）**：
+1. **Postmark Messages API**(server token 在 `noti/notification-center` pod env `POSTMARK_KEY`;`curl https://api.postmarkapp.com/messages/outbound?recipient=...` + header `X-Postmark-Server-Token`)→ 確認真的有寄、看 Subject/Metadata/MessageEvents、`/details` 看 body(consult_date/clinician 確認是哪場)。
+2. **Kafka `notification-email-template`**(kafkajs,`$ConnectionString` SASL)consume 找那封 → 它的 message **headers 帶 dd-trace 注入的 `x-datadog-trace-id` / `traceparent`**(producer instrumentation)。payload 結構 = transv2 `email-template-config.service.ts buildEmailMessage`(`MessageID:uuid`、`Tag:calendar_${NODE_ENV}`、`TemplateId`、`TemplateModel`、`MessageStream:outbound`)。
+3. **Datadog producer span**(用 trace id 查,站點 us3.datadoghq.com)→ 給出 `service` / **`env`** / `git.commit.sha` / **`host`**。`host` 是 node 名(`aks-agentpool-<id>-vmss<n>`)→ 比對 `kubectl get node` + `az aks list`/`az vmss list` 判斷屬於哪個 cluster。**span 沒有 `kube_*` 標籤 ≠ 不在 k8s**(可能是該 cluster Datadog 沒做 pod 標籤);用 `host` 才準。
+- 還原**被刪 event 的 id**:`v2_event_accession_audit_log`(不隨主表 cascade 消失,記 claim/release + event_id + reason)+ Postmark email body 重建 lifecycle。
+
+**止血手法**:在出事的 cluster `kubectl scale deploy <transv2> --replicas=0`,或改其 `Azure_notification_topic`/`Azure_kafka_notification_url` 為非 prod,或設 `platform_type=local`。**根因治理**:非 prod 環境不得持有 prod notification Event Hub 連線字串;reminder cron 在非 prod 一律 gate;test calendar DB 定期 refresh 或標記禁止對外寄信。
