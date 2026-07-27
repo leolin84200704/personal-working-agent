@@ -194,6 +194,7 @@ score: 0.675
 - **DOUBLE RESULT DELIVERY flag**: both rows LIVE+result_enabled=1 -> results for 30248 now push to BOTH P2P /public/ AND BioInsights /incoming/. Leo to decide: retire P2P row (REJECTED per removal playbook) or keep during transition.
 - Cyberduck access for Leo: key converted to ~/.ssh/bioinsights_vibrant-wellness.pem (2026-07-27); ppk still unencrypted in ~/Downloads (secure-store follow-up stands).
 - Still waiting on vendor: sample HL7 files + direction-convention confirm (orders=/outgoing/ assumption unchanged). ORC-12 must carry 30248 for orders to resolve.
+- [2026-07-27] Leo SENT reply to Serdar+Payton: technically ready end-to-end; "internal coordination step" (= P2P transition confirm, old platform not named externally); will update immediately; invited sample HL7 into outgoing/. PENDING DECISIONS: (a) P2P row retirement — double delivery to /public/ + /incoming/ is ACTIVE until decided (30248's next report_finished pushes both); manual repush w/o integration_id now targets BioInsights (FULL sorts first in validateEmrIntegration findFirst desc); (b) kits_options=2 unconfirmed; (c) JAG payment method for EMR ordering unverified.
 
 ## Open items (go-live checklist)
 1. ~~BLOCKER: provision account permissions~~ DONE 2026-07-23 (Serdar). Remaining vendor asks: confirm direction convention (incoming/outgoing semantics) + sample HL7 files.
