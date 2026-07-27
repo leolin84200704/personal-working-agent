@@ -4,7 +4,7 @@ type: stm
 category: emr_integration
 status: active
 created: 2026-07-21
-updated: '2026-07-23'
+updated: '2026-07-27'
 links:
 - BIOINSIGHTS-SFTP-KEY
 - FHIR-ONDEMAND-RESULT
@@ -186,6 +186,14 @@ score: 0.675
 - Leo SENT the reply email to Serdar 2026-07-23: connectivity confirmed, archive explained, asked to confirm direction convention (orders=outgoing/, results=incoming/) and to have clinical team prep sample HL7.
 - STATUS: waiting on Serdar — (a) direction confirm, (b) sample HL7 files. When samples land in /outgoing/ the pipeline auto-ingests; they will fail safely at customer_not_found (no ehr_integrations yet) and be visible in hl7_file_input for parse/mapping review.
 - NEXT ACTION on vendor reply: review ingested sample rows in hl7_file_input + raw files in /BIOINSIGHTS/Prod/Order/; if direction reversed, UPDATE mapping.server_folder + swap vendor ordering/result paths + mkdir archive under the other folder; then define practice scope -> ehr_integrations INSERTs (gated) -> flip is_public=1 at go-live.
+
+### [2026-07-27] Practice scope arrived + ehr_integrations INSERTED — first BioInsights practice live
+- Email (Serdar thread): Office = JAG Holdings Group, LLC, Provider 30248, Practice 132493. Payton @ Canvas Medical CC'd to continue integration (BioInsights appears to ride on Canvas Medical's EMR platform).
+- 30248 = JAGHP (VP-16987 quarterly CSV client). Identity verified via existing prod row: (30248,132493) already had POWER2PRACTICE RESULT_ONLY LIVE (vendor 4, NPI 1730269200, msh06=30248, /public/, onprem).
+- **INSERTED `ehr_integrations` id=cms3icsz700010xlgywfuj8do** (prisma create in guarded tx, dry-run first, in-tx verify + reverse-audit clean): vendor 46 BIOINSIGHTS, FULL_INTEGRATION, LIVE, o1/r1/s1, use_vendor_sftp_config=1 (host+key from vendor row), msh06=**132493** (Practice ID convention), sftp_result_path=/incoming/, ordering via folder mapping /outgoing/ (id=281), report_option=CLASSIC (followed sibling), kit_delivery_option=NO_DELIVERY + kits_options=2 (no-oc fallback — vendor kit behavior UNCONFIRMED), pipeline_location=**cloud**, NPI borrowed from sibling, requested_by=BIOINSIGHTS-onboarding.
+- **DOUBLE RESULT DELIVERY flag**: both rows LIVE+result_enabled=1 -> results for 30248 now push to BOTH P2P /public/ AND BioInsights /incoming/. Leo to decide: retire P2P row (REJECTED per removal playbook) or keep during transition.
+- Cyberduck access for Leo: key converted to ~/.ssh/bioinsights_vibrant-wellness.pem (2026-07-27); ppk still unencrypted in ~/Downloads (secure-store follow-up stands).
+- Still waiting on vendor: sample HL7 files + direction-convention confirm (orders=/outgoing/ assumption unchanged). ORC-12 must carry 30248 for orders to resolve.
 
 ## Open items (go-live checklist)
 1. ~~BLOCKER: provision account permissions~~ DONE 2026-07-23 (Serdar). Remaining vendor asks: confirm direction convention (incoming/outgoing semantics) + sample HL7 files.
