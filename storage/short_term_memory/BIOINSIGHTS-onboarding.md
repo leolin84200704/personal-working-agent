@@ -55,7 +55,12 @@ links:
 - VP-17411
 - VP-17460
 - VP-17466
+- VP-17474
 - VP-17475
+- VP-17493
+- VP-17497
+- VP-17499
+- VP-17517
 - emr-integration
 - fhir-api
 - repos
@@ -80,8 +85,14 @@ summary: 'New EMR vendor BioInsights — first key-based (non-password) SFTP int
   2026-07-21 email sent to Thomas (perms + dir layout + sample HL7). STATUS: waiting
   on vendor reply.'
 jira_status: none
-score: 0.675
+score: 0.7313
 ---
+
+
+
+
+
+
 
 
 

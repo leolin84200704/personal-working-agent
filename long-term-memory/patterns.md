@@ -1220,3 +1220,15 @@ Prod 有**兩條**會寄 consult reminder 的管線，排查「不該收到的 r
 排查紀律（VP-16921 → VP-17421 實踩）：
 - **不要繼承上一張 ticket 的 root cause** — 症狀長得像 VP-16921（stale reminder）但機制完全不同（rogue 環境 vs Bull replay）。舊 STM 該讀，結論要重新驗證機制。
 - **restart 時間相關 ≠ 因果** — portal-calendar pods 正好在 burst 時間重啟而被誤指，但它們的 Bull 根本連不上 redis（無 REDIS_URL）。定罪前先證明嫌疑 service 真的持有那條 queue（去 redis 看 key 歸屬）。
+
+### Rolling update 的完成判準 — deployment.status.readyReplicas 會算到舊 pod（VP-17497, 2026-07-27）
+「deployment spec image 已更新 + readyReplicas>=1」是**假完成訊號** — rolling update 期間 readyReplicas 計入仍在跑的舊 pod，對舊 code 跑 E2E 白費 30 分鐘。正確判準：**找到 image == merge sha 的那個 POD，且它自己的 `containerStatuses[0].ready==true`**。同場加映：rollout 中途曾讀到一個從未存在的 bogus image sha（transient），單次讀值不可信，要重讀確認。
+
+### 手動 repush/gRPC 迴圈要 pace（>=8s）— lis-core v1 burst 降級（VP-17493 backfill, 2026-07-27）
+對 prod 快速連續呼叫 GenerateResultHl7（in-pod gRPC localhost:5000）：3 次成功後**每一發都失敗**（upstream `13 INTERNAL Error serializing response ... customer_name` ×12、`listSamples empty` ×2），幾分鐘後單發 probe 又全部健康 → burst 誘發 lis-core v1 gRPC（長期 Azure-Redis-bound 的那個 service）transient 降級。**手動批次 repush 迴圈固定 >=8s 間隔**；8s pacing 重跑 14/14 全過。另：sandbox 到 60.6:31317 不通時，in-pod gRPC（dist/proto + @grpc/grpc-js 寫進 /app/temp/）是免 VPN 路徑。
+
+### Confluence 寫入：MCP 沒有 write 工具，走 REST v2 + JIRA_API_TOKEN（2026-07-27）
+Atlassian MCP 只有 Confluence 讀取工具。要更新頁面：`.env` 的 `JIRA_API_TOKEN`（同一個 Atlassian token 兩用）直接 PUT Confluence REST v2（`/wiki/api/v2/pages/{id}`，body 帶 version+1）。VP-17497→17500 arc 用此法把 2485977089 推到 v15。
+
+### 對外 API 的 doc 問答是 defect 探測器；doc 常領先 code（cross-ticket: VP-17497/99/500, 2026-07-27）
+一天內 idempotency 語意改三次，每一層 defect 都是「回答使用者/PM 的 doc 問題」時暴露的：sandbox 行為 vs doc 不符 → reclaim（17497）；「客戶怎麼填 placerId」→ 查 uniqueness 作用域發現全域 unique（17499）；optional 需求 → 17500。**認真回答 doc 問題（對 ground truth 查證，不是照 doc 復述）= 便宜的 defect 掃描**。同 arc 的第二個教訓：這個 repo 的 doc 慣性領先 code — ORDER-PIPELINE.md §2.6「承諾」了 payment replay 但沒實作、Confluence spec 也常領先 impl；**doc 說有的行為要當 claim 驗證，不當事實**。同 arc 第三個教訓：defect-found-must-be-ticketed 規則連續兩次在同 session 立刻執行（VP-17499、VP-17503），流程有效。

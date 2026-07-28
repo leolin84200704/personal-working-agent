@@ -6,8 +6,8 @@ status: active
 score: 1.1438
 base_weight: 0.9
 urgency: 3
-created: 2026-07-22
-updated: 2026-07-22
+created: 2026-07-23
+updated: 2026-07-23
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -148,7 +148,7 @@ summary: Auto-aggregated failure index from 54 entries across STM
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-07-22 — total 54 entries
+> Last updated: 2026-07-23 — total 54 entries
 
 ## Themes
 

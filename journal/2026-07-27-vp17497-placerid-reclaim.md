@@ -1,3 +1,10 @@
+---
+date: 2026-07-27
+slug: vp17497-placerid-reclaim
+related: [VP-17497, VP-17283, VP-17286, VP-17475]
+distilled: true
+---
+
 # 2026-07-27 — VP-17497: placerId 卡死 triage → 一天內修完（reclaim + payment replay）
 
 Related: VP-17497, VP-17283, VP-17286, VP-17475

@@ -1,3 +1,10 @@
+---
+date: 2026-07-27
+slug: vp17499-vp17500-placerid-namespace
+related: [VP-17497, VP-17499, VP-17500]
+distilled: true
+---
+
 # 2026-07-27 — VP-17499/VP-17500: placerId namespace 修正 + optional 化（同日三票連環）
 
 Related: VP-17497, VP-17499, VP-17500

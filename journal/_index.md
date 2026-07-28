@@ -1,10 +1,12 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-07-14
+> Last updated: 2026-07-28
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-07-27 | vp17499-vp17500-placerid-namespace | VP-17497, VP-17499, VP-17500 | true |
+| 2026-07-27 | vp17497-placerid-reclaim | VP-17497, VP-17283, VP-17286, VP-17475 | true |
 | 2026-07-15 | vp17421-stale-reminders | VP-17421, VP-16921, VP-16499 | true |
 | 2026-07-14 | payment-chain-closeout | VP-17286, VP-17408, VP-17411 | true |
 | 2026-07-13 | vp17286-e2e-staging | VP-17286, VP-17283, VP-17342 | true |

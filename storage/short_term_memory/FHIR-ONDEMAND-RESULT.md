@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.4459
+score: 0.4203
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -60,7 +60,12 @@ links:
 - VP-17411
 - VP-17460
 - VP-17466
+- VP-17474
 - VP-17475
+- VP-17493
+- VP-17497
+- VP-17499
+- VP-17517
 - emr-integration
 - fhir-api
 tags:
@@ -71,6 +76,13 @@ tags:
 summary: FHIR DiagnosticReport PULL on-demand generation fallback for samples without
   result_transmission_records (portal-only customers)
 ---
+
+
+
+
+
+
+
 
 
 

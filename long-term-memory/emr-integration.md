@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 0.9529
+score: 1.0147
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -71,6 +71,10 @@ links:
 - VP-17466
 - VP-17474
 - VP-17475
+- VP-17493
+- VP-17497
+- VP-17499
+- VP-17517
 - fhir-api
 tags:
 - emr
@@ -85,6 +89,11 @@ tags:
 summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle config,
   hl7_file_input triage
 ---
+
+
+
+
+
 
 
 
@@ -1023,7 +1032,7 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 ## Result push levels — per-report / per-sample-type partial push（VP-17344, 2026-07-08，dormant 上線）
 
 - **機制**：`ehr_integrations.result_push_level` ENUM('WHOLE_ORDER','PER_REPORT','PER_SAMPLE_TYPE') DEFAULT WHOLE_ORDER + `result_transmission_records.push_scope_key`（如 `SAMPLE_TYPE:EDTA` / `REPORT:VA`；whole-order 記錄 = NULL，新舊互不干擾）。全 fleet 部署時 100% WHOLE_ORDER（零行為變化）；啟用 = `UPDATE ehr_integrations SET result_push_level=... WHERE id=...`，60s listener cache 內生效，rollback = 改回 WHOLE_ORDER。
-- **設計定數**：partial push 強制 `add_report='0'`（報告 PDF 未生成時 downloadPdfFromApi 會 ~70s×5 retry spiral）；partial-level integration 仍保留 final whole-order push（no-stall AC）；redraw 一律 whole-order；REPORT scope 已 TRANSMITTED 永不重推、未送達只擋 24h；SAMPLE_TYPE scope 24h 後可重推（redraw→re-finish）。gate 查詢失敗 = fail-CLOSED（空集合、不留 stale cache，partial 暫停、whole-order 不受影響）。
+- **設計定數**：~~partial push 強制 `add_report='0'`~~ **2026-07-25 起（VP-17493, PR #288/#289 prod live）PER_SAMPLE_TYPE partial 會帶 PDF**：listener 對 SAMPLE_TYPE scope 傳 `add_report_override=undefined` → 從 `report_option` 解析（CLASSIC→'1'）；PDF 下載失敗 = 單次嘗試（maxRetries 0，避免 backoff spiral）→ WARN + degrade 成 data-only，job 不失敗、無 placeholder。PDF 是 cumulative snapshot（同 sample 後續 scope 的 PDF 會變大）。**PER_REPORT 仍固定 '0'**（data-only，scope 決策）。whole-order path 未動 — 它仍有 placeholder-PDF fallback 債（下載全敗時送 junk PDF），已開 **VP-17503** 追蹤；partial-level integration 仍保留 final whole-order push（no-stall AC）；redraw 一律 whole-order；REPORT scope 已 TRANSMITTED 永不重推、未送達只擋 24h；SAMPLE_TYPE scope 24h 後可重推（redraw→re-finish）。gate 查詢失敗 = fail-CLOSED（空集合、不留 stale cache，partial 暫停、whole-order 不受影響）。
 - **記錄定位**：partial job 帶 `transmission_record_id`，processor 的 retry/failure 更新精準打該 row——不能用 scope filter updateMany（會改寫較舊的 TRANSMITTED sibling）。已知 latent：whole-order updateMany 仍會打 >24h 舊 sibling（pre-existing，未動）。
 - **Ops doc**：Confluence「Result Granularity」folder（pages/2542501892）。測試 integrations `cvp17344e2etest0000000001/2`（customer 999997 → Vibrant 自家 SFTP /Test/Input/EMR_V2/VP17344*）。
 
@@ -1044,7 +1053,7 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **測試代碼**：`VAREQUISTION463` = Gut Zoomer（**就是 GZ_EMR_CODE**，happy-path 跟 NY-swap 測試同一產品族）、`485` = GZ-NY、`VAREQUISTION99` = PSA duo（items 376+377，PSAMaleOnly 規則）、`VAREQUISTION89` = Celiac Genetics、`30010` = NutriproZ-Maintenance（ProzFollowupNoPreviousOrder 規則）；Regenere/Skincare `30011-13` 不在 classifier mapping（unrecognized 測試用）。
 - **staging 前置 fix（保留中）**：999997 的 LIVE ehr_integrations row（id `cmpcy2u1h0001r107bkwuuuuk`）原本 `ordering_enabled=false`，已改 true — fetchById 硬性要求 LIVE+ordering_enabled，這行解鎖所有後續 API-path staging 測試。
 - **Eligibility 實測 failure codes**（vs Confluence 2517139459 有 drift）：實際 `PSAMaleOnly`（文件寫 PFSAMaleOnly）、`IncompletePatientInfo`（會點名缺哪個欄位）、`ProzFollowupNoPreviousOrder`；`GeneticTestAlreadyOrdered` 在 staging 連續下兩單**沒有 fire**（rule 觸發條件待 order team 釐清）。
-- **Idempotency 語意**：同 placerId 重送回 `duplicate`（帶真 sampleId、不重複收費）；placement 失敗的 row 現在標 `failed` — follow-up 應允許 failed row 重跑（否則 placerId 永久卡死）。
+- **Idempotency 語意**：已全面改版（VP-17497/99/500，2026-07-27）— 見下方「placerId idempotency 完整語意」section；舊的「任何既有 row 都回 duplicate / placerId 永久卡死」行為已不存在。
 - **ConfigMap drift 教訓**：PROD ConfigMap `lis-emr-v2-config-prod` 在 E2E 通過前就已是 `ORDER_INTAKE_MODE: live`（違反 PR #206 的 flag 註記）— 「文件說 disabled」不可信，**查實際 ConfigMap**。
 
 ## API order path — catalog external code 解析（VP-17475, PR #284, 2026-07-21）
@@ -1056,6 +1065,19 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **`items.unique_emr_code` 不唯一**（GZ 3.0 與 4.0 都是 `VAREQUISTION279`）— downstream 一律 key on `item_id`/`order_type_id`，別用 unique_emr_code。
 - **NY swap 相容**：GUT_ZOOMER→845→VAREQUISTION463，`gz-ny-routing.ts` 的 swap key 就是 463 → catalog 解析後 NY swap 照常觸發（staging E2E 已驗）。
 - **未爆彈**：bundleId 的 cache join（`officialBundleIdToBundleMap` key 是 `oldOrderTypeId`，但 productMap 對 bundle 回 `promotion_id`）**未測** — 第一個 catalog bundle code 上線時要驗。**prod 的 productMap endpoint 尚未部署**（404）— prod rollout gated on pricing。Option B（pricing 擁有 composition）另開 VP-17478。
+
+## API order path — placerId idempotency 完整語意（VP-17497/17499/17500，2026-07-27 全數 prod live）
+
+一天內三票連環改版（源頭都是 api-product/Tianhao 的 doc 問答暴露下一層問題），最終語意：
+
+- **Namespace = per-customer（integrator account），不是全域也不是 per-patient**（VP-17499）：`order_intake.customer_id` + 複合 unique `(customer_id, placer_id)`；JWT customer，derive-scope token（VP-17450）在 insert 前 resolve provider 的 customer。**Legacy 全域 unique `order_intake_placer_id_UNIQUE` 已 drop（part B，staging+prod 皆已套用）** — idempotency 完全靠複合鍵；`placer_id_conflict` branch 是 dead code。後續 status 寫入一律用 rowId，不用 placer 字串。
+  - 為什麼不 per-patient：idempotency key 識別的是 request；「填錯 patient_id 修正重送」必須落在同一個 key，per-patient scope 會在這個場景雙開訂單。
+- **Terminal-failure reclaim**（VP-17497）：`ineligible/rejected/dry_run/failed` 的 row 重送同 placerId = status-gated atomic updateMany 收回重跑 pipeline（保留 row 當 audit trail，不 delete；併發重送恰一個贏）；`received/finalized` 才回 `duplicate`（帶真 sampleId）。
+- **Payment replay 防重複收費**：finalize 是 charge-first — `failed` row 可能已完成收費。charge 一回來就 persist 到 order_intake（`payment_id/sample_id_payment/julien_barcode`），reclaim 重跑時經 `parseOrderInfo.sample_id_payment` 走 finalize 既有的 HL7 replay branch 跳過收費。**此路徑 staging 不可 live 測（測試卡全死）— 只有 unit test 蓋著，第一筆 prod customerPay placement-failure retry 要盯**。
+- **placerId 是 optional**（VP-17500）：缺席/空白 → server 生成 `AUTO-<uuid>` key = 結構上不可能 dedup，重複呼叫各自下單（portal parity，api-product 決策）；有 placerId 才有完整 idempotency contract。選 AUTO key 而非 nullable 欄位：零 schema churn、row 照留（audit/payment）、MySQL NULL-dup 語意問題整個繞開。
+- **Migration 手法（expand/contract 兩段式，值得複用）**：part A 加欄位+複合鍵、**保留**舊全域 unique（線上舊 code 的 idempotency 靠它的 P2002）→ 部署新 code 到兩環境 → part B 才 drop 舊鍵。先 drop = promotion 前 prod 完全沒有防重複下單保護。過渡期跨租戶撞名 fail-closed 422。
+- **Cancel endpoint（VP-17517，PR #295/#296 已 merge+promote 至 prod 2026-07-28Z，Jira 仍 Dev To Do）**：POST /order-cancel 包 order-management /orders/cancel；placerId/sampleId 都經 customer-scoped order_intake row resolve（tenancy+API-only 一次搞定；HL7-path 訂單回 order_not_found）；cancelled 是 terminal status、placerId 不可回收；refund 失敗回 `{status:cancelled, refundFailed:true}`。**Gateway route /v1/orders/cancel 尚未由 api-product 配置；staging E2E 未跑**。
+- staging E2E 測試資產：patient 3226428（VP17497 ReclaimTest, cust 3194）、samples 2553975/76/79/80、order_intake rows 62/84/85/88。
 
 ## SFTP credential 單一來源 — `ehr_vendors`（VP-17385 + VP-17460, 2026-07）
 
