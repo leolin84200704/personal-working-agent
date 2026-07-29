@@ -48,6 +48,14 @@ jira_status: n/a
 - MDHQ vendor SFTP: 34.199.194.51:2210 user vibrantamerica (ehr_vendors 'MDHQ(Cerbo)'); order archive at <practice>/orders/archive/.
 - Blast radius: ANY EMR order carrying a newer discountpanel code will strand the same way (silent stuck row; only pod logs / error_detail show why). Watch for more rows if practices adopt Foundation Zoomer + Methylation Genetics before the BestDeal fix.
 
+## [2026-07-29 23:20Z] RESOLVED — order placed as sample 2605735
+
+- Deploy race: #299 (bounded retry) reached prod BEFORE #301 (substitution) — the 21:46Z rescan burned retry_num 5->0 with the old BestDeal call (last_error captured it; VP-17533 worked day one). retry_num=0 => rescan stopped.
+- Recovery: bumped retry_num=3 (whitelisted flip) but the owning rescan never ticked for 90min; re-drove MANUALLY: staged the archived HL7 onto the AKS prod PV (path from row.localDir) + enqueued BullMQ job (Queue 'process-hl7-file', jobId hl7-6735-manual-vp17535, pod redis sidecar localhost:6379). Job completed: parse_finished=1, sample_id=2605735, total $1300, order items include 853+851 (substitution PROVEN in prod).
+- Jenkins tag/checkout skew CONFIRMED both directions: pod image tagged bacfb1c (#300) contained #301's code — Jenkins tags with the triggering commit but builds the branch HEAD at build time. Image tag is NOT a version proof; only dist content is.
+- REMAINING: customerPay $1300 charge FAILED — stripe 'PaymentMethod pm_1TFctl... does not belong to Customer cus_UvXe...' = VP-17411 class, SAME practice (Plessen 150325) as unpaid 6390/6502/6504. Order shipped unpaid per HL7 semantics; payment recovery joins the VP-17411 queue (charging-team stripe fix dependency). error_detail + last_error updated on the row.
+- Code nit noted (Leo to decide): the success path does not clear last_error — a placed row can carry a stale failure text (cosmetically fixed by hand for 6735; one-liner if wanted).
+
 ## Pending
 
 - INTERIM SHIPPED (Leo, 2026-07-29, 2nd rework): VP-17535 / PR #301 draft (e5c5ec2) — six unprovisioned Zoomer+Genetics panels are SPLIT INTO COMPONENT TEST IDS inside the single BestDeal request (18006=842+843, 18015=844+724, 18016=823+822, 18017=854+822, 18018=849+856, 18019=853+851; dedupe for shared 822/already-ordered components); response passes through untouched = LIVE pricing, nothing hardcoded (Leo: hardcoded prices break as prices change — his first synthetic-response spec was itself a live BestDeal answer for [853,851]). Verified vs prod BestDeal: [853,851] 200 $700, [844,724] 200. REMOVE when BestDeal 200s for 18019; VP-17535 stays open as removal tracker.
