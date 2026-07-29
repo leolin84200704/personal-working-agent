@@ -52,4 +52,4 @@ jira_status: n/a
 
 - Order team: add/enable the newer official bundles (at least 18019; likely the whole recent batch incl 18018/17762) in BestDeal's discount-panel data.
 - After fix: confirm 6735 self-completes on a rescan tick (sample_id populated); if rescan stopped, re-drive manually (local file retained on-prem).
-- Optional emr-v2 hardening (OUR scope, small): record upstream 4xx text into hl7_file_input on parse failure so this class isn't flag-less (would have saved the whole on-prem log hunt) — candidate ticket if Leo wants it.
+- DONE (Leo approved 2026-07-29): hardening shipped as VP-17533 / PR #299 draft — hl7_file_input.last_error column (ALTER applied+verified staging+prod) + catch-all routing uncaught parse throws through markFailure (bounded retry, bare-fact trace). After deploy, 6735 self-documents its BestDeal 400 and counts down to triage visibility.
