@@ -1195,13 +1195,16 @@ GitHub **不會**在 parent PR merge 時自動 retarget open child PR — 只有
 emr-v2 是 Java EMR-Backend 的 port，code 裡大量「Java parity」註解 — VP-17408 實證其中至少一處是**錯的**（OBR-16 provider name 註解聲稱對齊 Java，實際 emit NPI^Last^First，legacy 是 NPI^First^Last，已修）。**查 parity 問題一律回 Java 原始碼或 legacy 輸出樣本比對，不要信 port 註解**。
 
 ### VP Jira Bug create 必填欄位（createmeta，2026-07-13/14 兩次確認）
-VP project 的 Bug type 建單必帶：`Environment`、`Impact`（customfield_10492）、`Portal Affected System`（customfield_10487，single-select object，EMR 相關選 `EMR`）、`Detection Method`（customfield_10082）、`duedate`（customfield_10489 亦見）。Priority 名稱是 `"P0 - Highest"`..`"P4 - Lowest"`。RCA 欄位（結案時填）：`customfield_10485` Root Cause（rich text）、`customfield_10490` Root Cause Category（Code Defect / Configuration Error / Infrastructure / Process / Dependency / Requirements-Design / Insufficient Testing）。
+VP project 的 Bug type 建單必帶（field id 以 2026-07-28 createmeta 重新確認，先前記載有誤植）：`Environment`=customfield_10492（Production/Staging/...）、`Impact`=customfield_10487（Extensive/Significant/Moderate/**Minor / Localized**）、`Portal Affected System/Page`=customfield_10082（single-select，EMR 選項 id=10639）、`Detection Method`=customfield_10489（Customer Report/Monitoring / Alerting/...）、`duedate`。Optional 但值得帶：`Bug Type`=customfield_10081（Code Bug 等）。Priority 名稱是 `"P0 - Highest"`..`"P4 - Lowest"`。RCA 欄位（結案時填）：`customfield_10485` Root Cause（rich text）、`customfield_10490` Root Cause Category（Code Defect / Configuration Error / Infrastructure / Process / Dependency / Requirements-Design / Insufficient Testing）。
 
 ### Staging 環境取數/測試技巧（VP-17286 E2E, 2026-07-13）
 - **不用 VPN/DB 找 staging 測試病人**：portal staging API `GET https://api.vibrant-wellness.com/v1/portal/order/staging/orderTest/searchPatient?inputPatient=...`（dev-secret JWT，scoped by token customer）；`orderTest/patient?patientId=` 取完整 demographics。`allTests` 在 staging 是 404 — 測試代碼改查 prod Azure MySQL `package_price_mapping.uniqueemrcode`。
 - **不用 VPN 查 emr-v2 staging DB**：`kubectl exec` 進 AKS staging pod，把 node script 寫進 `/app/temp/` 再跑 — `require('@prisma/client')` 從該目錄向上解析得到（放 `/tmp` 會解析失敗）。
 - zsh 陷阱：shell loop 變數命名 `path` 會 clobber `PATH`（curl 直接消失）。
 - staging 已知 quirk：`generateBarcodeForSampleID` 對每個新 sample 失敗（Go upstream `unknown time zone America/Los_Angeles`）— 非致命（barcode best-effort），staging API order 無 julien_barcode 是預期現象，prod 健康。
+- **自鑄 emr-v2 JWT（HS256, JWT_SECRET）payload 必含 `userId`**（VP-17517 E2E, 2026-07-28）：JwtStrategy.validate 對缺 userId/user_id 的 token 一律回 generic 401 "Invalid token" — customer_id/clinic_id 齊全也不夠，錯誤訊息不會告訴你缺哪個欄位。
+- **staging 的 order 資料活在 order-staging 自己的 DB，不在 .11 的 lis_core_v7**（VP-17517, 2026-07-28）：staging API 下的單在 lis_core_v7 查不到 ≠ 不存在；要證明 upstream 狀態，直接打 order-staging service（如 re-cancel 期待 409 "Order already canceled"）。
+- emr-v2 對外 POST endpoints（/orders、/order-cancel）成功回 **HTTP 201**（Nest POST 預設），不是 200 — 寫 doc/Confluence 時照 201 寫，別照直覺寫 200。
 
 ### Consult reminder 兩個 producer 並存 — Postmark tag 指紋 + Bull replay class（VP-17421, 2026-07-15）
 Prod 有**兩條**會寄 consult reminder 的管線，排查「不該收到的 reminder」先用指紋分辨是哪條：

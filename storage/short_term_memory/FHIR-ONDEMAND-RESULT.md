@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.4203
+score: 0.4065
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -76,6 +76,7 @@ tags:
 summary: FHIR DiagnosticReport PULL on-demand generation fallback for samples without
   result_transmission_records (portal-only customers)
 ---
+
 
 
 

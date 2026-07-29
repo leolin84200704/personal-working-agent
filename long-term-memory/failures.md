@@ -6,8 +6,8 @@ status: active
 score: 1.1438
 base_weight: 0.9
 urgency: 3
-created: 2026-07-23
-updated: 2026-07-23
+created: 2026-07-27
+updated: 2026-07-27
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -66,7 +66,6 @@ links:
 - VP-16921
 - VP-16934
 - VP-16945
-- VP-16955
 - VP-16968
 - VP-16980
 - VP-16987
@@ -81,6 +80,7 @@ links:
 - VP-17412
 - VP-17421
 - VP-17422
+- VP-17497
 - business-model
 - business-model-deep
 - feedback_batch_db_verify
@@ -92,9 +92,8 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 54 entries across STM
+summary: Auto-aggregated failure index from 55 entries across STM
 ---
-
 
 
 
@@ -148,7 +147,7 @@ summary: Auto-aggregated failure index from 54 entries across STM
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-07-23 — total 54 entries
+> Last updated: 2026-07-27 — total 55 entries
 
 ## Themes
 
@@ -159,11 +158,11 @@ summary: Auto-aggregated failure index from 54 entries across STM
 - [Deploy / commit / push coordination](#deploy-coordination) — 4 entries
 - [Redis / cache / pending list](#redis-cache) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
+- [Scope / requirement / PM communication](#scope-communication) — 2 entries
 - [Auth / permission / role](#auth-permission) — 1 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
 - [gRPC / network / timeout](#grpc-network) — 1 entries
 - [Error handling / throw vs log](#error-handling) — 1 entries
-- [Scope / requirement / PM communication](#scope-communication) — 1 entries
 - [GraphQL / API design](#graphql-api) — 1 entries
 
 ---
@@ -567,6 +566,23 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 
 ---
 
+## Scope / requirement / PM communication <a id='scope-communication'></a>
+
+### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
+
+- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
+- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
+- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
+- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
+
+### **[[VP-17497]]** — `2026-07-27` — SERIOUS MISS (Leo): defect known 14 days before external partner hit it
+
+- The exact bug was discovered during VP-17286 E2E (2026-07-13, scope item 7) and recorded ONLY as a "proposed follow-up" STM note — no ticket filed, nobody scheduled it. api-product hit it in sandbox 2026-07-22; fixed 2026-07-27.
+- Leo: "這也是一個嚴重的失誤(需要記下來 into both this agent and general agent)".
+- Recorded: agent memory feedback_defect_found_must_be_ticketed.md + factory lesson PR (process discipline). Rule: a defect surfaced by testing that won't be fixed in the current ticket gets a Jira ticket in the SAME session; the note references the ticket id, never the reverse.
+
+---
+
 ## Auth / permission / role <a id='auth-permission'></a>
 
 ### **[[INCIDENT-2604156666]]** — Lessons for testing
@@ -601,17 +617,6 @@ After `cd /Users/hung.l/src/EMR-Backend && gh pr view 156`, subsequent Bash call
 2. 失敗時不寫任何 record（連 failure record 都沒）→ 監控無從得知 0 交付。
 3. upload 成功但 record 失敗 → 狀態不一致。
 4. 自動產的 xlsx 內容 (per-accession csvReport, 7.4MB) 與手動精簡版 (139KB) 差異大 → 正式內容規格需與 PM 對齊。
-
----
-
-## Scope / requirement / PM communication <a id='scope-communication'></a>
-
-### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
-
-- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
-- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
-- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
-- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
 
 ---
 
