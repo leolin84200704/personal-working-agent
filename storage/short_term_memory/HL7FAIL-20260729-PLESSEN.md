@@ -1,0 +1,55 @@
+---
+id: HL7FAIL-20260729-PLESSEN
+type: stm
+category: emr_integration
+status: blocked-on-other-team
+created: 2026-07-29
+updated: '2026-07-29'
+links:
+- VP-17411
+- VP-17412
+- VP-17120
+- emr-integration
+tags:
+- hl7-triage
+- bestdeal
+- discount-panel
+- mdhq
+summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck parse_finished=0
+  no-error-flags: BestDeal 400 non_existing_discount_panel_ids [18019] on every retry.
+  Root cause = BestDeal (v1, order team) discount-panel data missing the NEWER official
+  bundles: getLegacyBundleMapping HAS 18019 (Foundation Zoomer + Methylation Genetics,
+  oldOrderTypeId 415 = discountpanel415) so classify passes, but BestDeal rejects
+  18019/18018/17762 while accepting old bundleId 1 -> provisioning gap, not a format
+  bug (emr-v2 sends bundleId, 1:1 Java parity). error_detail written (VP-17412 duty).
+  Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
+  team scope) — hand-off package given to Leo.'
+jira_status: n/a
+---
+
+# hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap
+
+## Diagnosis chain (2026-07-29)
+
+1. Row: parse_finished=0, retry_num=5, all error flags NULL, order_input NULL -> looked like silent Type C.
+2. AKS dead-ends (learned): AKS PV has NO MDHQ order tree; RS 694c74c55 not in AKS -> row owned by ON-PREM prod pod (`lis-emr-v2-deployment-prod` also exists in the internal cluster, ns default). ssh leo@192.168.60.5 now DENIED for key AND password (worked 2026-07-15; creds changed?) — Leo ran the log grep himself on the box.
+3. Original HL7 retrieved from MDHQ SFTP remote archive `/plessenhealthcareemr/orders/archive/` (HL7-FETCH archive feature) — file structurally fine: 3 tests incl discountpanel415.
+4. On-prem pod logs (via Leo): every attempt fails `POST /v1/bestdeal/GetBestDealSuggestion 400 non_existing_discount_panel_ids:["18019"]` — NOT a parse crash; BullMQ job retries 5x per rescan tick, rescan re-enqueues (job seen 5h after receipt) => will SELF-COMPLETE once data fixed.
+5. Contrast probes (prod pod, ORDER_API_TOKEN Bearer): getLegacyBundleMapping HAS 18019 (oldOrderTypeId 415, official, $700; response is an OBJECT keyed by bundleId, ~1.6MB). BestDeal: bundleId '1' -> 200 OK; '18019','18018','17762' -> 400; '415','414' (oldOrderTypeId form) -> 400. => BestDeal's discount-panel universe lacks the newer official bundles; emr-v2 request format is correct (parser sends bundle.bundleId, Java line 834-838 parity).
+
+## Actions taken
+
+- error_detail written on row 6735 (VP-17412 agent duty, 1 row bounded UPDATE).
+- NO ticket filed — BestDeal is the order team's v1 service (scope boundary rule); hand-off package in the session report for Leo.
+
+## Ops notes
+
+- getLegacyBundleMapping auth: token must be sent WITH `Bearer ` prefix (raw ORDER_API_TOKEN alone -> 401 "invalid number of segments"); response shape = object keyed by bundleId, not array.
+- MDHQ vendor SFTP: 34.199.194.51:2210 user vibrantamerica (ehr_vendors 'MDHQ(Cerbo)'); order archive at <practice>/orders/archive/.
+- Blast radius: ANY EMR order carrying a newer discountpanel code will strand the same way (silent stuck row; only pod logs / error_detail show why). Watch for more rows if practices adopt Foundation Zoomer + Methylation Genetics before the BestDeal fix.
+
+## Pending
+
+- Order team: add/enable the newer official bundles (at least 18019; likely the whole recent batch incl 18018/17762) in BestDeal's discount-panel data.
+- After fix: confirm 6735 self-completes on a rescan tick (sample_id populated); if rescan stopped, re-drive manually (local file retained on-prem).
+- Optional emr-v2 hardening (OUR scope, small): record upstream 4xx text into hl7_file_input on parse failure so this class isn't flag-less (would have saved the whole on-prem log hunt) — candidate ticket if Leo wants it.
