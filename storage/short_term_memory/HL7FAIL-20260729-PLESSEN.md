@@ -50,6 +50,7 @@ jira_status: n/a
 
 ## Pending
 
+- INTERIM SHIPPED (Leo, 2026-07-29): VP-17535 / PR #301 draft — TEMPORARY BestDeal fallback: panel 18019 contributes {left_over:[851,853], price:700.00}, merged with the real BestDeal for mixed orders, stripped from the request. REMOVE when BestDeal 200s for 18019; VP-17535 stays open as the removal tracker.
 - Order team: add/enable the newer official bundles (at least 18019; likely the whole recent batch incl 18018/17762) in BestDeal's discount-panel data.
 - After fix: confirm 6735 self-completes on a rescan tick (sample_id populated); if rescan stopped, re-drive manually (local file retained on-prem).
 - DONE (Leo approved 2026-07-29): hardening shipped as VP-17533 / PR #299 draft — hl7_file_input.last_error column (ALTER applied+verified staging+prod) + catch-all routing uncaught parse throws through markFailure (bounded retry, bare-fact trace). After deploy, 6735 self-documents its BestDeal 400 and counts down to triage visibility.
