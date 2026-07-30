@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.4065
+score: 0.41
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -11,6 +11,7 @@ links:
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - HL7FAIL-20260722-MDHQ
+- HL7FAIL-20260729-PLESSEN
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -66,6 +67,8 @@ links:
 - VP-17497
 - VP-17499
 - VP-17517
+- VP-17537
+- VP-17538
 - emr-integration
 - fhir-api
 tags:
@@ -76,6 +79,10 @@ tags:
 summary: FHIR DiagnosticReport PULL on-demand generation fallback for samples without
   result_transmission_records (portal-only customers)
 ---
+
+
+
+
 
 
 

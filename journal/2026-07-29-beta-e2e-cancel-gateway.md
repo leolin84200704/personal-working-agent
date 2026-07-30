@@ -1,3 +1,10 @@
+---
+date: 2026-07-29
+slug: beta-e2e-cancel-gateway
+related: [BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500]
+distilled: true
+---
+
 # 2026-07-29 — Beta clients 全鏈路 E2E + cancel gateway 修復（VP-17531）
 
 Related: BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500

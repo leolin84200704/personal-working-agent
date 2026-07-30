@@ -3,16 +3,18 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.0147
+score: 1.0643
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
 links:
+- BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
 - HL7-TRIAGE-20260427
 - HL7FAIL-20260722-MDHQ
+- HL7FAIL-20260729-PLESSEN
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -75,6 +77,8 @@ links:
 - VP-17497
 - VP-17499
 - VP-17517
+- VP-17537
+- VP-17538
 - fhir-api
 tags:
 - emr
@@ -89,6 +93,11 @@ tags:
 summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle config,
   hl7_file_input triage
 ---
+
+
+
+
+
 
 
 
@@ -618,6 +627,9 @@ UPDATE hl7_file_input SET retry_num = 3 WHERE id = {X};
 - **判斷該失敗單由 emr-v2 還是 Java cron 處理**（決定 reprocess 機制是否適用）：emr-v2 processor 遇 customer_not_found 會設 `parse_finished=true`（停止重試）；若 `parse_finished=0` + customer_not_found + `retry_num=0` → 是 **EMR-Backend Java cron** 處理（該 client 未在 emr-v2 cutover batch），`SET retry_num=3` 重撿適用（VP-16765 驗證）。emr-v2 的 `retry_num` 則是從 `INITIAL_RETRY_NUM=5` 倒數、SFTP 掃檔驅動，不靠 hl7_file_input 重掃。
 - **`last_update_pod_name` 有同名歧義（HL7FAIL-20260722）**：on-prem cluster 的 deployment 與 AKS 同名（都叫 `lis-emr-v2-deployment-prod-*`），看 pod name 無法判斷該 row/檔案屬於哪個 cluster。要判斷 folder 的 owner 用 `sftp_folder_mapping.pipeline_location`（onprem/cloud），不要假設是 AKS。
 - **原始 HL7 只存在 owning pod 的 local file**（`hl7_file_input.order_input` 常為 null；失敗的檔案不會 archive）：`retry_num` bump 讓 owning pod 從本機檔案重讀，是唯一的 re-place 途徑 — 沒有那個 pod 的檔案就無法手工重建訂單。所以 bump 前務必先把 integration 修好（先 INSERT/修正、再 bump，順序不可反）。
+- **`last_error` 欄位（VP-17533，2026-07-29 prod live）**：`hl7_file_input.last_error TEXT NULL` = app code 寫的**裸失敗事實**（`error_detail` 保留給 agent 層的 diagnosis，VP-17412）。之前 parse chain 裡**任何 throw**（BestDeal/pricing/lab-fee HTTP、patient/customer gRPC、mapping-cache refresh、decode、DB）都繞過 `markFailure()`：row 停在 `parse_finished=0` 而所有 error 欄位 NULL、`retry_num` 永不遞減 → rescan 無限重排、永遠進不到 daily triage 的 `retry_num=0` 視窗。修法是 `processFromFile()` 外包一層 catch-all 走 `markFailure`（persist `last_error` + 遞減 retry_num，floor at 0）再 rethrow，BullMQ attempt 語意不變。**已知小瑕疵**：成功路徑不清 `last_error`，placed 的 row 可能帶著過期失敗字串（Leo 待決定要不要修）。
+- **`retry_num` 歸零後 rescan 就停**：bounded retry 的代價是「診斷可見」換「不再自動重試」。VP-17533 上線後遇過 deploy race（#299 先到 prod，#301 的修正還沒到）→ 21:46Z 的 rescan 用舊 BestDeal 呼叫把 retry_num 5 燒到 0，之後 bump 回 3 也等不到 owning rescan tick。
+- **手動 re-drive（bump retry_num 都不動時的最後手段，HL7FAIL-20260729 實作過）**：把 archive 取回的 HL7 依 `row.localDir` 放回 owning pod 的 PV，然後直接 enqueue BullMQ job（queue `process-hl7-file`，自訂 jobId 如 `hl7-6735-manual-vp17535`，redis 走 pod 的 sidecar `localhost:6379`）。完成後驗 `parse_finished=1` + `sample_id`。這條路徑會走完整正常 pipeline（含收費），不是繞過。
 
 ### hl7_file_input 欄位寬度限制（寫入前必 truncate）
 | Column | Type | 易溢出來源 |
@@ -1076,8 +1088,28 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **Payment replay 防重複收費**：finalize 是 charge-first — `failed` row 可能已完成收費。charge 一回來就 persist 到 order_intake（`payment_id/sample_id_payment/julien_barcode`），reclaim 重跑時經 `parseOrderInfo.sample_id_payment` 走 finalize 既有的 HL7 replay branch 跳過收費。**此路徑 staging 不可 live 測（測試卡全死）— 只有 unit test 蓋著，第一筆 prod customerPay placement-failure retry 要盯**。
 - **placerId 是 optional**（VP-17500）：缺席/空白 → server 生成 `AUTO-<uuid>` key = 結構上不可能 dedup，重複呼叫各自下單（portal parity，api-product 決策）；有 placerId 才有完整 idempotency contract。選 AUTO key 而非 nullable 欄位：零 schema churn、row 照留（audit/payment）、MySQL NULL-dup 語意問題整個繞開。
 - **Migration 手法（expand/contract 兩段式，值得複用）**：part A 加欄位+複合鍵、**保留**舊全域 unique（線上舊 code 的 idempotency 靠它的 P2002）→ 部署新 code 到兩環境 → part B 才 drop 舊鍵。先 drop = promotion 前 prod 完全沒有防重複下單保護。過渡期跨租戶撞名 fail-closed 422。
-- **Cancel endpoint（VP-17517，PR #295/#296 已 merge+promote 至 prod 2026-07-28Z，Jira 仍 Dev To Do）**：POST /order-cancel 包 order-management /orders/cancel；placerId/sampleId 都經 customer-scoped order_intake row resolve（tenancy+API-only 一次搞定；HL7-path 訂單回 order_not_found）；cancelled 是 terminal status、placerId 不可回收；refund 失敗回 `{status:cancelled, refundFailed:true}`。**Gateway route /v1/orders/cancel 尚未由 api-product 配置；staging E2E 未跑**。
+- **Cancel endpoint（VP-17517，PR #295/#296 已 merge+promote 至 prod 2026-07-28Z）**：POST /order-cancel 包 order-management /orders/cancel；placerId/sampleId 都經 customer-scoped order_intake row resolve（tenancy+API-only 一次搞定；HL7-path 訂單回 order_not_found）；cancelled 是 terminal status、placerId 不可回收；refund 失敗回 `{status:cancelled, refundFailed:true}`。
+- **Gateway 是通用子路徑 passthrough（VP-17531, 2026-07-29 prod live）**：api-sandbox `/v1/orders/*` → emr service `/api/v1/order-intake/*`，**不需要 api-product 逐條配 route**。VP-17517 只註冊 `/api/v1/order-cancel`，所以外部 `POST /v1/orders/cancel` 全部 404（`Cannot POST /api/v1/order-intake/cancel` — upstream path 洩漏了轉發規則）。修法是 controller 雙路徑 alias `@Controller(['order-cancel','order-intake/cancel'])`（Nest v11 陣列路徑合法），`/api/v1/order-cancel` 保留給內部呼叫者。**新增對外 endpoint 時預設先假設 gateway 已經通、用 404 的 upstream path 反推轉發規則，不要先假設要配 route**。
 - staging E2E 測試資產：patient 3226428（VP17497 ReclaimTest, cust 3194）、samples 2553975/76/79/80、order_intake rows 62/84/85/88。
+- **Beta client E2E 全表（BETA-E2E-20260729，5 組 sandbox client）**：token recipe = POST api-sandbox `/v1/oauth2/token` form-urlencoded `client_credentials` + `algorithm=RS256`，claims 帶 `customer_id=ProviderID` / `clinic_id=PracticeID` / `userId`（JwtAuthGuard RS256 path 接受）。creds 在 `~/src/credential/beta-clients-sandbox-20260729.md`。24/26 pass；**第一次真實雙租戶驗證**（兩個真 tenant 同 placerId 各自獨立下單、互相 cancel 得到 order_not_found）= VP-17499 part B 的隔離終於有真證據，不再只靠單租戶推論。
+
+## customerPay place-order payload / 收費方法選擇（VP-17537 / VP-17538，2026-07-29 prod live，Jira 仍 Dev To Do / In Progress）
+
+- **`julien_barcode` 就是下游的 `accession_id`**：order-management `handler/order_billing_sample_info.go:289` 用 `lis_re.order_table.julien_barcode` 組 `&accession_id=`；emr-v2 result pipeline 也是 `accessionId: sampleInfo.julienBarcode`。customerPay 是 charge-first，charging `POST /transaction/pay` 回 `sample_id` + `julien_barcode`，所以 place-order payload 的 `accession_id` 一直有值可填 — VP-17283 以來只是沒接（VP-17537 補 `accession_id: of.julienBarcode || undefined`；patientPayLater 是 placement 後才產 barcode，故用 truthiness guard）。
+- **收費要走完整個 payment method list，不是只打 `[0]`**（VP-17538）：`getPaymentMethodCandidates()` 回 customer array 然後 clinic array（照 charging 自己的順序，**沒有**按 type 重排 — wallet priority 定義找不到，Jira 30 張 + Confluence 都只講 revenue credit 的 Practice-vs-Provider 優先，不是收費嘗試順序）。`finalize()` 逐個試，停在第一個 2xx **且**帶 `payment_transaction_id`（VP-17411 規則）。**只在「可證明沒收到錢」的失敗才往下試**；`isIndeterminateChargeError()`（timeout/abort/ECONNRESET/socket hang up）直接中止整條鏈 = 結果未知時絕不重收。
+- **blast radius**：`finalize` 是 API intake 與 legacy HL7 customerPay 共用 — 以前第一張卡壞就整筆 unpaid 出貨的 HL7 訂單，現在會用後面的方法收成功，是真的 prod 行為改變。
+- **staging 無法 live 驗 customerPay**：charging `payWithAch`（`handler/payment.go:842`）呼叫 `UpdatePaymentIntent("")` 而沒有 create branch（card path 在 :1529 有）→ Stripe 404 `POST /v1/payment_intents/` → 400。customer 3194 前三個 shared method 都是 ACH，第四個才是可用的 stax visa 366147。要 live 驗必須等 charging ACH 修好，或把測試帳號的方法順序調成 visa 在 `[0]`。
+- 同場踩到：staging coresamples-v2 缺 tzdata（`generateBarcodeForSampleID` 報 `unknown time zone America/Los_Angeles`）→ 訂單照 finalize 但 `julien_barcode` 留 null。
+
+## BestDeal discount-panel provisioning gap — 新 official bundle 會靜默擱單（HL7FAIL-20260729-PLESSEN / VP-17535, 2026-07-29）
+
+- **症狀**：`hl7_file_input` row `parse_finished=0`、所有 error flag NULL、`order_input` NULL，看起來像 silent Type C。真因是 BestDeal（v1，**order team** 的服務）`POST /v1/bestdeal/GetBestDealSuggestion` 每次都 400 `non_existing_discount_panel_ids:["18019"]`。
+- **關鍵不對稱**：`getLegacyBundleMapping` **有** 18019（Foundation Zoomer + Methylation Genetics，`oldOrderTypeId 415` = `discountpanel415`，official，$700）所以 classify 過關；但 BestDeal 自己的 discount-panel 資料沒有這批較新的 bundle。emr-v2 送的是 `bundle.bundleId`，與 Java `ParseOrder` line 834-838 1:1 parity — **不是格式 bug，是資料 provisioning gap**。
+- **對照探針（prod pod，ORDER_API_TOKEN）**：BestDeal `bundleId '1'` → 200；`18019/18018/17762` → 400；`'415'/'414'`（oldOrderTypeId 形式）→ 400。要判「是我們送錯 還是對方沒資料」就用這組新舊 bundle 對照。
+- **auth 細節**：`getLegacyBundleMapping` 的 token 必須帶 `Bearer ` prefix（裸 ORDER_API_TOKEN → 401 `invalid number of segments`）；response 是**以 bundleId 為 key 的 object**（~1.6MB），不是 array。
+- **interim workaround（VP-17535 / PR #301，2026-07-29 prod live，VP-17535 = 移除追蹤票）**：六個未 provision 的 Zoomer+Genetics panel 在單一 BestDeal request 內**拆成 component test id**（18006=842+843、18015=844+724、18016=823+822、18017=854+822、18018=849+856、18019=853+851；共用的 822 與已下單元件要 dedupe），response 原樣通過 = **live pricing，不 hardcode 任何價格**（Leo：hardcode 的價格會隨調價失效）。BestDeal 對 18019 回 200 後就移除。
+- **blast radius**：任何帶較新 discountpanel code 的 EMR 訂單都會同樣擱單。VP-17533 之後 `last_error` 會記下 BestDeal 400，triage 才看得到。
+- MDHQ vendor SFTP：`34.199.194.51:2210` user `vibrantamerica`（`ehr_vendors` = `MDHQ(Cerbo)`），order archive 在 `<practice>/orders/archive/`（HL7-FETCH archive 功能可取回原始 HL7）。
 
 ## SFTP credential 單一來源 — `ehr_vendors`（VP-17385 + VP-17460, 2026-07）
 

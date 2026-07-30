@@ -11,6 +11,7 @@ links:
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
 - HL7FAIL-20260722-MDHQ
+- HL7FAIL-20260729-PLESSEN
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -61,10 +62,16 @@ links:
 - VP-17497
 - VP-17499
 - VP-17517
+- VP-17537
+- VP-17538
 - emr-integration
 - fhir-api
-score: 0.619
+score: 0.6263
 ---
+
+
+
+
 
 
 

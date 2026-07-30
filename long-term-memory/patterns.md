@@ -1235,3 +1235,44 @@ Atlassian MCP 只有 Confluence 讀取工具。要更新頁面：`.env` 的 `JIR
 
 ### 對外 API 的 doc 問答是 defect 探測器；doc 常領先 code（cross-ticket: VP-17497/99/500, 2026-07-27）
 一天內 idempotency 語意改三次，每一層 defect 都是「回答使用者/PM 的 doc 問題」時暴露的：sandbox 行為 vs doc 不符 → reclaim（17497）；「客戶怎麼填 placerId」→ 查 uniqueness 作用域發現全域 unique（17499）；optional 需求 → 17500。**認真回答 doc 問題（對 ground truth 查證，不是照 doc 復述）= 便宜的 defect 掃描**。同 arc 的第二個教訓：這個 repo 的 doc 慣性領先 code — ORDER-PIPELINE.md §2.6「承諾」了 payment replay 但沒實作、Confluence spec 也常領先 impl；**doc 說有的行為要當 claim 驗證，不當事實**。同 arc 第三個教訓：defect-found-must-be-ticketed 規則連續兩次在同 session 立刻執行（VP-17499、VP-17503），流程有效。
+
+## 【PROMOTED 2026-07-29】部署驗證的終局判準：exec 進 pod grep dist 內容（4+ 案例跨 ticket 蒸餾）
+
+「code 到 prod 了嗎」這個問題被連續四次答錯，每次錯在不同的代理指標上。收斂成一條規則：
+
+**唯一可信的判準 = exec 進當前 pod，grep 編譯產物（`dist/`）裡那個變更專屬的字串。** 找不到就是沒上線，不管其他訊號多綠。
+
+已知會騙人的代理指標（每一條都真的騙過一次）：
+
+| 代理指標 | 為何不可信 | 案例 |
+|---------|-----------|------|
+| PR merged + GitHub Actions deploy `success` | GH Actions ≠ 實際部署；Jenkins 才 apply，今天實測落後 ~2h | VP-17531 |
+| pod image tag == merge sha | **Jenkins 用觸發 commit 打 tag，但 build 的是當時的 branch HEAD** → tag 與內容雙向都可能不符（實測 image 標 bacfb1c/#300 卻含 #301 的 code） | HL7FAIL-20260729 |
+| `deployment.status.readyReplicas >= 1` | rolling update 期間會算進還在跑的舊 pod | VP-17497 |
+| 單次 `kubectl get pod` 讀值 | **phantom read，已 2 次**：讀到 pod「Running true <sha>」，事後連 ReplicaSet 都查無此物 | VP-17497, VP-17531 |
+| 本地 repo checkout | 落後 origin 就會推出錯結論 | FHIR-ONDEMAND-RESULT |
+
+衍生紀律：
+- **「先確認 code 有沒有真的在跑，再 debug code」** — VP-17531 差點去修一個不存在的 Nest bug（`@Controller(['a','b'])` 陣列路徑在 v11 本來就合法，404 的真因是 deploy 沒發生）。
+- **對外 API 的 404 vs 401 是零副作用的 route 探針**：401 = route 通、服務在驗 token；404 = route 斷。prod 驗路由不需要碰任何真訂單/真資料。
+- 報「prod 還沒有這段 code」之前先 `git log origin/main` 確認有沒有 promotion PR — promotion PR 標題常沒有 ticket id（VP-17531 漏看 #298，Leo 一句話抓到）。
+
+### Config store 沒有歷史 ≠ config 沒變過（VP-17532, 2026-07-29）
+P1 報「booking 落在我的 availability 之外」，engine 其實正確：**資料寫入時的 config 與現在的 config 不同**。`v2_schedule` 沒有 timestamp/history，但 `updateWorkingHours` 是 `deleteMany + createMany` → **該 calendar 的 row id 是全表最大值，就證明它的 weekly hours 比所有其他 calendar 都晚被重寫**，晚於最後一筆爭議 booking。
+- 通用紀律：**診斷 engine bug 前，先確認「資料違反的那份 config」在資料寫入當下是否存在**。
+- 通用技巧：**delete-and-recreate 的寫入模式讓 surrogate key 順序變成可用的「變更時間推定工具」** — 沒有 audit table 也能定序。
+- 排除法紀錄（避免重走）：pooled multi-clinician slot 洩漏（VP-16499）被 participant signature 排除（`clinicadmin/no_response + patient/accepted` = `createEventByPatient` legacy path，不是 reschedule — reschedule 會留 cancelled twin，一個都沒有）；timezone 理論被 live 查 core SettingService gRPC 排除（她的 tz 自 6/24 起是 America/New_York，任何 tz 解讀都無法讓那些時間通過 `validateSlotAvailability`）。
+- 產品缺口（Leo 決定不開票）：縮小 weekly hours 時，既有的未來 booking 不會被重新驗證，也不會通知任何人。
+
+### 權限檢查鏈的超時預算會變成 UI 卡死（PO-256, 2026-07-29 oncall）
+Accessioning「送不出 tube count、轉圈轉到底」的完整鏈：LIS-frontend `UpdateTubeInfoDialog.vue` → LIS-Shipping（AKS `lisportalprod` ns `shipping`）`OrdersTubesService.receiveTubes` → `PermissionGuard` → `CheckPermission` gRPC → coresamples-v2（ns `coresamplesv2`, Go）→ **RBAC Container App（Azure Container Apps，每 call 5s timeout）**。
+- RBAC Container App stall 15 分鐘（DeadlineExceeded）→ shipping 在 ~17s 後回 403（≈3 retry × 5s + overhead）→ 35 個請求被擋（22 筆 tube receive、12 筆 phlebotomist patch）。**UI-blocking 的 guard 給 17s 預算太長，該 fail-fast。**
+- 前端把 403 變成無限轉圈的機制：axios throw → catch 回 `undefined` → caller 讀 `res.data.code` → TypeError 逃出所有 try/catch → `changeLoadingState(false)` 永遠不執行。**「錯誤處理」catch 完回 undefined 而不 rethrow，等於把可診斷的失敗變成不可診斷的凍結。**
+- 診斷紀律：pod 全健康（無 restart、無 deploy、無 error burst）+ 錯誤字串指向下游 → 責任在下游的 managed service，不要在健康的 service 裡找。`az` MFA 過期就明說查不到，把邊界標清楚（Azure Container Apps 是 platform team scope）。
+
+### Cross-ticket review 2026-07-29（marker 2026-07-27 後 7 張 completed：VP-17517, BETA-E2E-20260729, VP-17531, VP-17532, VP-17533, PO-256, LBS-1674）
+三個系統性 pattern：
+
+1. **「code 到 prod 了嗎」是這批 ticket 的最大共通線** — 已升級成上面的 PROMOTED 章節（4+ 案例、5 種假訊號）。這族從 2026-07-22 的「status 不是 ground truth」一路長到「連 image tag 都不是 ground truth」，現在的終點是 dist 內容。
+2. **scope 邊界規則一天內 5 次全部執行正確**（`defect_found_must_be_ticketed`）：別人的 service 只交診斷不自己開票 — PO-256（RBAC Container App，platform team）、HL7FAIL-20260729（BestDeal，order team）、VP-17537/17538 附帶發現的 charging ACH bug、BETA-E2E 的 QA client OAuth 500（Rust OAuth 服務）；自己 scope 的立刻開票 — VP-17531、VP-17537。**規則已穩定，不需要再蒐證**；剩下的風險是反向的：交出去的診斷沒人追（BestDeal 至今未修，靠 VP-17535 workaround 撐著）。
+3. **interim workaround 不可 hardcode 會漂移的值**（Leo 2026-07-29 兩次退回 VP-17535 設計）：第一版打算回傳 synthetic BestDeal response 含固定價格 → Leo 指出「價格會變，hardcode 會壞」。最終版改成**把 bundle 拆成 component test id 塞進同一個真實 request，response 原樣通過** = 定價永遠是 live 的。**臨時方案的判準不是「多快能上」，而是「它會不會靜默地過期」**；同時 workaround 必須配一張移除追蹤票（VP-17535 本身）。

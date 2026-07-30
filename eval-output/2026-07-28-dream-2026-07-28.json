@@ -1,0 +1,132 @@
+{
+  "coverage": {
+    "completed_without_retro": [
+      "HL7FAIL-20260722-MDHQ",
+      "LBS-1541",
+      "LBS-1547",
+      "LBS-1656",
+      "QH-1860",
+      "VP-14787",
+      "VP-15279",
+      "VP-16009",
+      "VP-16146",
+      "VP-16168",
+      "VP-16169",
+      "VP-16172",
+      "VP-16186",
+      "VP-16271",
+      "VP-16337",
+      "VP-16391",
+      "VP-16685",
+      "VP-16689",
+      "VP-16759",
+      "VP-16784",
+      "VP-16785",
+      "VP-16786",
+      "VP-16787",
+      "VP-16832",
+      "VP-16859",
+      "VP-16881",
+      "VP-16885",
+      "VP-16924",
+      "VP-16968",
+      "VP-17065",
+      "VP-17076",
+      "VP-17117",
+      "VP-17120",
+      "VP-17136",
+      "VP-17217",
+      "VP-17222",
+      "VP-17260",
+      "VP-17283",
+      "VP-17286",
+      "VP-17312",
+      "VP-17342",
+      "VP-17343",
+      "VP-17385",
+      "VP-17407",
+      "VP-17408",
+      "VP-17411",
+      "VP-17421",
+      "VP-17422",
+      "VP-17460",
+      "VP-17474",
+      "VP-17493",
+      "VP-17497",
+      "VP-17499",
+      "VP-17500",
+      "VP-17517"
+    ],
+    "failures_pct": 20.7,
+    "retrospective_pct": 28.9
+  },
+  "cross_links": 7856,
+  "date": "2026-07-28",
+  "last_dream": {
+    "log": "dream-2026-07-28.md",
+    "ops": {
+      "archived": 0,
+      "extracted": 1,
+      "merged": 0,
+      "promoted": 0
+    }
+  },
+  "ltm_lines": {
+    "business-model": 267,
+    "business-model-deep": 225,
+    "emr-integration": 1097,
+    "failures": 537,
+    "fhir-api": 308,
+    "patterns": 1237,
+    "repo-catalog": 499,
+    "repos": 354,
+    "rules": 359,
+    "ticket-routing": 73
+  },
+  "tiers": {
+    "archive": {
+      "archive_candidates": 0,
+      "by_category": {
+        "emr_integration": 13,
+        "pm_patterns": 1,
+        "technical": 11
+      },
+      "count": 25,
+      "highest": 0.8277,
+      "lowest": 0.0506,
+      "mean": 0.3754,
+      "median": 0.4803,
+      "stdev": 0.2683
+    },
+    "ltm": {
+      "archive_candidates": 0,
+      "by_category": {
+        "emr_integration": 2,
+        "pm_patterns": 2,
+        "repo_patterns": 1,
+        "technical": 5
+      },
+      "count": 10,
+      "highest": 1.1438,
+      "lowest": 0.1126,
+      "mean": 0.6017,
+      "median": 0.6237,
+      "stdev": 0.3889
+    },
+    "stm": {
+      "archive_candidates": 0,
+      "by_category": {
+        "emr_integration": 57,
+        "process": 1,
+        "repo_patterns": 2,
+        "technical": 75
+      },
+      "count": 135,
+      "highest": 0.7986,
+      "lowest": 0.0133,
+      "mean": 0.2867,
+      "median": 0.2407,
+      "stdev": 0.2011
+    }
+  }
+}

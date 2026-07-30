@@ -1,3 +1,10 @@
+---
+date: 2026-07-29
+slug: vp17532-availability-vs-booked-events
+related: [VP-17532, VP-16850, VP-17190, VP-16499, VP-16410]
+distilled: true
+---
+
 # 2026-07-29 — VP-17532: "booked outside my availability" = config edited after bookings
 
 Related: VP-17532, VP-16850, VP-17190, VP-16499, VP-16410
