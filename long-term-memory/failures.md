@@ -6,8 +6,8 @@ status: active
 score: 1.1438
 base_weight: 0.9
 urgency: 3
-created: 2026-07-28
-updated: 2026-07-28
+created: 2026-07-29
+updated: 2026-07-29
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -17,6 +17,7 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - PO-222
+- PO-256
 - QH-1104
 - QH-1130
 - QH-1159
@@ -81,6 +82,7 @@ links:
 - VP-17421
 - VP-17422
 - VP-17497
+- VP-17532
 - business-model
 - business-model-deep
 - feedback_batch_db_verify
@@ -92,7 +94,7 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 55 entries across STM
+summary: Auto-aggregated failure index from 57 entries across STM
 ---
 
 
@@ -147,21 +149,21 @@ summary: Auto-aggregated failure index from 55 entries across STM
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-07-28 — total 55 entries
+> Last updated: 2026-07-29 — total 57 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 14 entries
-- [Other / uncategorized](#other) — 9 entries
+- [Other / uncategorized](#other) — 10 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 8 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 4 entries
 - [Redis / cache / pending list](#redis-cache) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
+- [gRPC / network / timeout](#grpc-network) — 2 entries
 - [Scope / requirement / PM communication](#scope-communication) — 2 entries
 - [Auth / permission / role](#auth-permission) — 1 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
-- [gRPC / network / timeout](#grpc-network) — 1 entries
 - [Error handling / throw vs log](#error-handling) — 1 entries
 - [GraphQL / API design](#graphql-api) — 1 entries
 
@@ -298,6 +300,10 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[LBS-1541]]**
 
 (none yet)
+
+### **[[PO-256]]**
+
+- az CLI MFA expired — could not inspect RBAC Container App directly; bounded diagnosis at the coresamples→container-app hop via error strings and timing.
 
 ### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
 
@@ -566,6 +572,19 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 
 ---
 
+## gRPC / network / timeout <a id='grpc-network'></a>
+
+### **[[VP-16521]]** — `2026-05-28 17:53` — IDE diagnostics 不穩（mcp__ide__getDiagnostics 連續 timeout）
+
+- 試 2 次都 timeout，改跑 `npx eslint <file>` CLI 直接拿同樣結果
+- 教訓：WebStorm 抓 lint 等於 eslint + prettier；agent 端不要等 IDE diagnostics，CLI 更快更穩
+
+### **[[VP-17532]]**
+
+- (none blocking) setting_audit table in lis_frontend_service does not record the `timezone` setting; had to query core SettingService via gRPC (grpcurl + client-credentials OAuth token from transformer .env) — worked.
+
+---
+
 ## Scope / requirement / PM communication <a id='scope-communication'></a>
 
 ### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
@@ -597,15 +616,6 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 ### **[[VP-15460]]** — [2026-04-27 → 28] Cwd persistence in Bash tool calls
 
 After `cd /Users/hung.l/src/EMR-Backend && gh pr view 156`, subsequent Bash calls without explicit `cd` defaulted to EMR-Backend. Created `bugfix/leo/VP-15460-redlock-import` in the wrong repo, had to clean up. Lesson: always explicit `cd` in cross-repo flows.
-
----
-
-## gRPC / network / timeout <a id='grpc-network'></a>
-
-### **[[VP-16521]]** — `2026-05-28 17:53` — IDE diagnostics 不穩（mcp__ide__getDiagnostics 連續 timeout）
-
-- 試 2 次都 timeout，改跑 `npx eslint <file>` CLI 直接拿同樣結果
-- 教訓：WebStorm 抓 lint 等於 eslint + prettier；agent 端不要等 IDE diagnostics，CLI 更快更穩
 
 ---
 

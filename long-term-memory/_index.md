@@ -5,9 +5,9 @@
 
 | Score | ID | Summary | Status | Category | Updated |
 |-------|-----|---------|--------|----------|---------|
-| 1.14 | failures | Auto-aggregated failure index from 55 entries across STM | active | technical | 2026-07-28 |
+| 1.14 | failures | Auto-aggregated failure index from 57 entries across STM | active | technical | 2026-07-29 |
 | 1.06 | emr-integration | EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle config, hl7_file_input triage | active | emr_integration | 2026-07-22 |
-| 1.00 | fhir-api | HL7 v2 vs FHIR deep reference + feasibility of a FHIR inbound order API for lis-backend-emr-v2 (no report), reuse map, difficulty ranking, and Epic/Story/Ticket breakdown for future creation | active | emr_integration | 2026-06-06 |
+| 1.01 | fhir-api | HL7 v2 vs FHIR deep reference + feasibility of a FHIR inbound order API for lis-backend-emr-v2 (no report), reuse map, difficulty ranking, and Epic/Story/Ticket breakdown for future creation | active | emr_integration | 2026-06-06 |
 | 0.97 | repos | Active repo reference: tech stack, ports, key areas, setup | active | technical | 2026-04-22 |
 | 0.78 | repo-catalog | Org-wide repo catalog: every Vibrant-America LIS repo — service type, purpose/本質, tech, ports, data stores, role in ecosystem. Companion to repos.md (which holds deep gotchas for actively-worked repos). | active | technical | 2026-06-07 |
 | 0.49 | business-model | Vibrant America / Vibrant Wellness business model reconstructed from code: products (60+ lab tests), B2B2C customer model, EHR platform, phlebotomy network, and the charging→billing→payout revenue/money-flow. Context for interpreting PM tickets. | active | technical | 2026-06-07 |
