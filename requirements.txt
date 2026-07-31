@@ -11,10 +11,6 @@ uvicorn[standard]>=0.23.0
 websockets>=12.0
 python-multipart>=0.0.6
 
-# Vector Database & RAG
-chromadb>=0.4.0
-sentence-transformers>=2.2.0
-
 # Async utilities
 aiofiles>=23.0
 
