@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     claude_allowed_tools: str = ""  # Claude CLI --allowedTools (e.g., "mcp__vibrant__*,Bash,Read,Edit")
 
 
-    @field_validator("repos_base_path", "storage_path", "vector_store_path", "agent_root", mode="before")
+    @field_validator("repos_base_path", "storage_path", "agent_root", mode="before")
     @classmethod
     def resolve_paths(cls, v: Union[str, Path]) -> Path:
         """Resolve string paths to Path objects, expanding ~."""
