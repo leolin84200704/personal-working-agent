@@ -126,14 +126,19 @@ def write_frontmatter(path: Path, meta: dict) -> None:
     content = path.read_text(encoding="utf-8") if path.exists() else ""
     if content.startswith("---\n"):
         end = content.index("\n---", 3)
-        body = content[end + 4:]
+        # end points at the newline BEFORE the closing '---', so end + 4 lands on the
+        # newline that terminates the closing delimiter line. Leaving it in and then
+        # writing '---\n' + body re-inserted one blank line on every single write, so
+        # STM/LTM bodies grew a blank line per dream run (LBS-1541 reached 106).
+        # Strip all leading blank lines and re-emit exactly one separator: idempotent.
+        body = content[end + 4:].lstrip("\n")
     else:
-        body = content
+        body = content.lstrip("\n")
     if yaml is not None:
         yaml_str = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip()
     else:
         yaml_str = _dump_flat_yaml(meta)
-    path.write_text(f"---\n{yaml_str}\n---\n{body}", encoding="utf-8")
+    path.write_text(f"---\n{yaml_str}\n---\n\n{body}", encoding="utf-8")
 
 
 def list_tier_files(tier: str) -> list[Path]:
