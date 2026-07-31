@@ -10,7 +10,6 @@ Retrievers tested:
   2. ripgrep weighted — multi-term ranked count of matches per file
   3. skill_index — lis-code-agent's keyword-weighted skill matcher
                    (extended to STM by re-pointing tier_dir)
-  4. vector chroma — sentence-transformer similarity, if collection populated
 
 Metrics per retriever:
   hit@1, hit@3, hit@5, mean reciprocal rank (MRR), zero-recall %
@@ -111,18 +110,6 @@ def retrieve_summary_only(query: str, corpus: list[tuple[str, str, str]], file_i
     return [sid for _, sid in scored]
 
 
-def retrieve_chroma(query: str, file_id: str) -> list[str]:
-    """Try the chroma vector store — graceful if empty / not installed."""
-    try:
-        from src.memory.vector_store import VectorStore  # type: ignore
-
-        vs = VectorStore()
-        results = vs.search(query, k=10, collection="conversations")
-        return [r.get("metadata", {}).get("file_id", "") for r in results if r]
-    except Exception:
-        return []
-
-
 def retrieve_skill_index(query: str) -> list[str]:
     try:
         from src.memory.skill_index import SkillIndex  # type: ignore
@@ -157,7 +144,7 @@ def evaluate(name: str, retriever, corpus: list[tuple[str, str, str]], use_corpu
         if use_corpus:
             ranked = retriever(summary, corpus, sid)
         else:
-            ranked = retriever(summary, sid) if retriever is retrieve_chroma else retriever(summary)
+            ranked = retriever(summary)
         elapsed += time.perf_counter() - t0
         if not ranked:
             zero += 1
@@ -186,7 +173,6 @@ def run() -> dict:
     results = []
     results.append(evaluate("grep_body", retrieve_grep, corpus, use_corpus=True))
     results.append(evaluate("summary_only", retrieve_summary_only, corpus, use_corpus=True))
-    results.append(evaluate("chroma_vector", retrieve_chroma, corpus, use_corpus=False))
     results.append(evaluate("skill_index", retrieve_skill_index, corpus, use_corpus=False))
 
     return {

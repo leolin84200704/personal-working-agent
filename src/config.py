@@ -64,11 +64,6 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_reload: bool = False
 
-    # Vector Store (optional fallback — primary retrieval uses YAML scoring)
-    use_vector_search: bool = False
-    vector_store_path: Path = Field(default_factory=lambda: Path("./storage/chroma"))
-    embedding_model: str = "all-MiniLM-L6-v2"  # sentence-transformers model
-
     # Agent Behavior
     max_conversation_history: int = 20
     max_retrieved_memories: int = 5
@@ -119,9 +114,6 @@ class Settings(BaseSettings):
     def conversations_path(self) -> Path:
         return self.storage_path / "conversations"
 
-    @property
-    def chroma_path(self) -> Path:
-        return self.storage_path / "chroma"
 
 
 # Global settings instance

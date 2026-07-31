@@ -77,7 +77,7 @@ Enforced by PreToolUse hooks in `.claude/settings.json` (`.claude/hooks/validate
 
 ## Legacy (v2 Python service)
 
-`src/` contains the retired FastAPI/WebSocket agent (agent loop, ChromaDB vector store with `all-MiniLM-L6-v2` embeddings, session index, thread-safe git operator). It is **not maintained and not part of the running system**. It stays in the tree because `scripts/eval.py` and `scripts/test-retrieval.py` still import parts of it for benchmark snapshots. Do not add new dependencies on `src/` — the dream pipeline was deliberately decoupled from it (`scripts/memory_scoring.py`).
+`src/` contains the retired FastAPI/WebSocket agent (agent loop, session index, thread-safe git operator). It is **not maintained and not part of the running system**. It stays in the tree because `scripts/eval.py` and `scripts/test-retrieval.py` still import parts of it (memory manager/scorer) for benchmark snapshots. Do not add new dependencies on `src/` — the dream pipeline was deliberately decoupled from it (`scripts/memory_scoring.py`). The ChromaDB/`all-MiniLM-L6-v2` vector store was DELETED on 2026-07-30 (never invoked by the running system; English-only model on a mixed 繁中/English corpus); some retired modules still carry dead imports of it and will not start — they are not meant to.
 
 The RAG/embedding chain (SentenceTransformer → ChromaDB semantic search) was replaced by Grep + scored `_index.md` routing, which is transparent, diffable, and has no model/index to drift. If semantic search is ever needed again, build it as a standalone script with a **multilingual** embedding model — the memory corpus is mixed 繁中/English and `all-MiniLM-L6-v2` is English-only, so its recall on Chinese memory text was always weak.
 
