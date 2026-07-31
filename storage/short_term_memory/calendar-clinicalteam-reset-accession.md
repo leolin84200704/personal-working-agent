@@ -3,7 +3,7 @@ id: calendar-clinicalteam-reset-accession
 type: stm
 category: technical
 status: active
-score: 0.0287
+score: 0.0277
 base_weight: 0.9
 created: 2026-06-18
 updated: 2026-06-18
@@ -16,26 +16,6 @@ tags:
 summary: 讓 clinicalteam 可 reset event accession (LIS-transformer-v2 calendar)：guard
   豁免 + resolver 允許名單
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # calendar clinicalteam reset accession - Work Loop Record
 

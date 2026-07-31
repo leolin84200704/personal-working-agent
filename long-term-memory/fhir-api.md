@@ -3,7 +3,7 @@ id: fhir-api
 type: ltm
 category: emr_integration
 status: active
-score: 1.0147
+score: 1.0271
 base_weight: 1.0
 created: 2026-06-06
 updated: 2026-06-06
@@ -80,6 +80,7 @@ links:
 - VP-17517
 - VP-17537
 - VP-17538
+- VP-17539
 - emr-integration
 - repos
 tags:
@@ -94,90 +95,6 @@ summary: HL7 v2 vs FHIR deep reference + feasibility of a FHIR inbound order API
   lis-backend-emr-v2 (no report), reuse map, difficulty ranking, and Epic/Story/Ticket
   breakdown for future creation
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # FHIR for lis-backend-emr-v2 — Reference & Build Plan
 

@@ -3,7 +3,7 @@ id: _OPEN-TICKETS-OVERVIEW-20260606
 type: stm
 category: process
 status: reference
-score: 0.0128
+score: 0.0124
 base_weight: 0.6
 created: 2026-06-06
 updated: 2026-06-06
@@ -16,31 +16,6 @@ tags:
 summary: 跨 ticket 總覽（2026-06-06 批次分工辯證，48 張 open ticket）：分組 / 依賴 / Dev Blocked 解鎖
   / 需 PM 確認 / 建議處理順序。各 ticket 完整解法見同目錄 {KEY}.md。
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Open Tickets — 批次分工辯證總覽
 

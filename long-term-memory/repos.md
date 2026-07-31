@@ -3,7 +3,7 @@ id: repos
 type: ltm
 category: technical
 status: active
-score: 0.969
+score: 0.9801
 base_weight: 0.9
 created: 2026-04-22
 updated: 2026-04-22
@@ -74,6 +74,7 @@ links:
 - VP-17412
 - VP-17421
 - VP-17422
+- VP-17559
 - business-model
 - business-model-deep
 - failures
@@ -85,106 +86,6 @@ tags:
 - grpc
 summary: 'Active repo reference: tech stack, ports, key areas, setup'
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Repo Reference
 

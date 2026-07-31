@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.0643
+score: 1.0766
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -79,6 +79,7 @@ links:
 - VP-17517
 - VP-17537
 - VP-17538
+- VP-17539
 - fhir-api
 tags:
 - emr
@@ -93,109 +94,6 @@ tags:
 summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle config,
   hl7_file_input triage
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # EMR Integration Rules
 
@@ -1093,12 +991,13 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - staging E2E 測試資產：patient 3226428（VP17497 ReclaimTest, cust 3194）、samples 2553975/76/79/80、order_intake rows 62/84/85/88。
 - **Beta client E2E 全表（BETA-E2E-20260729，5 組 sandbox client）**：token recipe = POST api-sandbox `/v1/oauth2/token` form-urlencoded `client_credentials` + `algorithm=RS256`，claims 帶 `customer_id=ProviderID` / `clinic_id=PracticeID` / `userId`（JwtAuthGuard RS256 path 接受）。creds 在 `~/src/credential/beta-clients-sandbox-20260729.md`。24/26 pass；**第一次真實雙租戶驗證**（兩個真 tenant 同 placerId 各自獨立下單、互相 cancel 得到 order_not_found）= VP-17499 part B 的隔離終於有真證據，不再只靠單租戶推論。
 
-## customerPay place-order payload / 收費方法選擇（VP-17537 / VP-17538，2026-07-29 prod live，Jira 仍 Dev To Do / In Progress）
+## customerPay place-order payload / 收費方法選擇（VP-17537 / VP-17538，2026-07-29 prod live；VP-17538 Jira 2026-07-30 Done，VP-17537 仍 Dev To Do 且已無 assignee）
 
 - **`julien_barcode` 就是下游的 `accession_id`**：order-management `handler/order_billing_sample_info.go:289` 用 `lis_re.order_table.julien_barcode` 組 `&accession_id=`；emr-v2 result pipeline 也是 `accessionId: sampleInfo.julienBarcode`。customerPay 是 charge-first，charging `POST /transaction/pay` 回 `sample_id` + `julien_barcode`，所以 place-order payload 的 `accession_id` 一直有值可填 — VP-17283 以來只是沒接（VP-17537 補 `accession_id: of.julienBarcode || undefined`；patientPayLater 是 placement 後才產 barcode，故用 truthiness guard）。
 - **收費要走完整個 payment method list，不是只打 `[0]`**（VP-17538）：`getPaymentMethodCandidates()` 回 customer array 然後 clinic array（照 charging 自己的順序，**沒有**按 type 重排 — wallet priority 定義找不到，Jira 30 張 + Confluence 都只講 revenue credit 的 Practice-vs-Provider 優先，不是收費嘗試順序）。`finalize()` 逐個試，停在第一個 2xx **且**帶 `payment_transaction_id`（VP-17411 規則）。**只在「可證明沒收到錢」的失敗才往下試**；`isIndeterminateChargeError()`（timeout/abort/ECONNRESET/socket hang up）直接中止整條鏈 = 結果未知時絕不重收。
 - **blast radius**：`finalize` 是 API intake 與 legacy HL7 customerPay 共用 — 以前第一張卡壞就整筆 unpaid 出貨的 HL7 訂單，現在會用後面的方法收成功，是真的 prod 行為改變。
 - **staging 無法 live 驗 customerPay**：charging `payWithAch`（`handler/payment.go:842`）呼叫 `UpdatePaymentIntent("")` 而沒有 create branch（card path 在 :1529 有）→ Stripe 404 `POST /v1/payment_intents/` → 400。customer 3194 前三個 shared method 都是 ACH，第四個才是可用的 stax visa 366147。要 live 驗必須等 charging ACH 修好，或把測試帳號的方法順序調成 visa 在 `[0]`。
+- **[2026-07-30 dream] VP-17538 已被 Leo 轉 Done，但票上那句「Open question — priority order」從未有人回答**（Jira 零 comment）。票的描述本身寫著 "Needs confirmation of the authoritative rule ... before this is considered final"。也就是：**prod 上跑的順序 = charging API 的 array 順序，是「拒絕猜」的產物，不是被核准的規格**；live customerPay 驗證仍被 charging ACH bug 擋住。要改順序只需動 `getPaymentMethodCandidates` 一處。
 - 同場踩到：staging coresamples-v2 缺 tzdata（`generateBarcodeForSampleID` 報 `unknown time zone America/Los_Angeles`）→ 訂單照 finalize 但 `julien_barcode` 留 null。
 
 ## BestDeal discount-panel provisioning gap — 新 official bundle 會靜默擱單（HL7FAIL-20260729-PLESSEN / VP-17535, 2026-07-29）
@@ -1127,3 +1026,43 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **結構性背景**：result-ready email 常寄到 clinic 共用信箱（office@/info@ — getCustomerEmailBoth 回 clinic-level email），clinic staff 登入常是 `customer_id=null` 的 clinic-role JWT — 舊 per-customer 模型下這群人全部 access_denied，即 VP-17474 誤報的來源。
 - 401（JWT guard）不會留 `deep_link_resolve` log（guard 先 throw）；resolve log 有 `login_clinic_id` + `matched_by(recipient|clinic)`，PHI-free。
 - **Postmark suppression 必查**：result_ready_new 所在 server 有 16,828 個 suppressed addresses；suppression 中的 clinic inbox 收不到**任何** result-ready email（與任何 outage 無關）。Triage「沒收到 email」先查 `/message-streams/outbound/suppressions/dump`。Postmark server token 可從 noti/notification-center pod env（POSTMARK_KEY）取得。
+
+## Result push 沒有 idempotency gate — 同一份結果可以被重送（VP-17408 移除 gate，2026-07-31 實證）
+
+- `ResultGenerationService.ensureResultTransmissionRecord`（`result-generation.service.ts:1240`）用
+  `findFirst(sample_id, integration_request_id, push_scope_key)` 找既有 record：**< 24h 就重用**，把
+  `generation_status`/`encoding_status` 重設成 GENERATING/ENCODING，然後**照常走完 generate → 寫檔 →
+  SFTP transmit**。重用 record ≠ 跳過投遞。
+- 舊的 `emr_sample.result_sent` 擋門在 **VP-17408 已移除**（證據留在
+  `result-generation.service.spec.ts:271` 的註解）。所以目前**沒有任何機制**阻止同一個
+  (sample, integration, push_scope) 在 24h 內被重複推給 vendor。
+- **後果**：任何會重放 report_finished 事件的動作（Kafka offset 重播、手動 re-enqueue、cluster 回切）
+  都會讓 EMR vendor 收到第二份 ORU。2026-07-31 01:35Z 的 cloud→on-prem 回切實測：**17 筆 record /
+  16 個 sample 重送，全是 MDHQ(Cerbo) 診所**，切換視窗共 35 筆 / 34 sample / 20 clients 曝險。
+- **偵測**：`result_transmission_records` 的 row 數**不會增加** —— 查
+  `updated_at > created_at`（或 `updated_at >= 事件時間 AND created_at < 事件時間`），
+  或 pod log 的 `♻️ Reusing existing transmission record <id> for sample_id: <sid>`。
+  只數 row 會得到「沒有重複」的錯誤結論。
+- **重放前的紀律**：手動 re-drive 一個 sample 的 result（BullMQ re-enqueue、rescan、offset 回捲）前，
+  先查該 (sample, integration, push_scope) 在 24h 內有沒有 TRANSMITTED 的 record；有就是在製造重複投遞。
+
+## emr-v2 app-direct Key Vault（VP-17559, 2026-07-31 prod live 已驗證）
+
+- vault `https://vibrant-app-secret.vault.azure.net`，secret `kafka-sas-connection-string`
+  （namespace-level SendListen，144 chars，服務 `general-events.servicebus.windows.net`）。
+  與 CSI-mount 的 `jwt-rsa-private` 是**不同的 vault**，不要混。
+- 認證 = workload identity：pod `serviceAccountName: identity-provider` +
+  `azure.workload.identity/use` label → webhook 注入 `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
+  `AZURE_FEDERATED_TOKEN_FILE`；identity `ae63b423-110a-4873-8dc3-369415150fa2`（order/bkkeeping/
+  charging 共用，對我們的需求 over-privileged，Leo 知情接受）。federated credential 由
+  Tianhao Wang 建（subject `system:serviceaccount:emr-v2:identity-provider`）—— hung.l 在整個
+  subscription 只有 `AKS Contributor`，**讀不到 vault 也管不了 identity**，cluster 側是能自己做的極限。
+- 啟動成功的 log 指紋：`[key-vault] using WorkloadIdentityCredential (AKS)` →
+  `[key-vault] resolved secret "kafka-sas-connection-string" (144 chars)`。
+- **無 SDK 驗證 recipe（可複用）**：讀 `$AZURE_FEDERATED_TOKEN_FILE` → POST
+  `login.microsoftonline.com/{tenant}/oauth2/v2.0/token`（`client_assertion` +
+  `scope=https://vault.azure.net/.default`）→ GET `{vault}/secrets/{name}?api-version=7.4`。
+- **注意 template ≠ cluster**：PR 改了 ConfigMap template（新增 `AZURE_KEY_VAULT_URL` /
+  `KAFKA_CLOUD_SASL_SECRET_NAME`），但 live prod ConfigMap **沒有這兩個 key**，靠 code 內建 default
+  才會動。空字串的 `KAFKA_CLOUD_SASL_PASSWORD` 仍留在 CM（設計上會 fall through 到 vault，無害）。
+  改 ConfigMap template 的 PR merge 掉 ≠ cluster 的 ConfigMap 變了 —— 要另外 apply。

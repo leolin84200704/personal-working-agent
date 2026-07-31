@@ -3,7 +3,7 @@ id: business-model
 type: ltm
 category: technical
 status: active
-score: 0.4901
+score: 0.5012
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
@@ -38,6 +38,7 @@ links:
 - VP-17222
 - VP-17312
 - VP-17422
+- VP-17559
 - business-model-deep
 - emr-integration
 - failures
@@ -56,45 +57,6 @@ summary: 'Vibrant America / Vibrant Wellness business model reconstructed from c
   and the charging→billing→payout revenue/money-flow. Context for interpreting PM
   tickets.'
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Vibrant America / Vibrant Wellness — 商業模式 (從程式碼反推)
 

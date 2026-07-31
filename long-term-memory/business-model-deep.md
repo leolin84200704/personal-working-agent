@@ -3,7 +3,7 @@ id: business-model-deep
 type: ltm
 category: technical
 status: active
-score: 0.2339
+score: 0.245
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
@@ -15,6 +15,7 @@ links:
 - VP-16921
 - VP-16968
 - VP-17312
+- VP-17559
 - business-model
 - failures
 - repo-catalog
@@ -31,18 +32,6 @@ summary: 'Deep computational reference: exact pricing/markup/tax/coupon math, pa
   state machine, and PNS naming. All code-backed with file:line. Reference when a
   ticket touches money math.'
 ---
-
-
-
-
-
-
-
-
-
-
-
-
 
 # 商業模式深掘 — 計算層公式參考
 

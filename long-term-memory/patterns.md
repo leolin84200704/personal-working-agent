@@ -1276,3 +1276,39 @@ Accessioning「送不出 tube count、轉圈轉到底」的完整鏈：LIS-front
 1. **「code 到 prod 了嗎」是這批 ticket 的最大共通線** — 已升級成上面的 PROMOTED 章節（4+ 案例、5 種假訊號）。這族從 2026-07-22 的「status 不是 ground truth」一路長到「連 image tag 都不是 ground truth」，現在的終點是 dist 內容。
 2. **scope 邊界規則一天內 5 次全部執行正確**（`defect_found_must_be_ticketed`）：別人的 service 只交診斷不自己開票 — PO-256（RBAC Container App，platform team）、HL7FAIL-20260729（BestDeal，order team）、VP-17537/17538 附帶發現的 charging ACH bug、BETA-E2E 的 QA client OAuth 500（Rust OAuth 服務）；自己 scope 的立刻開票 — VP-17531、VP-17537。**規則已穩定，不需要再蒐證**；剩下的風險是反向的：交出去的診斷沒人追（BestDeal 至今未修，靠 VP-17535 workaround 撐著）。
 3. **interim workaround 不可 hardcode 會漂移的值**（Leo 2026-07-29 兩次退回 VP-17535 設計）：第一版打算回傳 synthetic BestDeal response 含固定價格 → Leo 指出「價格會變，hardcode 會壞」。最終版改成**把 bundle 拆成 component test id 塞進同一個真實 request，response 原樣通過** = 定價永遠是 live 的。**臨時方案的判準不是「多快能上」，而是「它會不會靜默地過期」**；同時 workaround 必須配一張移除追蹤票（VP-17535 本身）。
+
+## 跨 cluster 消費者切換：rollback 不是 cutover 的鏡像（VP-17559/17561, 2026-07-31 dream 抓到）
+
+emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘後被 `KAFKA_CLOUD_ENABLED=false` + rolling restart 切回去。切過去健康、切回來卻**重送了已投遞的結果**。
+
+- **機制**：兩個 cluster 是 dual-publish（同一批事件都在）。consumer group 的 committed offset 是**每個 cluster 各自一份**。切走的那一刻，舊 cluster 的 offset 就凍結在那裡；切回來時 `fromBeginning:false` 不救你 —— 它是從**凍結的 offset** 續讀，於是把切換視窗內的每一則事件重新消費一次。
+  - 正向（cutover）= **gap**（新 cluster 從 latest 開始，切換瞬間的訊息永不消費）——這個大家都會寫進 caveat。
+  - 反向（rollback）= **overlap**（整個視窗重播）——這個通常沒人寫，因為 rollback 被想成「回到原狀」，但 offset 不會跟著回到原狀。
+- **紀律**：切換計畫要同時定義兩個方向。丟一個進去：(a) rollback 前把舊 cluster 的 offset 前推到現在（offset forwarding），或 (b) 投遞端有 idempotency gate。**兩者都沒有就不要切**，因為 rollback 是出事時唯一的手段，而它本身會製造事故。
+- **一般化**：任何「同一份資料流有兩個獨立進度指標」的遷移（cluster、佇列、CDC slot、cursor table）都有這個不對稱性。判準問題是「回切時，舊來源的進度指標指在哪裡？」
+- **偵測手法**：不要只看「有沒有新增 row」。重播可能命中「重用既有 record」的路徑，於是 row 數不變、只有 `updated_at` 前進。查 `updated_at > created_at`（或 > 切換時間）才看得到，配合 app log 的 reuse 訊息。這次 row count 完全正常，17 筆重送全靠 `updated_at` 才浮出來。
+- **同時學到**：ConfigMap 的 `metadata.managedFields[].time` + `manager`（這次是 `kubectl-patch` @ 01:35:13Z）是「誰在什麼時候改了 config」的 ground truth；deployment 用**同一個 image tag** rolling restart 就能改行為 —— 所以「image tag 沒變」不代表「行為沒變」（和 PROMOTED 章節的「tag 不是版本證明」是同一族，方向相反的那一半）。
+
+### Cross-ticket review 2026-07-31（marker 2026-07-29 後 5 張 completed：VP-17559, VP-17561, VP-17538, VP-17539, VP-16934）
+
+這批的共通線不是技術，是**「Jira Done 被當成流程的第一步而不是最後一步」**，而且比前幾晚嚴重一級：
+
+1. **前幾晚的失效模式是「Done 但沒驗證」，今晚出現「Done 之後 prod 反向走掉」。** VP-17561 在
+   17:27 PT 轉 Done，18:35 PT 被 `KAFKA_CLOUD_ENABLED=false` 切回去 —— 若 closeout audit 在 17:30 跑，
+   它會**正確地判 PASS**，然後一小時後這個 PASS 就過期了。
+   → 紀律：**closeout audit 的結論帶時間戳，不帶保證期**。對「靠 config flag 生效」的變更（不是靠
+   image 版本），PASS 之後 config 還可能被改，所以這類 ticket 要記下「生效條件是哪個 flag」，
+   下一晚重新確認那個 flag 而不是重新確認 deploy —— deploy 早就成功了，flag 才是真正的開關。
+2. **票寫得很好，但驗收條件不會擋住 transition。** 五張裡有三張，「能證明它成立的那件事」就寫在票上
+   卻沒做：VP-17538 的 priority order（票上明寫 "before this is considered final"）、VP-17539 的
+   六個 bundle 各下一單對價、VP-17561 caveat 1 的重啟後 spot-check。缺的不是知識，是
+   **acceptance criteria 與狀態轉換之間沒有連結**。可行的最小補強：轉 Done 前把每條 AC 逐條標記
+   done/unmet/waived，unmet 的要寫理由 —— 這件事只有寫票的人做得到，不是 reviewer 能補的。
+3. **「臨時方案要配移除追蹤票」的規則有它自己的失效模式**（2026-07-29 剛立的規則）：VP-17539（永久解）
+   轉 Done，但實際上線的 code 仍掛著 VP-17535 的 `TEMPORARY` 標記與 log 前綴，而 VP-17535 仍是
+   `Dev To Do`、移除條件寫著「BestDeal 回 200 就刪掉這段」。**永久票關閉時沒人回頭撤掉臨時框架**，
+   於是留下一段「按註解指示就會刪掉生產定價邏輯」的 code。
+   → 補強：workaround 轉正時，**同一個 commit 要一起拔掉 TEMPORARY 標記並關掉 removal tracker**；
+   或反過來，永久票不要在 code 還標 TEMPORARY 時關。
+4. 唯一乾淨的一張是 VP-16934（Epic，無 code 無 deploy）—— 也就是說**這批只有「沒有東西可驗」的那張
+   通過得毫無爭議**，其餘四張都需要 audit 補證據。
