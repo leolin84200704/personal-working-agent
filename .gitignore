@@ -55,3 +55,4 @@ benchmarks/results/*.md
 
 # live secrets — never commit (self-contained creds file)
 long-term-memory/access-and-secrets.md
+.dream.lock/

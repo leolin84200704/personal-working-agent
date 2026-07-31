@@ -18,6 +18,31 @@ fi
 
 LOG_FILE="$LOG_DIR/launchd-stdout-$DATE.log"
 
+# Single-instance guard. Two dream runs must never overlap: on 2026-07-29 three
+# instances were live at once (a 17:03 run still inside its retry loop, the 18:30
+# launchd run, and a manually invoked one). The winning run consolidated and
+# committed at 19:39:03; the losing run then reached its own post-dream
+# extract-failures.py at 19:39:43 and overwrote long-term-memory/failures.md with
+# a score=0.0 stub (129 lines of links dropped). Concurrent consolidation can also
+# double-write LTM sections and race the _index.md rebuilds.
+# mkdir is the atomic primitive here — macOS bash has no flock.
+LOCK_DIR="$AGENT_ROOT/.dream.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    LOCK_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [[ -n "${LOCK_PID:-}" ]] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        echo "[$(date)] SKIP: dream already running (pid $LOCK_PID) — this instance exits" | tee -a "$LOG_FILE"
+        exit 0
+    fi
+    echo "[$(date)] Stale lock (pid ${LOCK_PID:-unknown} gone) — taking it over" | tee -a "$LOG_FILE"
+    rm -rf "$LOCK_DIR"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo "[$(date)] FATAL: cannot acquire $LOCK_DIR" | tee -a "$LOG_FILE"
+        exit 1
+    fi
+fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 echo "[$(date)] Starting dream pipeline..." | tee -a "$LOG_FILE"
 echo "  Agent root: $AGENT_ROOT" | tee -a "$LOG_FILE"
 
