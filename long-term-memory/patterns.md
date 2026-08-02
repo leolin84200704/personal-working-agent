@@ -354,6 +354,8 @@ EMR-Backend customer_id mismatch 案例：reproducer 用 current DB state 回 47
 - ⚠ `mysql ... | grep -v "Using a password"` 會吃掉 mysql 的 exit code（輸出全被過濾時 grep 回 1）→ DDL 成敗用 information_schema SELECT 驗證，別看 shell exit（VP-17344）
 - **典型症狀**：FE call 該 table 的 endpoint 回 500、staging pod log 印 `prisma:error P2021 ... does not exist in the current database` (INCIDENT-20260528 reject endpoint 案例)
 - **長期 fix**：把 migration apply 寫進 Jenkinsfile pre-deploy step（同時對兩個 DB 跑），不再靠人記得
+- ⚠ **`.env` 的 `DATABASE_URL` 密碼是 URL-encoded**（含 `%xx`）：直接把那段字串餵給 `mysql` CLI 會 auth failed，要先 `urllib.parse.unquote`。踩過（HL7FAIL-20260730）：同一台機上唯讀帳號好好的，只有 app 帳號的 URL 需要 decode，很容易誤判成「密碼過期／權限問題」。
+- **VPN 斷線時的替代讀取路徑（HL7FAIL-20260730 / 2026-07-31 dream 驗證）**：Azure prod MySQL 從本機要 VPN，但 **AKS prod pod 內直接連得到** —— `kubectl exec` 進 pod 用它自己的 `DATABASE_URL` + `@prisma/client` 跑 `$queryRawUnsafe` 就能查。`kubectl cp` 一支 node script 進 `/tmp` 最省事。**注意欄位名要先 `SHOW COLUMNS` 確認**：`hl7_file_input` 用 `received_time`/`updated_time`（不是 `created_at`），`result_transmission_records` 才是 `created_at`/`updated_at`；BusyBox 的 `grep` 也沒有 `--include`。
 
 ### redlock@4 API & CommonJS Interop
 - **CommonJS-only package**: `module.exports = Redlock` (no `.default`, no bundled `.d.ts`)
@@ -1288,6 +1290,10 @@ emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘�
 - **一般化**：任何「同一份資料流有兩個獨立進度指標」的遷移（cluster、佇列、CDC slot、cursor table）都有這個不對稱性。判準問題是「回切時，舊來源的進度指標指在哪裡？」
 - **偵測手法**：不要只看「有沒有新增 row」。重播可能命中「重用既有 record」的路徑，於是 row 數不變、只有 `updated_at` 前進。查 `updated_at > created_at`（或 > 切換時間）才看得到，配合 app log 的 reuse 訊息。這次 row count 完全正常，17 筆重送全靠 `updated_at` 才浮出來。
 - **同時學到**：ConfigMap 的 `metadata.managedFields[].time` + `manager`（這次是 `kubectl-patch` @ 01:35:13Z）是「誰在什麼時候改了 config」的 ground truth；deployment 用**同一個 image tag** rolling restart 就能改行為 —— 所以「image tag 沒變」不代表「行為沒變」（和 PROMOTED 章節的「tag 不是版本證明」是同一族，方向相反的那一半）。
+- **後續（2026-08-01 dream 查證）**：01:35Z 切回 on-prem 之後，**02:16:20Z 又被 `kubectl-patch` 切回 cloud**（`emr-v2` ns 的 configmap），pod 自此連續 Running 47h、0 restart、SFTP `189 successful / 0 failed`、error 0 —— cutover 目前是**成立的狀態**，不是停在 rollback。第二次切換（on-prem → cloud）**沒有引發第二波重播**：`updated_at ∈ [02:16Z, 04:00Z] AND created_at < 02:16Z` 只有 3 筆，而背景基線本來就約 1 筆/小時 → 那 3 筆是背景。
+  - **關鍵在於「為什麼沒有」：re-enable 之前先把 cloud group 的 offset 前推過 8,501 則堆積訊息**，也就是本節「紀律」條列的 (a) offset forwarding 被真的執行了。這是**這條規則第一次有正向證據**：同一個系統，沒做 offset forwarding 的那次切換重送了 17 筆 ORU，做了的那次 0 筆。
+  - ⚠️ 不要把它誤讀成「視窗短／低量所以裸切安全」。cloud 端當時堆了 8,501 則待消費訊息，量一點都不小；差別是措施，不是運氣。
+- **踩到的坑：同名 ConfigMap 存在兩個 namespace**。`lis-emr-v2-config-prod` 在 `default` 和 `emr-v2` 兩個 ns 都有（`default` 那份最後被改是 2026-06-17，早就不是活的）。不加 `-n` 查到的是 `default` 的殘骸，值可能剛好一樣而給出「已驗證」的錯覺。**驗 config 前先確認跑著的 deployment 在哪個 ns**（`kubectl get deploy -A | grep <svc>`），再對那個 ns 查。
 
 ### Cross-ticket review 2026-07-31（marker 2026-07-29 後 5 張 completed：VP-17559, VP-17561, VP-17538, VP-17539, VP-16934）
 
@@ -1312,3 +1318,16 @@ emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘�
    或反過來，永久票不要在 code 還標 TEMPORARY 時關。
 4. 唯一乾淨的一張是 VP-16934（Epic，無 code 無 deploy）—— 也就是說**這批只有「沒有東西可驗」的那張
    通過得毫無爭議**，其餘四張都需要 audit 補證據。
+
+## Agent repo 自身的環境陷阱（2026-07-31 MiniLM 清除 arc 蒸餾）
+
+- **驗 dream / memory pipeline 相關的東西一律用 `/usr/bin/python3`**：launchd 的 dream job 跑的是 system
+  python（有 `rich`），homebrew 的 `python3` 沒有。用錯 interpreter 會得到與實際排程不同的結果 ——
+  「我在 shell 裡跑過了」不等於「排程跑得起來」。
+- **刪 config 欄位要直接 `import` 那個 module 來驗，不要跑上層腳本**：移除 `vector_store_path` 時漏刪
+  `config` 裡 `field_validator` 的欄位名 → `import src.config` 直接炸 PydanticUserError，但 merge 前的
+  驗證跑的是 `eval.py`，而它對 config 是 **lazy import**，那次執行根本沒觸發 → 假陰性，merge 後才爆
+  （hotfix PR #18）。一般化：**驗證要直接觸發最脆弱的那一點**；「跑一個會用到 X 的程式」在 lazy
+  import／條件分支下不構成對 X 的驗證。
+- 退役決策寫進 README 有複利：這次「MiniLM 還會不會用到」的問題，README 早已記載退役理由與
+  English-only 弱點，30 秒就定方向。

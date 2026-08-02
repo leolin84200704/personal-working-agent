@@ -1,3 +1,10 @@
+---
+date: 2026-07-31
+slug: minilm-removal
+related: []
+distilled: true
+---
+
 # 2026-07-31 — MiniLM/ChromaDB 殘骸清除（PR #17 + hotfix #18）
 
 Related: (repo maintenance, no ticket)

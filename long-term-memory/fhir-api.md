@@ -3,7 +3,7 @@ id: fhir-api
 type: ltm
 category: emr_integration
 status: active
-score: 1.0271
+score: 1.0395
 base_weight: 1.0
 created: 2026-06-06
 updated: 2026-06-06
@@ -15,6 +15,7 @@ links:
 - HL7-TRIAGE-20260427
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
+- HL7FAIL-20260730-TURNPAUGH
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656

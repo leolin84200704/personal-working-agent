@@ -1,10 +1,11 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-07-29
+> Last updated: 2026-08-01
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-07-31 | minilm-removal | (repo maintenance, no ticket) | true |
 | 2026-07-29 | beta-e2e-cancel-gateway | BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500 | true |
 | 2026-07-29 | vp17532-availability-vs-booked-events | VP-17532, VP-16850, VP-17190, VP-16499, VP-16410 | true |
 | 2026-07-27 | vp17499-vp17500-placerid-namespace | VP-17497, VP-17499, VP-17500 | true |

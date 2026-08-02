@@ -3,7 +3,7 @@ id: repos
 type: ltm
 category: technical
 status: active
-score: 0.9801
+score: 1.0024
 base_weight: 0.9
 created: 2026-04-22
 updated: 2026-04-22
@@ -75,6 +75,8 @@ links:
 - VP-17421
 - VP-17422
 - VP-17559
+- VP-17561
+- VP-17577
 - business-model
 - business-model-deep
 - failures
@@ -110,6 +112,10 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
   - `src/calendar/models/event/appointment-event.service.ts` (L88-99) — Kafka topic & broker 設定
   - `prisma/schema.prisma` — `v2_event` (L164+, status enum L237) / `v2_event_participant` / `v2_calendar` / `v2_reminder_audit_log` (新)
   - `src/calendar/models/accession-claim/` (新, VP-16410) — `AccessionClaimService` 提供 claim/release/sync/reset + audit；event.service 6 個 hook 點 (createEvent/createEventByPatient/updateEvent/updateEventByPatient/deleteEvent/deleteEventByPatient) 限 150105 自動 enforce 1:1 (`accession_id` UNIQUE)；GraphQL `resetEventAccession` (admin/clinicadmin/**clinicalteam**, PR #496) + `getClaimedAccessionIds` (clinic user)；docs 在 `docs/vp-16410-accession-claim.md`。
+  - **accession 1:1 guard 的設計缺口 = `resetEventAccession`（VP-17577 P1「重複預約」的真因，2026-07-31 Leo 裁定 works-as-designed）**：guard 只保證「一個 accession 同時只被一筆 claim 佔用」，**不檢查被 reset 掉的那筆 event 是否還活著**。所以 `clinicalteam` 對一個 accession 按 reset 之後，原本那場未來的 consult **仍然是 live event**，accession 又能被重新 claim → 同一 accession 出現**兩場 live 未來 consult**，而 VP-16410 的 UNIQUE 從頭到尾沒被違反（查 claim 表看不出問題，要查 event）。
+    - 規模（2026-07-31 量測）：5 月以來 **245 次 reset-while-active**，其中 **23 次 reset 的是未來的 event**；當下有 **2 個 accession 各持有 2 場 live 未來 consult**。所以這不是單一事故，是常態操作。
+    - 診斷起點：拿 accession audit 的 actor（`user:N` = `lis_core_v7.user_id`，解析路徑見 memory「Calendar audit actor id lookup」）比對 reset 時間 vs. event 的 `is_canceled`/開始時間 —— **reset 時間落在一場 live 未來 event 之後 11 分鐘**就是這個形狀。
+    - 想真的堵掉要在 reset 路徑加「原 event 尚未 cancel 就拒絕／連帶 cancel」，屬產品決策；Leo 目前選擇不改 code。
   - **Calendar RBAC 細節（`src/calendar/guard/auth.guard.ts`）**：`AuthGuard` 是 calendar 模組通用 guard；`validateClinicUser` 要求 clinic-user token 有 `user_id`+`clinic_id`，否則 `401 "Missing required clinic user identifiers"`（在進 resolver 前就擋）。`isAdminUser(user)` **只看 `user_roles[]`**（admin/clinic_admin/clinic）或 `user_permission`，**不看** `role`/`internal_user_role` 字串。`isClinicalTeamUser(user)` = `internal_user_role` 或 `role` === `'clinicalteam'`（內部跨 clinic、無 clinic_id，已在 guard 層豁免 identifier 檢查）。要放行某 role 做某 accession 操作 → guard(validateClinicUser 豁免) + resolver(allow-list) **兩處都要改**。
   - 詳細 email flow / Kafka 佈局見 `patterns.md` → "Clinical Consult Calendar Email Flow"
 - **Base branch = `stage_test`**（非 staging/main）；feature PR → stage_test。

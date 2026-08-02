@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.0766
+score: 1.089
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -15,6 +15,7 @@ links:
 - HL7-TRIAGE-20260427
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
+- HL7FAIL-20260730-TURNPAUGH
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -162,6 +163,7 @@ summary: EMR/HL7/SFTP integration rules, identity mapping, MSH values, bundle co
 - **inbound order 的 MSH-6（receiving facility）emr-v2 完全不用**。MSH-6 語意=收件方(Vibrant 實驗室)；`ehr_integrations.msh06_receiving_facility` 是給**外送 result** 用的 MSH-6（hl7-encoder），與 inbound order 的 MSH-6 是**相反方向、不同東西**。
 - **MSH-4（sending facility）** 只在 `hl7-order.processor.resolveIntegration` 的 clinic-level fallback（`customer_id='-1'`=`CLINIC_LEVEL_MARKER` AND `clinic_id=MSH-4`）才用；該 processor 解析主供 logging + gz_ny pilot gate，真正下單 fall through 到 parser.service（ORC-12）。
 - 教 EMR vendor 填單：強調 **ORC-12=Provider ID(customer_id)**；別說「MSH-6=Practice ID」（誤導）。
+- **「整間 clinic 已經 FULL_INTEGRATION 了，為什麼還 customer_not_found？」（HL7FAIL-20260730 Turnpaugh，Leo 也先被騙）**：clinic-level 那筆（`customer_id='-1'`）常常是 **result-only 遷移產物**（`requested_by=migration_script_emr_result`、`ordering_enabled=0`、`customer_npi=NULL`）。order routing 走 per-provider ORC.12 → customer_id 配對，所以這種列**完全不參與下單**，看起來「整間都整合好了」是假的安心感。判斷方式：不要看 clinic 層有沒有列，要看**該 provider 自己的 customer_id 有沒有 LIVE + ordering_enabled=1 的列**（practice 內每個 provider 各有一筆才是正常形狀）。
 
 ---
 
@@ -527,6 +529,8 @@ UPDATE hl7_file_input SET retry_num = 3 WHERE id = {X};
 - **原始 HL7 只存在 owning pod 的 local file**（`hl7_file_input.order_input` 常為 null；失敗的檔案不會 archive）：`retry_num` bump 讓 owning pod 從本機檔案重讀，是唯一的 re-place 途徑 — 沒有那個 pod 的檔案就無法手工重建訂單。所以 bump 前務必先把 integration 修好（先 INSERT/修正、再 bump，順序不可反）。
 - **`last_error` 欄位（VP-17533，2026-07-29 prod live）**：`hl7_file_input.last_error TEXT NULL` = app code 寫的**裸失敗事實**（`error_detail` 保留給 agent 層的 diagnosis，VP-17412）。之前 parse chain 裡**任何 throw**（BestDeal/pricing/lab-fee HTTP、patient/customer gRPC、mapping-cache refresh、decode、DB）都繞過 `markFailure()`：row 停在 `parse_finished=0` 而所有 error 欄位 NULL、`retry_num` 永不遞減 → rescan 無限重排、永遠進不到 daily triage 的 `retry_num=0` 視窗。修法是 `processFromFile()` 外包一層 catch-all 走 `markFailure`（persist `last_error` + 遞減 retry_num，floor at 0）再 rethrow，BullMQ attempt 語意不變。**已知小瑕疵**：成功路徑不清 `last_error`，placed 的 row 可能帶著過期失敗字串（Leo 待決定要不要修）。
 - **`retry_num` 歸零後 rescan 就停**：bounded retry 的代價是「診斷可見」換「不再自動重試」。VP-17533 上線後遇過 deploy race（#299 先到 prod，#301 的修正還沒到）→ 21:46Z 的 rescan 用舊 BestDeal 呼叫把 retry_num 5 燒到 0，之後 bump 回 3 也等不到 owning rescan tick。
+- **成功後 `last_error` 不會被清（HL7FAIL-20260730 實測）**：row 6746 recover 後仍帶著 `customer_not_found=VINCENT GROVE` 字串。**成功訊號是 `parse_finished=1` + `sample_id` 非 null，不是 `last_error` 為空** — 拿 last_error 當健康指標會把已修好的 row 當成還在失敗。
+- **`retry_num` 是「剩餘預算」倒數，不是「已重試次數」（code 確認：`hl7-order.processor.ts` `Math.max(0, retry_num - 1)`、rescan `where retry_num > 0`、insert 給 `INITIAL_RETRY_NUM`）**。所以 >0 = 還會自己再試，0 = 永久停手才需要 bump。讀到 0 之前先確認不是誤讀：HL7FAIL-20260730 的 row 6746 在 2026-07-31 dream 被記成 `retry_num=0`（判定「不會自癒」），修完當天卻是 3，兩份紀錄對不起來且無 audit trail 可判——**別把「retry 預算還在」當成已成立的觀察引用**，要用就當場再查一次。
 - **手動 re-drive（bump retry_num 都不動時的最後手段，HL7FAIL-20260729 實作過）**：把 archive 取回的 HL7 依 `row.localDir` 放回 owning pod 的 PV，然後直接 enqueue BullMQ job（queue `process-hl7-file`，自訂 jobId 如 `hl7-6735-manual-vp17535`，redis 走 pod 的 sidecar `localhost:6379`）。完成後驗 `parse_finished=1` + `sample_id`。這條路徑會走完整正常 pipeline（含收費），不是繞過。
 
 ### hl7_file_input 欄位寬度限制（寫入前必 truncate）

@@ -3,7 +3,7 @@ id: repo-catalog
 type: ltm
 category: technical
 status: active
-score: 0.7908
+score: 0.8019
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
@@ -65,6 +65,7 @@ links:
 - VP-17421
 - VP-17422
 - VP-17559
+- VP-17561
 - business-model
 - business-model-deep
 - emr-integration
