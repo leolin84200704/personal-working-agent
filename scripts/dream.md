@@ -45,6 +45,18 @@ Output one line per ticket in the dream log (`PASS` or `FLAG: <reason>`). Any FL
 the daily digest top section so Leo sees it next morning; if the flag indicates active prod
 breakage (health signals firing), stop dreaming and escalate immediately instead.
 
+6. **Dependency propagation** — for each ticket in this audit that reached Done OR whose code
+   was verified live on prod (deploy confirmation counts even if Jira lags — VP-17538 was live
+   a day before its Done): grep ALL STM frontmatter for `unblocked_by:` entries and
+   `unblock_when:` text naming this ticket id. For every dependent STM found:
+   - insert `### [YYYY-MM-DD] RE-CHECK: {shipped_id} shipped — blocked verdict needs re-test`
+     under its most recent section, and bump its frontmatter `updated:`;
+   - add one line to the daily digest: "{dependent_id}: blocker {shipped_id} shipped — re-test
+     `unblock_when` before repeating its blocked status."
+   Do NOT auto-flip the dependent's status — the re-test happens in a work session, not in
+   dream. (Origin: VP-17537 stayed "blocked" in agent answers for 4 days after VP-17538's walk
+   made its E2E runnable; dream audited both tickets the same night without connecting them.)
+
 1. Read `storage/short_term_memory/_index.md`, `long-term-memory/_index.md`, `archive/_index.md`, `journal/_index.md`
 2. Determine the **last dream date**: newest `logs/dream-*.md` filename. If none, use 30 days ago.
 3. Build the working set — only these files get their bodies read:

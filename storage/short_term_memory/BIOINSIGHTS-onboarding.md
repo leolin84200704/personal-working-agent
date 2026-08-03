@@ -3,6 +3,10 @@ id: BIOINSIGHTS-onboarding
 type: stm
 category: emr_integration
 status: active
+relations:
+  unblocked_by: []
+  sibling: [BIOINSIGHTS-SFTP-KEY]
+unblock_when: "BioInsights grants account perms (test: sftp key-auth to sftp.bioinsights.com:2022 then ls / — currently auth OK but ls/stat/put all fail); waiting on Thomas reply to 2026-07-21 email"
 created: 2026-07-21
 updated: '2026-07-27'
 links:
@@ -76,7 +80,7 @@ tags:
 - key-auth
 - vendor-onboarding
 summary: 'New EMR vendor BioInsights — first key-based (non-password) SFTP integration.
-  Code shipped: emr-v2 PR #275 merged to main 2026-07-20 (branch feature/leo/bioinsights-sftp-key,
+  Code shipped: emr-v2 PR
   no VP ticket yet): migration 20260720_add_sftp_private_key adds nullable sftp_private_key
   to ehr_vendors + ehr_integrations and private_key to emr_sftp_source; order fetch
   accepts key-only credential rows (VP-17385 drift check extended to privateKey);
@@ -86,7 +90,7 @@ summary: 'New EMR vendor BioInsights — first key-based (non-password) SFTP int
   user vibrant-wellness, ed25519 keypair (PPK v3 unencrypted at ~/Downloads/bioinsights_key.ppk;
   emr-v2 needs OpenSSH PEM — convert with puttygen). 2026-07-21 verified from local:
   auth OK, but account has ZERO perms (ls/stat/put all fail) — vendor-side provisioning
-  incomplete. Migration verified applied prod+staging; PR #275 in both deployed images;
+  incomplete. Migration verified applied prod+staging; PR
   33 existing password vendors unaffected; AKS pod egress to bioinsights:2022 OK.
   2026-07-21 email sent to Thomas (perms + dir layout + sample HL7). STATUS: waiting
   on vendor reply.'
