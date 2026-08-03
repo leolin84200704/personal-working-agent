@@ -32,7 +32,7 @@ Case-specific "always check X" rules do not scale. This protocol replaces them w
 |---|---|---|
 | Behavioral / preference | L1 (CLAUDE.md) | "How should I report?", "Branch naming?" |
 | Background / pattern | L3b (LTM) | "How do we route Cerbo results?", "What's the MSH-6 convention?" |
-| **Current state of a ticket** | **L3b (STM) + L4 verification** | "What's the status of VP-x?", "What's next for VP-y?", "Did we push the fix?" |
+| **Current state of a ticket** | **L3b (STM) + L4 verification + `relations` sweep** | "What's the status of VP-x?", "What's next for VP-y?", "Did we push the fix?", "還差什麼" |
 | Why / how-decided | L3a (journal) → STM Decisions section | "Why Option A over B?", "What did we rule out?" |
 | Designing next iteration | L3a + L3b + L4 | "Redesign the retry logic — what failed before?" |
 | One-off chat | None | "ok", "got it" |
@@ -47,6 +47,14 @@ Case-specific "always check X" rules do not scale. This protocol replaces them w
 4. Reconcile: if STM is out of sync, **fix the STM in the same turn**, then answer.
 
 The nightly dream runs `scripts/reconcile-jira.py --apply` to do this in bulk, but per-question verification is still required — dream may not have run (see Staleness check).
+
+### The blocked-verdict rule
+
+A `blocked`/waiting verdict is a claim about the world *at write time* — it has a shelf life, and its expiry is usually caused by a *different* ticket shipping. Verifying the asked-about ticket alone misses this (real case, 2026-08-03: VP-17537's E2E stayed "blocked on charging ACH" in my answers for 4 days after VP-17538 — whose payment-method walk removed exactly that blocker — went live; I verified VP-17537's Jira status but never re-tested the blocker, and repeated the stale verdict to Leo twice. VP-17538 was even in VP-17537's `links:`, buried among 55 untyped auto-links).
+
+1. **Write side**: any blocked/waiting/deferred status MUST carry `unblock_when:` in frontmatter — a one-line testable condition plus how to test it. Causally-tied tickets get `relations:` edges (`unblocked_by` / `blocks` / `sibling`) — hand-curated, 0–3 per key, distinct from the auto-generated `links:` noise.
+2. **Read side**: before answering a status question about X ("VP-x 做完了嗎", "還差什麼"), also read every ticket in X's `relations` whose `updated:` is newer than X's — a moved dependency invalidates cached verdicts.
+3. **Repeat side**: never repeat a blocked verdict to Leo without re-running its `unblock_when` test in the same turn. If the test is cheap (one curl, one query), just run it; if expensive, state the verdict's date and that it is unverified.
 
 ### Staleness check (session start — mandatory)
 
@@ -104,3 +112,4 @@ Cap ~200 lines. Journal is the compressed reasoning trace, not a play-by-play �
 2. Writing LTM directly mid-session → journal, let dream distill
 3. Case-specific "always check X" rules in CLAUDE.md → instances belong here
 4. Assuming the dream pipeline ran → Staleness check
+5. Repeating a cached "blocked" verdict after its dependency shipped → Blocked-verdict rule (`unblock_when` re-test + `relations` sweep)
