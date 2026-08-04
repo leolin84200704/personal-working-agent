@@ -50,11 +50,25 @@ ORDER BY received_time DESC;
    找到的 code 一律附上 `isOrderable` 與 `priceVa` 欄位值作為證據
 
 ### Step 4: Type B 處理 — 手動 Payment + Order Recovery
-對每筆 Type B 記錄：
+
+> 錢的操作不靠判斷力自律，靠確定性閘門。以下 4.0/4.5 的每個 guard 都對應真實事故：
+> 6517/18/20（2026-07-02）「失敗」的原始 attempt 其實已在 server 端建單，缺 pre-check 差點重複下單；
+> 2xx 無 transaction id 曾被當成功導致無聲未收費出貨（VP-17411）。
+
+**Step 4.0 — 收費前置檢查（每筆，任一不過就跳過收費、標「需人工」）：**
+1. 重新 SELECT 該 row，確認仍 `parse_finished=0` 且 `payment_id IS NULL` — 不信 Step 1 的快照
+2. 查 core ground truth（`lis_core_v7.sample` + `order_info`，本機連不上就從 AKS pod 內查；
+   **不可用 `lis_emr.emr_sample` mirror 判斷**）：該 patient 在 order 時間窗內有無既有 active
+   sample。有 → 上次 attempt 可能已成功，絕不再收費，記錄 sample_id 標人工核對
+3. 檢查 recovery ledger（`DailyJob/hl7_fail/recovery_ledger.jsonl`，一行一 JSON
+   `{"id":..., "date":..., "step":...}`）：該 hl7_file_input id 已出現過 → **永不再收費**，
+   標「曾嘗試過，需人工」。這個檔案是防重複收費的最後防線 — 就算流程中斷重跑也擋得住
+
+對每筆通過 4.0 的記錄：
 1. 從 order_input JSON 提取 clinic_id 和 amount (total)
 2. 用 sftpDir 反查 order_clients 取得 customer_id；如果 order_clients 無資料，用 ehr_integrations WHERE clinic_id = X AND status = 'LIVE' 取第一筆
 3. 產生 JWT token (role="clinic", getTokenCustomerPM=true)，呼叫 getAllPaymentMethods
-4. 用取得的 payment_token + customer_token 呼叫 transactionPay:
+4. **先把 `{"id", "date", "step":"pre-charge"}` 寫入 recovery ledger**，再用取得的 payment_token + customer_token 呼叫 transactionPay:
    ```json
    {
      "account_id": customer_id, "account_type": "customer", "amount": total,
@@ -63,9 +77,25 @@ ORDER BY received_time DESC;
      "payment_token": X, "customer_token": Y, "new_sample": true
    }
    ```
-5. Payment 成功後，用原始 order_input 更新 sampleId/payment_id/julienBarcode 為 transactionPay 回傳值，產生 JWT (role="customer") 呼叫 Order API
-6. Order 成功後 UPDATE hl7_file_input: parse_finished=1, sample_id=新值, payment_id=新值, julien_barcode=新值, sample_id_payment=新值, retry_num=0
+   - **成功的定義 = 回應帶非空 `payment_transaction_id`**（VP-17411 規則）；2xx 但沒有
+     transaction id 一律當失敗，不得進下一步
+   - **結果不明（timeout / 連線中斷 / 無回應）→ 當作「可能已收費」處理**：不重試、不換卡再試，
+     標「結果不明，需人工向 charging 查證」（indeterminate 規則，VP-17538）
+   - 每筆每日**最多一次**收費嘗試，失敗不換 payment method 重刷（換卡重刷是人工決策）
+5. Payment 成功後，**先 neutralize 原始 row**（UPDATE parse_finished=1, error_detail 加註
+   `[RECOVERY-IN-PROGRESS {date}]`）防 retry-rescan 把原單再處理成第二筆，然後用原始
+   order_input 更新 sampleId/payment_id/julienBarcode 為 transactionPay 回傳值，產生 JWT
+   (role="customer") 呼叫 Order API。Order API 失敗 → 保持 parse_finished=1（錢已收，
+   絕不能讓原單被自動重跑再收一次），標「已收費未下單，需人工」+ 完整 transaction id
+6. Order 成功後 UPDATE hl7_file_input: sample_id=新值, payment_id=新值, julien_barcode=新值, sample_id_payment=新值, retry_num=0（parse_finished 已在上一步設 1）
 7. 如果任何步驟失敗，記錄錯誤但繼續處理下一筆
+
+**Step 4.5 — 每筆 post-verification（過了才准在報告寫 recovered）：**
+1. 查 core（同 4.0 的連線）：該 patient **恰好一筆**新 active sample，sample_id 與 Order API
+   回傳一致；發現兩筆以上 active → 重複下單事故，寫進報告最上方 FLAG 區塊並停止處理後續 Type B
+2. 重新 SELECT hl7_file_input 確認欄位都已寫回
+3. ledger 補一行 `{"id", "date", "step":"verified", "sample_id":...}`
+4. 任一驗證不過 → 報告標 `FLAG: recovery unverified`，不算 recovered
 
 ### Step 5: 產出報告
 寫入 `/Users/hung.l/src/vibrant-america-working-agent/DailyJob/hl7_fail/triage_{YYYY-MM-DD}.md`，格式：
