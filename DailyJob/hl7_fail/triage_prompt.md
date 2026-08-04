@@ -7,7 +7,8 @@
 - Order API (prod): POST https://www.vibrant-america.com/lisapi/v1/portal/order/orderTest/order
 - Payment Methods: GET https://www.vibrant-america.com/lisapi/v1/charging/paymentMethod/allSharedPaymentMethods
 - TransactionPay: POST https://www.vibrant-america.com/lisapi/v1/charging/transaction/pay
-- Bundle Mapping: GET https://api.vibrant-wellness.com/v1/pricing/item/promotion/getLegacyBundleMapping?currency=usd
+- Bundle Mapping (VACP only): GET https://api.vibrant-wellness.com/v1/pricing/item/promotion/getLegacyBundleMapping?currency=usd
+- Package Price Mapping (VATEST/VAREQUISTION): GET https://api.vibrant-wellness.com/v1/pricing/item/price/getLegacyPackagePriceMapping?currency=usd
 - JWT prod secret: 從 /Users/hung.l/src/EMR-Backend/src/main/resources/dependencies/orderApi.yaml 的 jwtSecret.prod 讀取
 - Bundle mapping API token: 從同檔案 orderApiToken.prod 讀取
 
@@ -25,10 +26,28 @@ ORDER BY received_time DESC;
 - **Type B (order failure):** `order_input` 有值 且 `emr_code_not_found` 為 NULL → payment/order 失敗
 - **Type C (parse failure):** `order_input` 為 NULL 且 `emr_code_not_found` 為 NULL → HL7 parse exception
 
-### Step 3: Type A 處理 — VACP/Code 分析
-1. 呼叫 bundle mapping API，搜尋每個 emr_code_not_found 的 panelId（VACP 後面的數字）
+### Step 3: Type A 處理 — Code 分析（依 prefix 選 API，不要全部用 bundle mapping）
+
+> 2026-07-10 教訓：舊版此步驟對所有 code 都查 bundle mapping，導致 VATEST79（05-22）和
+> VATEST2287 等 6 個 code（07-09）被誤診為「not found in mapping」— 用對的 API 重查後全部
+> 存在，真因是 isOrderable=false / priceVa=-1（catalog 設定缺口）。lookup path 已對照
+> emr-v2 `obr-parser.service.ts` / `order-mapping-cache.service.ts` 與 Java `ParseHL7.java` 確認。
+
+1. 把 `emr_code_not_found` 以逗號拆開，**每個 code 依 prefix 分別查**（同一筆內 prefix 可能混雜）：
+   - **`VACP{panelId}`** → Bundle Mapping API，比對 `oldOrderTypeId == panelId`
+   - **`VATEST{orderTypeId}`**（單項測試）→ Package Price Mapping API（dict key 是數字 id），
+     比對 `orderTypeId`；找到後**必須檢查 `isOrderable === "true"`** — 存在但 isOrderable=false
+     會被 parser 當作 not found，落入 emr_code_not_found 的方式跟真的不存在完全一樣
+   - **`VAREQUISTION{groupId}`**（panel/requisition）→ 同 Package Price Mapping API，但用
+     lowercase EMR code 比對 `emrCodeToPackagePriceMap`；同樣有 isOrderable 閘門
+   - 其他 prefix → 兩個 API 都查過再下結論，並在報告標記「未知 prefix」
 2. 用 sftpDir 反查 order_clients → ehr_integrations 取得 clinic_name, clinic_id, customer_id
-3. 記錄：哪些 code 找不到、哪些存在但未分配給該 customer/clinic
+3. 記錄時**區分三種診斷**（處方不同，寫錯會把 PM/order team 帶去錯的方向）：
+   - `code 不存在` → 需要 pricing 註冊新 code
+   - `存在但 isOrderable=false / priceVa=-1` → catalog 設定缺口（開 isOrderable + 補 VA 價，
+     或確認該測試應改走 panel）——**不是**註冊新 code
+   - `存在且 orderable，但未分配給該 customer/clinic` → 分配問題
+   找到的 code 一律附上 `isOrderable` 與 `priceVa` 欄位值作為證據
 
 ### Step 4: Type B 處理 — 手動 Payment + Order Recovery
 對每筆 Type B 記錄：
