@@ -3,7 +3,7 @@ id: fhir-api
 type: ltm
 category: emr_integration
 status: active
-score: 1.0395
+score: 1.089
 base_weight: 1.0
 created: 2026-06-06
 updated: 2026-06-06
@@ -27,6 +27,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
 - VP-15952
@@ -82,6 +83,9 @@ links:
 - VP-17537
 - VP-17538
 - VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
 - emr-integration
 - repos
 tags:

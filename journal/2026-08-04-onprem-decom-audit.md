@@ -2,7 +2,7 @@
 date: 2026-08-04
 slug: onprem-decom-audit
 related_tickets: [VP-17593, VP-17594, VP-17595]
-distilled: false
+distilled: true
 ---
 
 # On-prem decommission audit -> 3 fixes same day, plus VEJO integration deletion

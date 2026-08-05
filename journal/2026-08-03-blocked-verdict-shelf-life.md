@@ -2,7 +2,7 @@
 date: 2026-08-03
 slug: blocked-verdict-shelf-life
 related_tickets: [VP-17537, VP-17538]
-distilled: false
+distilled: true
 ---
 
 # VP-17537 closeout + Leo's process correction: blocked verdicts need edges and expiry tests

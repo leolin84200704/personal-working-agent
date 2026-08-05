@@ -25,6 +25,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
 - VP-15952
@@ -67,9 +68,12 @@ links:
 - VP-17537
 - VP-17538
 - VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
 - emr-integration
 - fhir-api
-score: 0.5917
+score: 0.5656
 ---
 
 # BIOINSIGHTS-SFTP-KEY — key-based SFTP auth support

@@ -2,7 +2,7 @@
 date: 2026-08-04
 slug: dob-sex-interception-and-address-chain
 related: [VP-17544, VP-17587, VP-17584, VP-17598, VP-17591, VP-17480]
-distilled: false
+distilled: true
 ---
 
 # DOB/Sex 攔截上線，與一條追了四層服務的 address 鏈

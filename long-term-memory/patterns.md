@@ -1331,3 +1331,117 @@ emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘�
   import／條件分支下不構成對 X 的驗證。
 - 退役決策寫進 README 有複利：這次「MiniLM 還會不會用到」的問題，README 早已記載退役理由與
   English-only 弱點，30 秒就定方向。
+
+## 【家族蒸餾 2026-08-04】「某環節看起來正常，但沒驗證它真的在做我以為的事」
+
+一天內同一形狀踩了四次（VP-17544 + VP-17591）。既有的 line 17（安靜的觀測窗）、line 51
+（grep 範圍）已記過兩種變體，但沒能救我 —— 因為當時沒把它們當成**同一個 family**。
+四個變體，判準都是「打開它真正的輸出/來源看一眼」：
+
+1. **`void somePromise()` 丟棄的是回傳值，不是 rejection** —— unhandled rejection 讓 Node
+   結束 process，於是一個「失敗也不該影響主流程」的告警旁支反而會殺掉服務。
+   → 不 await 的 promise 一律 `.catch()`。（是自己寫的測試 `mockRejectedValue` 讓 jest worker
+   crash 才抓到。）
+2. **搜尋 flag 用錯不會報錯，只會靜默降級成另一個搜尋** —— `rg -r` 是 `--replace`，
+   `-rn`/`-ril` 把後續字母吃成 replacement 值並停用 `-i`/`-l`/`-n`。一天三次：一次把自己的 bug
+   誤診成終端顯示層問題、一次配 `2>/dev/null` 製造假的「0 hits」、一次漏掉 `Slack.java`。
+   同族：**`git grep` 的 `\|` alternation 靜默匹配不到任何東西 —— 用 `-e` 逐個 pattern**
+   （2026-08-04 差點據此結論「transformer 沒有 kafka code」）。
+   → search flag 分開寫；`2>/dev/null` 會把「工具用錯」偽裝成「查無資料」。
+3. **repo 裡的部署設定不是 runtime 真相，兩個方向都會騙你** —— 同一天違反三次：
+   `MY_POD_NAME` 不在任何 manifest 但 prod 5370/5372 筆有值（差點據此開錯票、還為了消 guard
+   警告移除欄位寫入）；`SENTRY_DSN` 佔位符在但 SDK 從未安裝；`deployment.yaml` 宣告 `secretRef`
+   但那個 secret **根本不存在**（還照著叫別人去填）。→ prod 一個 `COUNT` 就能推翻三段推理。
+4. **修改看起來會生效，實際那個值不離開服務** —— 修「資料沒傳到下游」的 bug 之前，
+   **先打開送出去的 DTO/payload 型別確認欄位存在**，再去追它為什麼是空的。
+   VP-17591 直到 merge + deploy + live 驗證通過**之後**才發現 `PlaceOrderRequest` 沒有
+   address 欄位。**沿路每個訊號都是綠的，因為那些訊號測的是「我改的東西有沒有正確運作」，
+   不是「我改的東西是不是問題所在」。**
+
+（1/2/3 已進 factory `ENGINEERING-LESSONS.md` #17/#18/#19，2026-08-04 merge；4 為候選未定案。）
+
+### 找「既有機制」時先列實作形態的同義詞，並考古前一代（VP-17544 最貴的一次繞路）
+
+搜 slack/webhook/alert/pagerduty 全空 → 寫完整個 Slack notifier 才被 Leo 一句
+「我以前確實有 sentry message 傳到 C08C59A6TMF」推翻。漏搜的兩層根因：
+- **關鍵字集合不足** —— 沒把 error-tracking 當成告警管道。（同型：beta program 的管理 API 叫
+  `FeatureAccess`，不叫 beta。）
+- **搜錯 source** —— 只搜 `lis-backend-emr-v2/src/proto`，那是 **subset 副本**
+  （實測 `Object.keys(service)` 確認零個 `Feature*` RPC）。
+  → **consumer repo 的 proto 副本不能用來回答「這個 service 有什麼 RPC」。**
+
+→ Step 2 探索時就問「**這個能力在前一代服務是怎麼做的**」，並把 `SENTRY_DSN` /
+`ALERT_WEBHOOK_URL` 這類佔位符當成**考古線索**往下追，而不是記成「閒置設定」。
+補「缺失」能力前先考古；「要新增」與「做不到」是兩件事，寫成 finding 時要區分
+（把前者寫成後者，讀者會理解成不可行）。
+
+### 驗證判準的錯誤方向系統性偏向「通過」（VP-17591, 2026-08-04）
+
+live-verify 的 SQL 把 UTC 22:30 誤寫成 15:30，撈到一整天的舊成功 row；只因為另一個 bug
+（`finished=true` vs Prisma raw 的 `finished=1`）才沒誤報。那是運氣不是設計。
+- 改用 **`id > baseline`**（單調遞增、無時區語意）取代時間窗。
+- **最便宜的自檢：「如果現在什麼都沒發生，這個判準會不會通過？」**
+- rolling deploy 的完成判準要綁「**新 pod 的身份 + 就緒**」，不能用
+  `deployment.status.readyReplicas`（rolling update 期間計入舊 pod）—— 這正是 factory lesson
+  第 12 條，寫完還踩。
+- **on-prem pod 是否已更新，只能靠 DB 的 `hl7_file_input.last_update_pod_name`**
+  —— 那個 cluster 不在本機 kubeconfig。兩次 deploy 都靠新 hash 出現在真實訂單上證明
+  （VP-17544 `546b6869b8`、VP-17591 `777c956c9b`；AKS 側當時是 `844b49cc7f`）。
+
+### 沒送訊息的 live 連線 preflight（VP-17593，可複用）
+
+Leo 問「有實際測過嗎」時，在**不觸發真實副作用**的前提下閉合驗證缺口：
+`kubectl exec` 進 running pod → 確認 env 真的注入（url/topic/connstr 長度）→ 從 pod 內用
+kafkajs 做 SASL admin `connect` + `fetchTopicMetadata` → 證明 AUTH + REACH + topic 存在。
+（fetch 後的 ECONNRESET 是 Event Hub idle-close 雜訊，不是失敗。）
+**claim 要 live-config / live-call 證據，不能只靠 schema parity 推理。**
+
+### 共用 repo 上有並行 agent/job — commit 前確認當前 branch（2026-08-04 實踩）
+
+commit 一度落到背景 job checkout 的 `bugfix/leo/triage-prompt-step3-prefix-lookup` 上，
+而 `git push origin main` 推的是不含它的舊 main —— **卻印出 "STM pushed"，因為 `| tail`
+吃掉了 exit code**。管線末端的 `| tail` / `| head` 會吞掉前一段的失敗。
+
+### blocked 判定有保存期限（VP-17537, 2026-08-03 Leo 流程糾正）
+
+回報「這張票 blocked」前必須**重測 blocker**。VP-17537 的 blocked 理由（charging ACH 失敗）
+早在 4 天前就被 sibling ticket VP-17538 的 payment-method walk 解掉，但答案照抄 7/29 的 STM verdict。
+Leo：「實際上是你沒有去看其他的相關 ticket issue，對大方向不了解」。四部修正（均已 PR）：
+1. `blocked` status 必須帶**可執行的** `unblock_when:`（寫成一個測試，不是一句敘述）；
+2. 手工維護的 `relations:`（`unblocked_by` / `blocks` / `sibling`）與自動 `links:` 分離
+   —— 55 條沒有型別的 flat `links:` 不會給你「該去讀哪張」的理由；
+3. dream Phase 0.5 dependency propagation（shipped ticket → 在 dependents 上插 RE-CHECK marker）；
+4. status 類問題的檢索要 sweep `relations:` 中 `updated:` 更新的票。
+⚠ YAML 註解在 STM frontmatter 撐不過 `memory_scoring.py` 的 PyYAML round-trip —— schema 說明
+只能放 factory template。
+
+### 便宜的 payload 證明：response echo 一個只有我方持有的值（VP-17537）
+
+要證明「我送出的 payload 真的含某欄位」而看不到 wire：charging 在 place-order 前就 mint 了
+`julien_barcode 2608036004`，而 place-order 的 **response 回顯了它**；order-management 從不呼叫
+charging → 這個值只可能來自我們的 payload。**找一個下游不可能自己知道的值，看它有沒有回聲。**
+
+### 提出「需要新機制」前，先確認既有機制是否已覆蓋未來的案例（VP-17598, Leo 判斷勝出）
+
+我把一個**歷史清理**需求包裝成**架構缺口**（「event-time 告警無法發現已卡住的 backlog，
+所以需要週期性 sweep」）。但既有的 VP-17533 已把所有 throw 收攏進 `markFailure`，
+未來每筆 retry 耗盡都會即時告警、不會再累積 → 剩下的 90 筆只是考古。
+→ 區分「**過去的殘骸**」與「**未來還會再發生**」；只有後者才是機制缺口。
+
+### Scope discipline：修自己的，其餘交出去，即使修起來很容易（2026-08-04）
+
+VP-17594（setting module）已寫好 PR #552，Leo 判定非我方 scope 並直接關閉（「不需要管」）。
+與 [[feedback_defect_found_must_be_ticketed]] 的 OTHER-team 分支同一條：交診斷、不自己開票、
+不順手修。VP-17591 的 billing 元兇同樣處理。
+
+### Cross-ticket review 2026-08-04（marker 2026-07-31 後 7 張 completed：VP-17537, VP-17412, VP-17544, VP-17587, VP-17591, VP-17593, VP-17595 + VEJO-DELETION-20260804）
+
+三個橫跨這批的系統性樣態：
+1. **同一 root shape 在一天內重複四次**（見上方「家族蒸餾」）—— 個別 lesson 各自記錄過但沒被
+   當成 family，所以沒有一條救得了下一條。**把同形失誤合併成一條有名字的 family，比多記三條
+   獨立 lesson 有用。**
+2. **既有機制被「遷移遺失」而非「從未存在」**是這批的重複主題：Sentry 上報（emr-v2 遷移掉）、
+   setting.service 的 Azure leg（env 從未 provision）、result consumer 的 on-prem fallback
+   （退役後變成遮蔽 cloud 失敗的死路）。→ 面對「這個能力不存在」的結論，先假設它**曾經存在**。
+3. **Leo 的判斷在這批贏了三次**（沿用 Sentry project 49、90 筆歷史略過、VP-17594 交出去），
+   共同形狀都是**我把「乾淨的解法」排在「立刻能通的解法」前面**，或把別人的 scope 攬進來。

@@ -5,8 +5,12 @@ category: emr_integration
 status: blocked-on-other-team
 relations:
   unblocked_by: []
-  sibling: [VP-17537, VP-17538]
-unblock_when: "BestDeal knows panel 18019 (test: POST /v1/bestdeal/GetBestDealSuggestion with bundleId 18019 no longer 400s non_existing_discount_panel_ids); then hl7_file_input 6735 self-heals via retry-rescan — verify parse_finished=1"
+  sibling:
+  - VP-17537
+  - VP-17538
+unblock_when: 'BestDeal knows panel 18019 (test: POST /v1/bestdeal/GetBestDealSuggestion
+  with bundleId 18019 no longer 400s non_existing_discount_panel_ids); then hl7_file_input
+  6735 self-heals via retry-rescan — verify parse_finished=1'
 created: 2026-07-29
 updated: '2026-07-29'
 links:
@@ -27,6 +31,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
 - VP-15952
@@ -70,6 +75,9 @@ links:
 - VP-17537
 - VP-17538
 - VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
 - emr-integration
 - fhir-api
 tags:
@@ -87,7 +95,7 @@ summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck pa
   Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
   team scope) — hand-off package given to Leo.'
 jira_status: n/a
-score: 0.7227
+score: 0.6908
 ---
 
 # hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap

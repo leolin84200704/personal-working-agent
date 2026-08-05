@@ -1,10 +1,13 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-01
+> Last updated: 2026-08-04
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-04 | dob-sex-interception-and-address-chain | VP-17544, VP-17587, VP-17584, VP-17598, VP-17591, VP-17480 | true |
+| 2026-08-04 | onprem-decom-audit | VP-17593, VP-17594, VP-17595 | true |
+| 2026-08-03 | blocked-verdict-shelf-life | VP-17537, VP-17538 | true |
 | 2026-07-31 | minilm-removal | (repo maintenance, no ticket) | true |
 | 2026-07-29 | beta-e2e-cancel-gateway | BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500 | true |
 | 2026-07-29 | vp17532-availability-vs-booked-events | VP-17532, VP-16850, VP-17190, VP-16499, VP-16410 | true |

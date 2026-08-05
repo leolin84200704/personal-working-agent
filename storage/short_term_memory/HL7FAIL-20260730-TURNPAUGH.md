@@ -23,6 +23,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
 - VP-15952
@@ -65,6 +66,9 @@ links:
 - VP-17537
 - VP-17538
 - VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
 - emr-integration
 - fhir-api
 tags:
@@ -85,7 +89,7 @@ summary: 'hl7_file_input 6746 (order_28984_1785429636_83.hl7, /turnpaughemr/orde
   clinic 13505, active, no duplicates (core-verified). Leo direct request, no Jira
   ticket; requested_by=customer_not_found-fix-20260731.'
 jira_status: none
-score: 0.7726
+score: 0.7384
 ---
 
 # HL7FAIL-20260730 — Turnpaugh customer_not_found (Vincent Grove)

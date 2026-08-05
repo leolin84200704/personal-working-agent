@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.089
+score: 1.1385
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -27,6 +27,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
 - VP-15952
@@ -81,6 +82,9 @@ links:
 - VP-17537
 - VP-17538
 - VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
 - fhir-api
 tags:
 - emr
@@ -1070,3 +1074,100 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
   `KAFKA_CLOUD_SASL_SECRET_NAME`），但 live prod ConfigMap **沒有這兩個 key**，靠 code 內建 default
   才會動。空字串的 `KAFKA_CLOUD_SASL_PASSWORD` 仍留在 CM（設計上會 fall through 到 vault，無害）。
   改 ConfigMap template 的 PR merge 掉 ≠ cluster 的 ConfigMap 變了 —— 要另外 apply。
+
+## HL7 patient-demographics 攔截：DOB / Sex / Address 的真實語意（VP-17544 / VP-17591, 2026-08-04 prod live）
+
+三個欄位是上游 eligibility 完整性檢查的同一組（DOB + gender + address），但在 emr-v2 的
+HL7 進單路徑各有不同的既有缺陷：
+
+- **Sex 缺失會被靜默偽造成 `Male`** —— `patient-detail-parser.service.ts:128` 把任何非
+  f/female 的值（**含空值**）normalize 成 `'Male'`。下游那個 `isBlank(patient_gender)` 檢查在
+  HL7 路徑因此是**死碼**。這不是 silent failure，是 silent **wrong answer**。
+  → 任何 Sex 檢查都必須讀 normalize **之前**的 raw PID-8。
+  接受白名單（Leo 定，case-insensitive）：`F/M/Female/female/male/Male`；`O/U/Other` 一律擋並告警。
+- **DOB 缺失被貼成 `emr_code_not_found`** → 依 triage 表那是「丟給 Order team 建 bundle」的分類，
+  owner 全錯，然後靜默耗盡 retry。DOB 的「可辨別」標準 = 8 碼須為真實且非未來的日期
+  （現況 `19850732` 這種爛值會原樣通過，`calculateAgeFromDob` 回 0）。
+- **Address 根本不由 emr-v2 送出** —— `PlaceOrderRequest` DTO **沒有 address 欄位**，只送
+  `patient_id`；address 由 billing 從病人記錄自行組出。修 emr-v2 內部的 address 挑選邏輯
+  對「下游收到空 address」的症狀**無效**。
+
+### Address 的四層責任鏈（VP-17591 逐層排除，每層判準都不同）
+
+| 層 | 對「病人有效 address」的判準 |
+|---|---|
+| emr-v2 place-order | 不送 address（DTO 無此欄位） |
+| order-management `message.go:618` | `IsPrimaryAddress`，但有 `[0]` fallback；且是 Kafka addon |
+| billing concierge `:553` | `address_type == shipping`，退到 provider office address |
+| billing `buildCompletePatientInfoMap:4433` | `shipping`，**不看** primary |
+| coreSamples `get-patient-by-id` → `readPatient` | 有 `include: { patient_address: true }` |
+
+**跨服務不能外推「哪個欄位決定 X」** —— 三個服務三種判準。
+`is_primary_address` 對病人地址**已實質廢棄**：833,404 筆 `shipping/primary=0` vs
+251,608 筆 `primary=1`，最近建立的全是 0。
+2026-08-04 未結案的殘餘：billing 拿到的 `patient.getPatient_address()` 是空的（payload 的
+`country:"238"` 正是該 method 的預設值 → 迴圈沒進去），資料在 core 且 coreSamples 有 include
+→ 執行期問題（反序列化 / 部署版本 / CoreService 指向），**元兇在 billing，非 emr-v2 scope**。
+
+### NY 判定只能信 HL7（Leo 業務規則，比技術 fallback 更嚴）
+
+需要判別 NY 的測試（Gut Zoomer 等）**一律只以 HL7 檔案為準，沒有就連 DB 都不看，直接拒單**。
+理由是財務風險方向性：病人搬家後 DB 的舊地址會讓 $80 收錯或漏收，風險落在我們身上。
+實作 = 拆兩個欄位：`patient_state`（檔案→DB fallback，寄件用）與
+`inbound_patient_state`（**只有檔案**，NY 判定用，無條件設定含 undefined，讓「這張訂單沒告訴我們」
+表達得出來）→ `decideGzNy` 走既有 `NY_ADDRESS_REQUIRED` 拒單。
+只改 HL7 路徑；`assembleWithNyRouting`（API 進單）不動 —— 那條路呼叫方不傳 address 且有
+eligibility check 守著。
+
+### HL7 訂單失敗告警 = Sentry，不是 Slack webhook（VP-17544 / VP-17587）
+
+- Java 舊路徑：`EmrOrderTask/ParseOrder.java:355-360` 在 `retryNum == 1` 時
+  `Sentry.captureException(new EmrOrderException(...))` → self-hosted **project 49**
+  （`sentry1.vibrant-america.com`）→ alert rule → Slack `C08C59A6TMF` (`#emr-orders-bot`)。
+- **emr-v2 遷移時把整個 Sentry 上報掉了**（package.json 零 `@sentry/*`，只剩 ConfigMap 佔位符）。
+  2026-08-04 補回：`src/config/sentry.ts` 的 `initSentry` 在 `NestFactory.create` 之前呼叫，
+  fail-closed（無 DSN → 不 init → 不報告）。**沿用 project 49**（Leo 決定）：Sentry 按 exception
+  type 分組，Java `EmrOrderException` vs emr-v2 `EmrOrderAbandonedError` 天生不同 issue；
+  Java 用 `setTag("environment", ...)` 而非原生欄位，與我們的原生 `environment` 不衝突。
+- DSN 只進 cluster ConfigMap（`kubectl patch`，prod 149→151 keys），**未寫入任何版控檔案**。
+- 告警觸發點 `next === 0`（retry 耗盡當下）與 Java 的 `retryNum == 1` 是同一時刻。
+- **Message 要穩定不含 id** → Sentry 按 class grouping，per-order 值進 tags/extra。這是 Sentry
+  勝過裸 webhook 的關鍵：grouping / dedup / rate-limit 免費。
+- **event-time 告警不掃既有 backlog**：2026-08-04 查到 90 筆 `parse_finished=0 AND retry_num=0`
+  （2025-02 ~ 2026-07，85 筆從未下單，全部無 `last_error`），rescan 條件是 `retry_num>0` →
+  永遠撿不到。VP-17598 開了又 Inactive —— 因為 VP-17533 已把所有 throw 收攏進 `markFailure`，
+  未來不會再累積，清歷史只是考古（Leo 判斷）。
+
+## on-prem Kafka / 本地依賴退役（2026-08-04，VP-17593 / VP-17594 / VP-17595）
+
+infra 要求當日拔除所有 local DB / Kafka / Redis + CDC topic `153_*`（60.2）依賴。
+
+- **emr-v2 result consumer**（`KafkaReportFinishedListenerService`）：VP-17561 起 cloud 為主，
+  on-prem 60.9/10/11 為 fallback 且是 **hardcoded default**。退役後 fallback 是死路且會遮蔽
+  cloud 失敗 → 改 cloud-only、fail-loud；`KAFKA_CLOUD_ENABLED=false` 直接 throw
+  （`ENABLE_KAFKA_CONSUMER=false` 才是刻意的關閉開關）。理由：靜默不消費正是已知的
+  result-delivery 失效模式。prod 指紋 log：
+  `✅ Kafka consumer running on cloud cluster, topic=general-sample-events`，
+  group `emr-result-consumer-cloud-production`。
+- **transformer 公開預約驗證信**（`AppointmentNotificationEmailService`）：原本**只**發到
+  on-prem carlos brokers（topic `Notification-Email-Template`），失敗即 throw →
+  `public-booking.service.ts:727` 回 400 → 病人拿不到驗證碼。這是這次 audit 唯一 user-facing
+  的斷點。改走共用 `kafka-azure-notification.client.ts`（hub `vibrant-notification-events`，
+  topic 由 `Azure_notification_topic` = `notification-email-template`），與 `EmailService`
+  同 hub、**相同 Postmark message schema**（VP-16921 已在 prod 證明）。
+  ⚠ **舊 on-prem topic `Notification-Email-Template`（大寫）與 Azure 的
+  `notification-email-template`（小寫）是不同 consumer，不要「統一」它們。**
+- **transv2 staging 與 prod 共用同一個 notification hub + topic**（與 VP-16921 發現一致）
+  → 從 staging 任何一次 produce 都會經 prod consumer 寄出**真實 email**。E2E 只能用自己的信箱，
+  絕不隨手 test-send。
+- **ConfigMap 注入方式決定清理安全性**：emr-v2 用 `envFrom`（整包注入）→ 刪 key 安全；
+  **transv2 用 per-key `configMapKeyRef` → 刪掉被引用的 key = `CreateContainerConfigError`**。
+  清理前必須先確認注入方式。且 `KAFKA_BROKER_carlos*` 仍被剩下的 dual-publish 服務讀取，
+  transv2 的 carlos keys 在那些 local leg 移除前必須留著。
+- **repo grep 不足以做這種 audit** —— 兩個最嚴重的發現都是 live ConfigMap（kubectl）看出來的：
+  transv2 prod 仍走 carlos brokers 跑真實流程；setting.service 的 Azure leg 用了
+  **從未 provision 的 `Azure_kafka_host_gen`** → connect 在兩個 send 之前就 throw →
+  那些 setting-update 事件在 prod **早就全部遺失**，不是退役才壞的（VP-17594，Leo 判定非我方 scope）。
+- 2026-08-04 未解殘留：emr-v2 + transv2 的 **staging DB 仍在 192.168.60.11**（退役 blocker，
+  待 infra 決策）；ClickHouse 192.168.62.85 與 CDC feed 的 ownership 未確認；
+  transv2 還有 `DATABASE_URL_LIS` 死 key、60.6 RPC、192.168.10.153 report URL。
