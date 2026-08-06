@@ -7,7 +7,7 @@ score: 1.1873
 base_weight: 0.9
 urgency: 3
 created: 2026-07-29
-updated: 2026-07-29
+updated: 2026-08-04
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -62,7 +62,6 @@ links:
 - VP-16785
 - VP-16786
 - VP-16787
-- VP-16850
 - VP-16859
 - VP-16921
 - VP-16934
@@ -83,13 +82,17 @@ links:
 - VP-17422
 - VP-17497
 - VP-17532
+- VP-17544
 - VP-17559
 - VP-17561
 - VP-17577
+- VP-17591
 - business-model
 - business-model-deep
 - feedback_batch_db_verify
+- feedback_defect_found_must_be_ticketed
 - feedback_join_scope_reverse_audit
+- feedback_never_conclude_breakage_from_a_quiet_window
 - feedback_start_dev_iron_rule
 - repo-catalog
 - repos
@@ -97,29 +100,29 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 57 entries across STM
+summary: Auto-aggregated failure index from 68 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-07-29 — total 57 entries
+> Last updated: 2026-08-04 — total 68 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 14 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 19 entries
 - [Other / uncategorized](#other) — 10 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 8 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
-- [Deploy / commit / push coordination](#deploy-coordination) — 4 entries
-- [Redis / cache / pending list](#redis-cache) — 3 entries
+- [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
+- [Redis / cache / pending list](#redis-cache) — 4 entries
+- [Scope / requirement / PM communication](#scope-communication) — 4 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
 - [gRPC / network / timeout](#grpc-network) — 2 entries
-- [Scope / requirement / PM communication](#scope-communication) — 2 entries
+- [Error handling / throw vs log](#error-handling) — 2 entries
 - [Auth / permission / role](#auth-permission) — 1 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
-- [Error handling / throw vs log](#error-handling) — 1 entries
 - [GraphQL / API design](#graphql-api) — 1 entries
 
 ---
@@ -241,6 +244,185 @@ Prod pod: `lis-emr-v2-deployment-prod-54d77c8846-c8l9b` (default ns, container `
 - 6525 (OPTIMANTRA): replayed via in-pod script (jsonwebtoken sign with pod JWT_SECRET_PROD, UserPayload = system user bolin.l/54674 + customer 50342/clinic 153585 from the winning ehr_integration) POSTing the stored order_input with sampleId=0 → sample 2589807, barcode 2607026655. control_id/emr_order_id = filename number (66128162607012036) — OPTIMANTRA pattern verified against history. Patient is literally "Test Patient" (new integration onboarding order).
 - 6526 (MDHQ): same replay → sample 2589808, barcode 2607026656. control_id/emr_order_id UNKNOWN (MDHQ internal MQ* ids come from file content, not filename) → emr_sample row 5964 has NULLs; MDHQ result write-back may not reconcile. Do NOT ask vendor to resend (would duplicate — order is now placed); ask MDHQ for MSH.10 + specimen id from their message log instead, then UPDATE emr_sample.
 - Both replays verified upstream: exactly 1 sample per patient, correct customer.
+
+### **[[VP-17544]]** — `2026-08-03` — 測試抓到我 code 的真實缺陷：bare `void` 造成 unhandled rejection
+
+`void this.slackNotifier.notifyEmrOrderFailure(...)` 沒有 attach catch handler。
+notifier 自己保證不 reject，所以實務上安全 —— 但只要它被改壞或換實作，rejection
+就會變成 unhandled rejection，**Node 會直接結束 process**，等於「告警失敗導致 pod 掛掉」。
+測試（mockRejectedValue）直接讓 jest worker crash 才暴露出來。修法：try/catch 包同步
+throw + 顯式 `.catch()` 接 async rejection，兩個方向都關掉。
+**教訓：fire-and-forget 的 `void` 不是「安全地忽略」— 它只忽略回傳值，不忽略 rejection。
+凡是不 await 的 promise 都必須有 .catch。**
+
+### **[[VP-17544]]** — `2026-08-03` — 從「manifest 裡沒有」推論「prod 是壞的」，錯
+
+我看到 `MY_POD_NAME` 不在 `k8s/base/deployment.yaml`、不在 ConfigMap 快照，就寫下
+「`last_update_pod_name` 疑似長期為 null」並建議開票。實際查 DB：**prod 5370/5372 有值**。
+真相是 repo 的 `k8s/` 不是實際部署來源（跟 ConfigMap 快照分開維護是同一件事）。
+而且我還因此做了一個錯的 code 決定（為了消 guard 警告而移除該欄位寫入）。
+**教訓：這是 [[feedback_never_conclude_breakage_from_a_quiet_window]] 的同型錯誤 ——
+從「證據缺席」推論「功能故障」。宣告任何既有行為壞掉之前，先去 ground truth 查一筆資料；
+prod DB 一個 COUNT 就能推翻我三段推理。** 而且不要讓 lint/guard 的警告驅動 code 決策。
+
+### **[[VP-17544]]** — `2026-08-03` — Leo 5 點指示的執行結果
+
+**1. webhook（去 Java 找）→ 查了，Java 沒有可複製的東西，URL 不存在於 codebase。**
+- EMR-Backend 全 repo 只有 `Jenkinsfile` 提到 slack：`slackSend(channel: 'portal-emr-bot')`，
+  走 Jenkins Slack plugin 的 workspace token，**不是 incoming webhook**，URL 在 Jenkins server 端。
+- 應用層唯一先例是 **LIS-Report**：`base-report-server/src/bull/bull.module.ts:218-232` 注入
+  `SLACK_LIS_REPORT_WEBHOOK`，值放 **k8s Secret**
+  (`deployment/azure/k8s-secret.yaml` `stringData:`，而且那檔案是 tracked → 真 URL 進了 git)。
+- `emr-orders-bot` 這個字串在所有 repo 皆 0 命中 → 該 channel 只存在於 Slack 端。
+- **修正我原本的做法**：webhook 從 ConfigMap 移到 `k8s/environments/*/kustomization.yaml`
+  的 secretGenerator（三環境），ConfigMap 快照的 key 移除。`deployment.yaml:132-136`
+  的 envFrom 是 configMapRef 先、secretRef 後 → **secret 覆蓋同名 key**。
+  literal 留空（那檔案 tracked，webhook 是可代表我們發言的憑證 —— LIS-Report 把真 URL
+  commit 進 git 的那部分不值得效法）。
+- 另外發現 emr-v2 早就有一個閒置的 `ALERT_WEBHOOK_URL` secret key（三環境都是佔位符
+  `YOUR/PRODUCTION/WEBHOOK`，零 code 讀取）。沒沿用，因為專用 key 語意更清楚。
+
+**2. beta program → 建票 VP-17584，但執行不了（無 core DB 寫入權）。**
+- https://vibrantamerica.atlassian.net/browse/VP-17584（parent VP-17480，blocks VP-17544）
+- 本機沒有 prod core DB 憑證（transformer-v2 `.env` 只有註解掉的 dev tunnel）。
+- **但讀取機制已實測驗證**：gRPC `FetchCustomerBetaProgramsForClinic` 打 prod v1
+  `192.168.60.6:30276` 成功，3 個 LIVE ordering 整合都回得出資料：
+  - 51012/13505 → `newVAsetting, new_order`
+  - 28524/127660 → `cloud_charging, legacy_report, order_cloud, new_vw, auto_emr_integration, new_order`
+  - 30248/132493 → `cloud_charging, legacy_report, order_cloud, new_vw, newVAsetting, new_order`
+  - **無任何 clinic 有 `mandatory_dob_sex`** → gate 全 false → 程式碼可安全先上。
+
+**3. ACK 不可行的證據（5 條，全部可自行複驗）** — 見「交給 Leo」段。
+
+**4. MY_POD_NAME → 我原本的推論是錯的，不需要開票。**
+- prod `hl7_file_input`：**5370/5372 有真實 pod 名**（如
+  `lis-emr-v2-deployment-prod-5778544c48-lz82v`，最新 2026-08-03T18:01Z）；只有 2 筆 null。
+- staging：385/737 有值（如 `lis-emr-dev-59f7466fb7-gvjqf`）。
+- 結論：變數確實被注入，**repo 的 `k8s/` 目錄不是實際部署來源**（跟 ConfigMap 快照
+  分開維護是同一個事實）。→ 把 `last_update_pod_name` 寫回 `markTerminalFailure`。
+- **連線驗證**：staging `192.168.60.11:3306` OPEN；**prod
+  `lisportalprod2.mysql.database.azure.com:3306` 從本機可連並可查詢**（用 ConfigMap 裡的
+  憑證 + worktree 的 prisma client）。這修正了 LTM「emr-v2 prod DB grant 綁 pod IP」的
+  適用範圍 —— 那條講的是從 appserver04 連，不是從本機。gRPC 30276 兩邊（on-prem .60.6
+  與 cloud 10.224.0.199）都通。本機無 mysql client，用 prisma `$queryRawUnsafe` 取代。
+
+**5. API 路徑 → 你說對了，已經做了，而且比我以為的完整。**
+完整鏈路（`LIS-backend-v2-order-management` origin/main，本機落後 105 commits 所以先前找不到）：
+- `handler/order.go:25` `router.POST("/orders/eligibility-check", o.eligibilityCheck)`
+- `handler/order_eligibility.go:126-133`：**`if req.Source == "API"`** → 呼叫
+  `missingPatientProfileFields` → 有缺就加 `ReasonIncompletePatientInfo` failure，
+  reason = `"patient N is missing required information: date of birth, gender"`
+- `order_eligibility.go:386-398`：檢查 `PatientBirthdate` 空、`PatientGender` 空、
+  **以及沒有 address**（address 是我原本不知道的第三項）
+- emr-v2 `order-intake-enrichment.service.ts:204-215` 帶 `source: 'API'` 呼叫 → 失敗回
+  `{kind:'ineligible', failures}` → `order-intake.controller.ts:77-82` → **HTTP 422**
+  + `{status:'ineligible', failures:[{code, reason}]}`
+→ API 路徑本來就是同步回拒 + 明確說缺什麼，不需要 Slack，也不需要我改。
+
+**兩條路的語意差異（值得記錄，非 bug）**：API 判「欄位空」，HL7 判「空 **或不可辨別**」。
+所以 `'O'`/`'Other'` 在 API 路徑仍會通過（gender 非空）。API 那側的輸入品質由
+portal（VP-17540/17543）在寫入端把關。
+
+**同時發現（未動）**：`order_service.go:157-162` 的 placeOrder 流程把缺 DOB/Gender 記成
+**warnings**（`MissingDOB`/`MissingGender`），`:820-826` 則在下單成功後建
+`MISSING_DOB_ISSUE`/`MISSING_GENDER_ISSUE`。那就是 PRD §1 講的 post-order interception
+安全網，PRD 4.2-11 明說本階段不動它。
+
+### **[[VP-17544]]** — `2026-08-03` — 方向修正：告警其實一直是 Sentry，不是 Slack webhook
+
+Leo：「但我以前確實有 sentry message 傳到 https://vibrantamerica.slack.com/archives/C08C59A6TMF」
+→ 這句話推翻了我整個實作方向，而我先前兩次「Java 沒有 Slack」的回答都是搜尋壞掉的產物
+（見 Failures 的 `rg -r` 條）。**我搜 alerting 時搜了 slack/webhook/alert/pagerduty，
+漏了 sentry** —— 這是關鍵字覆蓋不足，不只是 flag 用錯。
+
+**真正的鏈路（Java 時代）**：
+- `EMR-Backend/pom.xml:237-239` → `io.sentry:sentry-spring-boot-starter:5.2.3`
+- `EmrOrderTask/EmrOrderScheduler.java:32` → `SENTRY_DSN = "https://<key>@sentry1.vibrant-america.com/49"`（硬編碼進 source，已進 git history），`:54` `Sentry.init`
+- `EmrOrderTask/ParseOrder.java:355-360` → **`if (retryNum == 1) Sentry.captureException(new EmrOrderException("Failed after all retry attempts"))`**
+- → self-hosted Sentry project 49 → Sentry alert rule → Slack `C08C59A6TMF`
+- （`reportService/GRPCServerOnly.java:17` 另用 project 3）
+
+**`retryNum == 1` 就是扣完變 0 = 放棄** → 跟我掛的 `next === 0` 是同一時刻。
+所以 Leo 選的「只在放棄時發一則」不是新設計，是 Java 的既有語意；我的**觸發點一開始就對，
+錯的是 transport**。
+
+**`notification/Slack.java` 是另一條從沒完成的支線**：3 個呼叫點
+（`GetOrderFromSFTP.java:63`、`ParseOrder.java:234`、`:237`，全在 catch），但 method body
+是空的，且 `git log --follow` 顯示**第一個 commit 就是空的**（`c00be90` 即 `{ return; }`）。
+所以 Java 從來沒有應用層直接發 Slack。
+
+**emr-v2 掉的是整個 Sentry 上報**：package.json 零 `@sentry/*`；實際 ConfigMap 連
+`SENTRY_DSN` key 都沒有（只有 repo `k8s/base/secrets.yaml` 的佔位符
+`https://your-sentry-dsn@sentry.io/project-id`）。所以遷移後每一筆 ingestion 失敗都只有
+DB 痕跡，沒有任何人被通知。
+
+**實測驗證（Leo 授權發測試 event）**：
+- self-hosted Sentry **接受新版 SDK 的 envelope 格式**：`POST /api/49/envelope/` → HTTP 200
+  （回 event id）。判別方法：不存在的 path 回 **403**，ingest path 回 **401**，
+  兩者差異證明 endpoint 存在。→ `@sentry/node` 10.69.0 可用，不必 pin 舊版。
+- 端到端走真實 code path（`initSentry` → `OrderFailureReporterService.report` → `flush`）
+  → `flush: true`。
+- **我先前從 `sentrysid` cookie 是 pickle 格式推論「Sentry 9、不支援 envelope」是過度推論**
+  —— Python 3 也能產生 protocol 2 pickle，那不構成版本證據。實測才是證據。
+
+**實作改動（取代原本的 Slack notifier）**：
+- 刪 `slack-notifier.service.ts` + spec
+- 新增 `src/config/sentry.ts`（`initSentry`，在 `NestFactory.create` 之前呼叫，
+  DSN 空或含 `your-sentry-dsn` 佔位符即不 init → 所有 report 點 no-op）
+- 新增 `alerting/services/order-failure-reporter.service.ts`：`EmrOrderAbandonedError`
+  具名 error（對應 Java 的 `EmrOrderException`）+ **message 刻意穩定（只含 failure class，
+  不含 id）** → Sentry 按 class grouping，一類一個 issue；per-order 值進 tags/extra。
+  這是 Sentry 勝過裸 webhook 的關鍵：grouping / dedup / rate-limit 免費。
+- `serverName` 不顯式設 —— k8s 的 container hostname 就是 pod name，Sentry 預設已足夠，
+  順便避開 `MY_POD_NAME` 那個 guard 盲點。
+- secretGenerator 的 literal 從 `EMR_ORDERS_SLACK_WEBHOOK_URL` 換成 `SENTRY_DSN`（留空）；
+  ConfigMap 快照加空的 `SENTRY_DSN`/`SENTRY_ENVIRONMENT` key，**讓 guard 誠實通過而非繞過**
+  （envFrom 是 configMapRef 先、secretRef 後 → secret 覆蓋）。
+
+**Sentry 這條路的 fail-closed 特性讓 PR 可以先上**：無 DSN → 不 init → 不報告；
+無 beta participation → gate 全 false → 攔截不啟用。兩個前置都不阻塞部署。
+
+### **[[VP-17591]]** — `2026-08-04 18:50` — 逐層排除，元兇定位到 billing（但無法定案）
+
+**產生 `postOrderStr` 的是 billing 自己**：
+`LIS-backend-billing/.../OrderServiceImpl.java:3915` →
+`buildCompletePatientInfoMap(lisCorePatient, newYorkPatient)` → `:4030`
+`asyncServices.putOrderList(wholeBodyStr, ...)`。
+（`SampleServiceImpl:303` 那個 `metaDataMap.get("postOrderStr")` 是另一條 path，收既有字串。）
+
+**address 填入邏輯（`:4433-4465`）本身是對的**：
+```java
+addressMap.put("country", "238");   // ← 預設值，與 ticket payload 完全一致
+for (PatientAddress a : patient.getPatient_address())
+    if (a.getAddress_type().compareTo("shipping") == 0) { ...填入... }
+```
+用 `address_type=="shipping"`，**完全不看 `is_primary_address`**。而該病人的 address 正是
+`shipping` → **應該填得進去**。payload 的 `country:"238"` 是這裡的預設值，
+證明那個迴圈**根本沒進去** → billing 手上的 `patient.getPatient_address()` 是空的。
+
+**逐層排除（每一層的邏輯都正確）**：
+| 層 | 判斷 | 結論 |
+|---|---|---|
+| emr-v2 place-order | `PlaceOrderRequest` DTO 無 address 欄位 | 不送，非元兇 |
+| order-management `message.go:618` | `IsPrimaryAddress` 但有 `[0]` fallback；且是 Kafka addon 非 postOrderStr | 非元兇 |
+| billing concierge `OrderServiceImpl:553` | `shipping` + 退到 provider office address | 非元兇 |
+| **billing `buildCompletePatientInfoMap`** | 邏輯正確（shipping，不看 primary） | **輸入為空** |
+| coreSamples `GET /api/patient/get-patient-by-id` → `readPatient` | **有** `include: { patient_address: true }` | 應回 address |
+| 時序 | address_id 4686438 與 patient 3160709 連號；`patient_create_time` **2025-12-09**，訂單 2026-07-31 | **早 8 個月，排除** |
+
+→ **每一層的邏輯都對，結果卻是空的** ⇒ 問題在執行期而非邏輯：
+候選為 (a) billing 的 `PatientAddress` model 反序列化失敗（欄位名/型別不匹配 → `getAddress_type()`
+回 null → `compareTo` NPE 被上層吞掉，addressMap 保持預設）、(b) prod 跑的 coreSamples/billing
+版本與 repo 不同、(c) billing 呼叫的 `CoreService` 指向另一個服務。
+
+**定案需要 billing 的 prod log** —— 它有
+`log.info(GsonUtil.nestJsonMap2Json("Patient Map", compeletePatientInfoMap))` (`:3919`)
+和 `log.info("Retrieving patient with id: ...")`，一看就知道它拿到什麼。
+但 billing 的 pod **不在我的 kubeconfig 範圍**（只有 AKS `lisportalprod` + minikube；
+`bkkeeping` ns 只有 `lis-accounting`）→ 交給 Leo。
+
+**不自行開票**：元兇在 billing，屬別的服務
+（[[feedback_defect_found_must_be_ticketed]] 的 OTHER-team 分支：交診斷、不自己開）。
 
 ---
 
@@ -480,6 +662,73 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 - Cutover TODO (Phase B): shared/migrated HL7Message_prod storage, single-side cron via POD_ROLE, and gate the retry-rescan on intake role too (otherwise cross-pod retry_num trampling returns).
 - Side mystery resolved-ish: the 7/2 11:01 heal of 6517/18/20 did not touch last_parse_time nor last_update_pod_name → not an app code path; someone ran manual SQL at 11:01 UTC (ask team — not Leo's session with me).
 
+### **[[VP-17591]]** — `2026-08-04 18:35` — 診斷修正：emr-v2 根本不送 address，PR #316 沒解決核心症狀
+
+**我錯在哪**：我驗證了「emr-v2 內部拿不到 address」（那是對的），卻**沒有驗證那個值有沒有離開
+emr-v2**。實際上：
+
+- `PlaceOrderRequest` DTO（`dto/place-order.dto.ts`）**沒有任何 address 欄位** —— grep
+  `address|street|city|state|zipcode` 零命中。
+- `toPlaceOrderRequest`（`order-request.mapper.ts:154`）只送 `patient_id` / `customer_id` /
+  `clinic_id` / line_items / deliver_method / payments / notification。
+- `OrderFrontend` 型別同樣沒有 address 欄位。
+- `patient_address` 在整個 hl7-order-processing 只出現在三處用途：
+  `createPatientV2`（**只有新病人**）、`updatePatientInfo` 的 request 型別（**但
+  `updateContactIfChanged` 只更新 phone/email**）、以及 NY email 的 `{{patient_state}}`。
+
+→ ticket 那個 `postOrderStr` 的空 address 是**下游從 patient DB 補的**，不是 emr-v2 送的。
+
+**PR #316（已 merge + 已 deploy prod）的實際價值**：
+| 改動 | 有效 |
+|---|---|
+| NY 判定改讀 `inbound_patient_state`（Leo 規則） | ✅ 真的在 emr-v2，decideGzNy 直接讀 |
+| 新病人 address 寫入（createPatientV2） | ✅ |
+| `address_type` 補進型別 | ✅ |
+| 既有病人 `patientDetails.address` | ❌ **不進訂單 payload，對 ticket 症狀無效** |
+
+**已排除的下游嫌疑（都有 fallback，不是元兇）**：
+- `LIS-backend-v2-order-management/tasks/message.go:618` 用 `IsPrimaryAddress` 挑，
+  但 `if primaryAddress == nil { primaryAddress = patient.PatientAddress[0] }` 有 fallback。
+  且那是 Kafka addonColumn，不是 postOrderStr。（該處註解自己寫
+  `// TODO: Need to verify which address used here`。）
+- `LIS-backend-billing/.../OrderServiceImpl.java:553` 用 `address_type=="shipping"` 挑，
+  找不到還退到 provider 的 office address。且那是 concierge coverage 用途。
+- **billing 是 postOrderStr 的收方**（`metaDataMap.get("postOrderStr")`），不是產生者。
+  全 `~/src` 只有 billing 的 script/test 提到 `completeOrderInformationSelected` 格式
+  → **產生者不在我 clone 到的 repo 裡**（可能是 legacy LIS）。已停止盲追第五層，改問 Leo。
+
+**`is_primary_address` 對病人地址已實質廢棄（強證據）**：
+| type | primary | 筆數 |
+|---|---|---|
+| shipping | 0 | **833,404（77%）** |
+| shipping | 1 | 251,608（23%） |
+| `Hello` / 空字串 | 1 | 2 筆髒資料 |
+最近建立的 5 筆全是 `primary=0` → 不是「忘了打勾」，是現行寫入流程根本不寫它；23% 有值的是歷史資料。
+且病人地址**一律** `address_type='shipping'`（只有 2 筆例外）→「以 shipping 為主」的挑選
+實務上等於「拿任何一筆」。
+
+**Deploy 驗證（prod, main@32ea60e, pod 844b49cc7f-xgmtc）**：
+CI success、2/2 Running、restarts=0、舊 pod 已終止、零 DI/unhandled-rejection、
+AlertingModule + Hl7OrderProcessingModule 正常初始化、Sentry 仍 not-configured（預期）。
+→ **只證明無 regression**，不能證明症狀修好（那個值不在我們送出的 payload 裡）。
+
+**Jira 狀態：不轉 Done。** merged + deployed + 零 regression，但核心症狀未解。
+
+### **[[VP-17591]]** — `2026-08-04 19:16` — Deploy 最終驗證通過（無 regression）
+
+`id=6788 vendor=THM pod=lis-emr-v2-deployment-prod-777c956c9b-xs52b finished=1
+sample=2609199 retry=5 err="" code=""`
+
+- pod hash `777c956c9b` ≠ AKS 的 `844b49cc7f` → **on-prem pod 也已更新**。
+  （DB 的 `last_update_pod_name` 是唯一能證明 on-prem 已更新的途徑 —— 那個 cluster
+  不在本機 kubeconfig。同一手法在 VP-17544 用過，當時 hash 是 `546b6869b8`。）
+- `retry=5` 未扣 → 一次成功；`err=""` / `code=""` → 無 error、無誤攔截、無 NY_ADDRESS_REQUIRED。
+- 加上先前的 boot 驗證（零 DI/unhandled-rejection、AlertingModule +
+  Hl7OrderProcessingModule 正常、cron 18:45 執行）→ **無 regression 成立**。
+
+**但這不證明 ticket 症狀修好** —— address 不在 emr-v2 送出的 payload 裡，元兇在
+billing（見上一節）。這是本次驗證的範圍上限，已在 PR #316 與此處明確標示。
+
 ---
 
 ## Redis / cache / pending list <a id='redis-cache'></a>
@@ -503,6 +752,60 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 - 5/30 INCIDENT-20260528: identified same symptom but only documented "Required pod rollout restart". Root cause was not traced into the singleton/await chain. Recurrence on 6/1 demanded deeper investigation.
 
 ---
+
+### **[[VP-17544]]** — `2026-08-03` — 收尾：Slack 路由已確認、清理、PR 開出
+
+- **Leo 確認 `#emr-orders-bot` 收到了測試訊息** → Sentry → Slack 的 alert rule 對 project 49
+  生效。這是我唯一驗不到的一環，現已閉環。剩下的只是新 project 要複製同一條 rule (VP-17587)。
+- **清理 pass**（`a1b0d2e`，無行為變更，測試仍 95 suites / 1071 passed）：
+  - `report()` 原本回 boolean 但沒有 caller 用 → 改 void，測試改斷言 Sentry spy。
+  - reporter / initSentry / processor guard 的 docstring 精簡 —— 遷移歷史在 commit message
+    和 PR 裡已有，不需要在三個檔案各覆述一遍。
+  - 刪 `tracesSampleRate: 0`（未設 tracing 時本來就是 0）。
+  - secretGenerator 註解 6 行 → 2 行 × 3 環境。
+  - **`package.json` 還原成只加一行**：`npm install` 順手把 `jsonwebtoken` /
+    `@types/jsonwebtoken` 重排成字母序，那是 reviewer 要讀的無關 churn。
+- **PR #313 ready for review**（base `staging`，8 commits，+1255/-33）。
+- Atlassian MCP 的 SSE deprecation：本機 `~/.claude.json` / `.mcp.json` 都沒有
+  `mcp.atlassian.com` 設定 → 那是 claude.ai 帳號層級的 connector（工具前綴
+  `mcp__claude_ai_Atlassian__` 即證），endpoint 由平台維護。而且截止日 2026-06-30 已過一個多月
+  工具仍正常 → 應已遷移，那行只是殘留的 deprecation header。Leo 無需動作。
+
+---
+
+## Scope / requirement / PM communication <a id='scope-communication'></a>
+
+### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
+
+- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
+- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
+- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
+- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
+
+### **[[VP-17497]]** — `2026-07-27` — SERIOUS MISS (Leo): defect known 14 days before external partner hit it
+
+- The exact bug was discovered during VP-17286 E2E (2026-07-13, scope item 7) and recorded ONLY as a "proposed follow-up" STM note — no ticket filed, nobody scheduled it. api-product hit it in sandbox 2026-07-22; fixed 2026-07-27.
+- Leo: "這也是一個嚴重的失誤(需要記下來 into both this agent and general agent)".
+- Recorded: agent memory feedback_defect_found_must_be_ticketed.md + factory lesson PR (process discipline). Rule: a defect surfaced by testing that won't be fixed in the current ticket gets a Jira ticket in the SAME session; the note references the ticket id, never the reverse.
+
+### **[[VP-17544]]** — `2026-08-03` — 用 awk 管線改 config yaml 把兩個檔案寫空
+
+`awk 'NR==FNR{next}1' /dev/null "$f"` 這個組合把所有行都跳過 → 兩個 copy 變 0 行。
+主 repo 原檔完好（gitignored、只有 worktree 的 copy 被毀），改用 python 逐行處理 +
+長度 assert 重建。**教訓：對既有檔案做原地插入時用會驗證的工具，不要湊 awk/sed 單行。**
+
+### **[[VP-17544]]** — `2026-08-03` — pre-commit guard 在 worktree 中必然誤報
+
+`config-yaml-coupling` guard 用 `git rev-parse --show-toplevel` 找兩個 gitignored 的
+ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktree 裡檔案不存在 →
+`yaml_has_key` 對所有變數都回 false → **連既有的 `env` 都被報缺失**。
+處置：把兩份快照 copy 進 worktree（gitignored，不會進 commit），guard 才真的在檢查
+真實 cluster 狀態。沒有用 `--no-verify`。
+第二次它報 `MY_POD_NAME` 缺失 —— 那是既有變數（7 處使用），只因為我複製了那一行。
+把空值塞進 ConfigMap 會讓 `process.env.MY_POD_NAME ?? null` 從 null 變成 `''`（行為變更），
+所以改成 `markTerminalFailure` 不覆寫 `last_update_pod_name`。
+**教訓：guard 抓到的不一定是新變數，可能只是既有變數的新使用點；用「塞空值進 config」
+去消除警告會偷偷改變 `??` 的語意。**
 
 ---
 
@@ -540,20 +843,28 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 
 ---
 
-## Scope / requirement / PM communication <a id='scope-communication'></a>
+## Error handling / throw vs log <a id='error-handling'></a>
 
-### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
+### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
 
-- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
-- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
-- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
-- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
+1. per-customer `catch` 只 `logger.error(msg, error.message)` 且 error.message 對 Prisma 錯誤為空 → 失敗幾乎不可見、無告警。
+2. 失敗時不寫任何 record（連 failure record 都沒）→ 監控無從得知 0 交付。
+3. upload 成功但 record 失敗 → 狀態不一致。
+4. 自動產的 xlsx 內容 (per-accession csvReport, 7.4MB) 與手動精簡版 (139KB) 差異大 → 正式內容規格需與 PM 對齊。
 
-### **[[VP-17497]]** — `2026-07-27` — SERIOUS MISS (Leo): defect known 14 days before external partner hit it
+### **[[VP-17544]]** — `2026-08-03` — 誤用 `rg -r` 汙染了好幾輪探索結論
 
-- The exact bug was discovered during VP-17286 E2E (2026-07-13, scope item 7) and recorded ONLY as a "proposed follow-up" STM note — no ticket filed, nobody scheduled it. api-product hit it in sandbox 2026-07-22; fixed 2026-07-27.
-- Leo: "這也是一個嚴重的失誤(需要記下來 into both this agent and general agent)".
-- Recorded: agent memory feedback_defect_found_must_be_ticketed.md + factory lesson PR (process discipline). Rule: a defect surfaced by testing that won't be fixed in the current ticket gets a Jira ticket in the SAME session; the note references the ticket id, never the reverse.
+`rg -rn 'pattern' path` 中 **`-r` 是 `--replace`**，`-rn` 被解析成 `-r n` → 把每個匹配
+內容替換成字面 `n` 再輸出。所以我看到 "eligibility" 變成 "lnility"/"liy"/"n"，
+**我還誤判成終端顯示層在吃字元**（甚至聯想到 memory 裡的 WezTerm hyperlink_rule 事件）。
+同一輪還用了 `--include='*.go'`（那是 grep 的語法，rg 要 `-g`）配上 `2>/dev/null`，
+把 rg 的 unknown-flag 錯誤吞掉 → **假的「0 hits」**，讓我一度以為 order-management
+沒有任何 DOB/Gender 處理。
+**教訓 (a)**：短選項簇不要跟需要參數的 flag 混寫（`-rn` ≠ `-n -r`）。
+**教訓 (b)**：`2>/dev/null` 會把「工具用錯」偽裝成「查無資料」。搜尋若回 0 命中，
+先確認命令本身有沒有報錯，再下結論。
+**教訓 (c)**：輸出看起來被亂改時，先懷疑自己的命令，再懷疑環境。我上次（Jira link 事件）
+的正確答案是「顯示層」，這次同樣的直覺是錯的 —— 前一次的結論不是這一次的先驗。
 
 ---
 
@@ -571,17 +882,6 @@ Leo caught that /EMR_storage was already the norm since ~June. Data: localDir by
 ### **[[VP-15460]]** — [2026-04-27 → 28] Cwd persistence in Bash tool calls
 
 After `cd /Users/hung.l/src/EMR-Backend && gh pr view 156`, subsequent Bash calls without explicit `cd` defaulted to EMR-Backend. Created `bugfix/leo/VP-15460-redlock-import` in the wrong repo, had to clean up. Lesson: always explicit `cd` in cross-repo flows.
-
----
-
-## Error handling / throw vs log <a id='error-handling'></a>
-
-### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
-
-1. per-customer `catch` 只 `logger.error(msg, error.message)` 且 error.message 對 Prisma 錯誤為空 → 失敗幾乎不可見、無告警。
-2. 失敗時不寫任何 record（連 failure record 都沒）→ 監控無從得知 0 交付。
-3. upload 成功但 record 失敗 → 狀態不一致。
-4. 自動產的 xlsx 內容 (per-accession csvReport, 7.4MB) 與手動精簡版 (139KB) 差異大 → 正式內容規格需與 PM 對齊。
 
 ---
 

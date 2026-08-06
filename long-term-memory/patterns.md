@@ -1358,7 +1358,21 @@ emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘�
    address 欄位。**沿路每個訊號都是綠的，因為那些訊號測的是「我改的東西有沒有正確運作」，
    不是「我改的東西是不是問題所在」。**
 
-（1/2/3 已進 factory `ENGINEERING-LESSONS.md` #17/#18/#19，2026-08-04 merge；4 為候選未定案。）
+5. **「排程 job 死了」是從輸出缺席推論出來的，而 job 其實每晚都在跑** ——
+   dream log 連續三晚（08-01/08-04 及本晚初判）寫 daily digest「dead / still silent」，
+   證據只有「`long-term-memory/daily-digest/` 最新還是 07-29」。今晚多查一層才發現：
+   launchd 的 `StandardOutPath`（`~/.lis-daily-digest/main/logs/daily-digest/launchd.out.log`）
+   是 **0 bytes、mtime 停在 6/23，從頭到尾沒被寫過** —— 我一度據此寫下「這個 job 從未執行」。
+   但 script 自己另有 per-run log（`logs/daily-digest/YYYY-MM-DD_HHMMSS.log`），裡面
+   **07-30 到 08-05 每天都有紀錄**，每次都跑到 `claude attempt 1/2` 然後
+   `API Error: Connection closed mid-response` → `final rc=1`。
+   → **宣告排程 job 故障前，先找 job 自己的 log，別只看 launchd 的 stdout/stderr**
+   （很多 script 自己 redirect，launchd 那份會永遠是空的，而「空」看起來就像「沒跑」）。
+   → 同時修正判斷：這不是三個 job 各自的 config bug，而是**同一個平台層 API 不穩**
+   打到全部三個 automation（見本晚 dream log 的 Automation health）。
+
+（1/2/3 已進 factory `ENGINEERING-LESSONS.md` #17/#18/#19，2026-08-04 merge；4 為候選未定案；
+5 於 2026-08-05 加入 —— 這個 family 首次是**在 dream 自己的診斷裡**被踩到，而非在 ticket 工作中。）
 
 ### 找「既有機制」時先列實作形態的同義詞，並考古前一代（VP-17544 最貴的一次繞路）
 

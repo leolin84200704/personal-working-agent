@@ -3,6 +3,7 @@ date: 2026-07-02
 slug: report-finished-pre-golive-drop
 related_tickets: []
 distilled: true
+archived: 2026-08-05
 ---
 
 # report_finished event 早於 integration go-live 被靜默丟棄（accession 2606116259 / 2606116226）
