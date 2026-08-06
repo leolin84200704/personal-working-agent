@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Result-delivery failure watch. Runs at 05:00, an hour after the HL7 order triage
+  (04:00) so the two jobs never contend for the VPN/DB pre-flight.
+
+  Not installed by this PR. To enable:
+    cp DailyJob/result_fail/com.lis.result-fail-watch.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.lis.result-fail-watch.plist
+
+  Auto-repush stays off until the reports have been reviewed for a few days; enable by
+  adding AUTO_REPUSH=1 to EnvironmentVariables below and reloading.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lis.result-fail-watch</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>/bin/bash</string>
+        <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/result_fail/run_result_fail.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AUTO_REPUSH</key>
+        <string>0</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent</string>
+
+    <!-- launchd stdout has always been 0 bytes for these jobs; the real log is
+         DailyJob/result_fail/run_<date>.log written by the wrapper. -->
+    <key>StandardOutPath</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/result_fail/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/result_fail/launchd_stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
