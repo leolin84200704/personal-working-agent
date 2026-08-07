@@ -1,3 +1,10 @@
+---
+date: 2026-08-06
+slug: vp17503-placeholder-pdf-removal
+related: [VP-17503, VP-17493, VP-17342]
+distilled: true
+---
+
 # 2026-08-06 — VP-17503: remove whole-order placeholder-PDF fallback
 
 Related: VP-17503, VP-17493, VP-17342

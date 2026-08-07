@@ -2,7 +2,7 @@
 date: 2026-08-06
 slug: vp17524-out-of-result-tags
 related: [VP-17524]
-distilled: false
+distilled: true
 ---
 
 # VP-17524 — the OUT_OF_ prefix, and reading a symptom one layer too early

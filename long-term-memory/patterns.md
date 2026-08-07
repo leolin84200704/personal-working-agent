@@ -1459,3 +1459,125 @@ VP-17594（setting module）已寫好 PR #552，Leo 判定非我方 scope 並直
    （退役後變成遮蔽 cloud 失敗的死路）。→ 面對「這個能力不存在」的結論，先假設它**曾經存在**。
 3. **Leo 的判斷在這批贏了三次**（沿用 Sentry project 49、90 筆歷史略過、VP-17594 交出去），
    共同形狀都是**我把「乾淨的解法」排在「立刻能通的解法」前面**，或把別人的 scope 攬進來。
+
+## 【家族延伸 2026-08-06】fallback 只要語意上是「猜」，就必須 fail loud（VP-17631 / VP-17524 / VP-17503）
+
+同一晚三張票蒸餾出同一條，接續 patterns #5/#6/#9 與 2026-08-04 的「家族蒸餾」：
+- **VP-17631**：order-package API 失敗時靜默退回 legacy first-match grouping。first-match 對
+  superset package 天生會贏（10001 是第一個 key），所以 degradation 產出的是**合法但臨床錯誤**
+  的文件 —— 沒有任何 error row，DB 全綠。
+- **VP-17503**：report PDF 下載失敗時回傳寫死的 placeholder base64，record 標 GENERATED/TRANSMITTED。
+  改成一律 throw → `GENERATION_ERROR` + BullMQ retry（沿用 VP-17342 既有機制，零 schema 變更）。
+- **VP-17524**：反面教材證明這條是對的 —— `default:` 分支的 ERROR log 是這個 bug **唯一**被看見的
+  原因。所以修 mapper 時刻意保留 `default:` fail-closed，只把「已知會出現的 modifier 前綴」結構化剝除。
+
+判準：**degradation 的輸出如果自己也是合法文件，就不能靜默。** 能靠既有 retry 機制自癒的，
+一律 throw；真正無法歸類的，fail closed 並保留 loud log 當 tripwire。
+
+### 但 fail loud 之後要確認「有人在看」（VP-17631 查證後的缺口）
+把靜默錯誤換成明確失敗，只走了一半。emr-v2 的實際處理鏈：
+`ensureResultTransmissionRecord` 在 `generateHl7Content` **之前**（main :205 vs :217），
+所以 throw 一定留 DB 痕跡（`GENERATION_ERROR` + error_message + `retry_count++` + `next_retry_at`）；
+BullMQ `attempts:5`、exponential backoff base 120s（≈2/4/8/16 分，總窗約 30 分）；
+用盡後 `onFailed` → `markPermanentFailure` → `next_retry_at = null`。
+**缺口**：`TIMEOUT_RETRY`（VP-17343）只在請求層 timeout 觸發，**沒有掃 `next_retry_at` 的 cron**；
+emr-v2 的 @Cron 只有 order fetch / mapping cache / scheduled reports，agent 端 DailyJob 也只看
+order 側（hl7_fail）。→ 超過 30 分的上游中斷 = 報告不會送出、**且沒有人在看**那些 ERROR row。
+改 fail-loud 的同時要問：這個 loud 誰在聽？
+
+### 描述症狀要從 artifact 講，不要從變數講（VP-17524，我自己寫的票自己踩）
+票是 2026-07-28 dream scan 我自己開的，症狀寫「OBX-8 abnormal flag TNP」—— 只讀到 mapper 就下筆。
+再往下一層讀 encoder 才發現 OBX-8 是**被清空**、另外多一段 `NTE|1||Test Not Processed`。
+同樣嚴重度、不同 artifact，而 NTE 才是人看到的那個。
+**凡是會離開 process 的東西（HL7、API response、email、檔案），先追到邊界再寫症狀。**
+
+### 別人家的 code 是比人更快更可靠的 oracle（VP-17524）
+票自己的提案是「先跟 lab/report team 確認這個 type 的語意」。實際上三個獨立 repo
+（producer + 兩個 consumer）已經把約定寫在 code 裡，一輪就把「要去問人」的票變成「已決定」的票。
+向外求證前先問：**這個語意有沒有已經被誰實作過？**
+
+### 離線重放 legacy 演算法 = 便宜的 root-cause 證明（VP-17631 / VP-17524 同形）
+- VP-17631：用兩支 mapping API 的資料在本地重跑舊的 first-match 算法，精確重現當時檔案的
+  OBX 分佈（74/1/5/2），**不需要當時的 pod log**。
+- VP-17524：在腦中執行 Java 的 `parseResult2SampleTestStatus(">90")`，得到 legacy 會送 `N`。
+凡是 port 自舊實作的服務，舊實作就是一份**可執行的 spec**；重放它比找歷史 log 便宜得多。
+
+### read-only 「generate content」endpoint 是投遞管線最值錢的東西（VP-17524 工具面）
+沒有 VPN、沒有部署、零副作用就能做出真 prod 資料的 before/after E2E：
+1. `kubectl port-forward` prod configmap 指的那幾個 gRPC upstream 到 localhost；
+2. 由**同一份 configmap** 產 `.env.local`，把 GRPC host 改寫成 127.0.0.1；
+3. 讓本機 boot 變惰性：`POD_ROLE=web`（intake providers / pusher queue processor 都不註冊）
+   ＋ `ENABLE_KAFKA_CONSUMER=false`（log 要確認 `KafkaReportFinishedListenerService` disabled）
+   —— 才不會搶 prod 的 result-finished event；
+4. `POST /api/v1/result/generate-content/:sampleId`（`send_result:false`）只做 gRPC get +
+   `findFirst`；事後確認 `HL7_LOCAL_ROOT` 下零檔案；
+5. admin JWT 用 configmap 自己的 `JWT_SECRET` HS256 本地簽（`internal_user_role:'admin'`）。
+   ⚠ staging 的 `JWT_SECRET` 在 `lis-emr-v2-config`（不是 `-config-prod`），prod token 在 staging 會 401。
+**control sample 才是讓 diff 變成證據的東西** ——「我想改的地方變了」很容易，
+「其他都 byte-identical」才是要證明的那句。
+（VP-17631 補充：`send_result=false` 的 dry-run **在 #333 merge 前不是零副作用** ——
+它會沿用既有 record 並覆寫 `generated_hl7_content`/`file_size_bytes`/`updated_at`，
+對已投遞的 record 做 dry-run 會讓 DB 與當時真正送出的檔案不一致。）
+
+### staging 驗不到不等於沒驗（VP-17524）
+staging 與 prod 共用 gRPC upstream 但指自己的 DB（192.168.60.11），而
+`validateEmrIntegration`（step 2）跑在 mapper（step 3）**之前** —— prod 樣本在 staging 會先死在
+"No result-enabled integration found"，永遠碰不到要測的 code。
+這種情況 staging 只能確認「跑著正確的 commit」，功能證據必須來自 prod read-only 探針。
+報告時要把這句寫清楚，不要讓「staging 驗過」含糊帶過。
+
+### emr-v2 fresh worktree：一律 `npm test`，不要 `npx jest`（VP-17524 差點誤報）
+`pretest` hook（`prisma generate --schema=prisma/schema.test.prisma`）才會建
+`.prisma/test-client`。乾淨 worktree 上直接 `npx jest` 會紅 5 個 suite，**長得跟 regression 一模一樣**。
+（接 repos.md 既有的 jest gotcha 清單。）
+
+### zsh：`grep -r --include` 的 pattern 一定要引號（VP-17524）
+`grep -r --include=*.java` 未加引號時 zsh 直接以 `no matches found` **中止整條命令**，
+讀起來就像「legacy repo 裡沒有這段 code」。與 [[feedback_rg_dash_r_is_replace_not_recursive]] 同族：
+**空結果先懷疑 shell/flag，再懷疑 codebase。**
+
+## 【蒸餾 2026-08-06】兩個 stakeholder 在裁決「同一個 fallback」時，先確認他們講的是不是同一種 actor（VP-17628）
+
+三輪才收斂的設計，形狀值得記住：
+1. 我的 Step-4 提案：省略 provider → 查 clinic defaultProvider → 再退回 token customer（portal parity）。Leo 先批准了 token-customer fallback。
+2. PM（Chris Wu）推翻：default 未設 → **ERROR，不准退回 token**；明給 provider 一律覆寫。
+3. Leo 接著反對我「把三種 token 壓成一條 chain」的摘要：**customer-scoped token 本來就該以自己下單，根本不該去查 clinic default。**
+
+最終不是一條 chain，而是**以 token type 為 key 的矩陣**：
+customer token → self；clinic-only token → default-or-error；scope-less → 必須自帶 provider。
+PM 的規則只適用 clinic-token 那一列。
+
+**看似矛盾的兩個裁決，其實是在講不同的 actor class。** 我把它們攤平成一條規則才製造出衝突；
+換成矩陣就同時滿足兩人，而且順帶消掉 skeptic 提的 namespace 漏洞（VP-17499 第二個 resolution point）
+——不需要額外的 code。
+→ 收到第二個 stakeholder 的裁決時，先問：**他跟前一個人講的是同一個主體嗎？**
+別急著回報「兩位的意見衝突」。
+
+### 「有 row」不等於「值可用」——設計 fallback 前先量化 unset 的分佈（VP-17628）
+clinic_setting 的 `defaultProvider`，用 ClickHouse replica 掃 **52,615 個 active clinic**：
+**37% 有可用值 / 37% 是 empty-string 的 row / 26% 根本沒有 row**。
+empty-string 型跟可用型一樣多 —— 如果照直覺寫「row 存在就當有設定」，**19,000 個 clinic 會判錯**。
+Live RPC 探針也確認了：clinic 153884 回傳 `value='' active=true`。
+→ 任何 optional setting，「沒設定」至少有三種型態（無 row / 空值 / 明確 null），
+**開工前先跑一次分佈統計**，這是幾分鐘的查詢換掉一個結構性 bug。
+（同族：RPC 失敗 vs 設定未設，也絕不能混為一談——skeptic 抓到的第四點。）
+
+### 移除 fallback 時，若 option flag 已無反向 caller，就整個刪掉而不是翻預設值（VP-17503）
+whole-order 也改成 throw 之後，`throwOnFailure` 沒有任何 `false` 的 caller 了 →
+直接把這個 option 拿掉，而不是把預設值翻成 true。改動因此變成幾乎純刪除（-98/+32），
+沒有留下「還可以關掉」的暗門。**參數的存在本身就是承諾它會被用到兩種值。**
+
+### 「for discussion」型 ticket：把 Step 3/4 壓成一個帶推薦的 AskUserQuestion（VP-17503）
+當兩個選項的差別是**產品語意**而不是技術風險，debate subagent 沒有加值。
+VP-17503 是「騎在已驗證機制上的刪除型改動」，一個帶明確推薦的提問，Leo 幾秒就回。
+→ 判準：**選項差在技術後果 → debate；差在產品語意 → 直接問人。**
+
+### 出貨 client 之前，先用 repo 自己的 proto 對 prod 打一次唯讀 RPC（VP-17628）
+在寫 GetClinicSetting client 之前先實際呼叫 prod，一次確認了 proto 欄位命名（`keepCase`、`isActive`）
+以及 configured / unset 兩種回傳形狀。比讀 proto 檔推測便宜太多，
+而且這正是上面那條「37% 是 empty string」被發現的方式。
+
+### worktree + config-yaml-coupling pre-commit hook：yaml 快照只在 main checkout（VP-17628 / VP-17589 兩次踩）
+`lis-emr-v2-config.yaml` / `lis-emr-v2-config.prod.yaml` 是**未被 track 的檔案，只存在於主 checkout**。
+新開的 worktree 裡沒有它們 → hook 對任何碰 `GRPC_V2_SETTING_*` 之類 env 的 commit 直接擋下。
+解法是把那兩個 yaml **複製進 worktree** 讓 hook 解析得到（不是 `--no-verify` 繞過）。

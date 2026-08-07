@@ -1,3 +1,10 @@
+---
+date: 2026-08-06
+slug: vp17628-default-provider
+related: [VP-17628, VP-17472, VP-17499, VP-17450, VP-17283, VP-17290]
+distilled: true
+---
+
 # 2026-08-06 — VP-17628: orderingProviderId optional, clinic default provider fallback
 
 Related: VP-17628, VP-17472, VP-17499, VP-17450, VP-17283, VP-17290

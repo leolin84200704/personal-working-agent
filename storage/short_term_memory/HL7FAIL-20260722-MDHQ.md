@@ -63,13 +63,17 @@ links:
 - VP-17493
 - VP-17497
 - VP-17499
+- VP-17503
 - VP-17517
+- VP-17524
 - VP-17537
 - VP-17538
 - VP-17539
 - VP-17544
 - VP-17589
 - VP-17591
+- VP-17628
+- VP-17631
 - emr-integration
 - fhir-api
 tags:
@@ -85,7 +89,7 @@ summary: 'Two 07-22 hl7_file_input failures (6673 Caroline Xanthakis / 6677 Ange
   retained local file on the next 15-min tick. Samples 2602089/2602090 created, correct
   customer+clinic, no duplicates. No Jira ticket (Leo direct request); requested_by=customer_not_found-fix-20260723.'
 jira_status: none
-score: 0.547
+score: 0.5573
 ---
 
 # HL7FAIL-20260722 — MDHQ customer_not_found x2 (Caroline Xanthakis / Angela Jordan)

@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.1385
+score: 1.188
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -78,13 +78,17 @@ links:
 - VP-17493
 - VP-17497
 - VP-17499
+- VP-17503
 - VP-17517
+- VP-17524
 - VP-17537
 - VP-17538
 - VP-17539
 - VP-17544
 - VP-17589
 - VP-17591
+- VP-17628
+- VP-17631
 - fhir-api
 tags:
 - emr
@@ -1171,3 +1175,65 @@ infra 要求當日拔除所有 local DB / Kafka / Redis + CDC topic `153_*`（60
 - 2026-08-04 未解殘留：emr-v2 + transv2 的 **staging DB 仍在 192.168.60.11**（退役 blocker，
   待 infra 決策）；ClickHouse 192.168.62.85 與 CDC feed 的 ownership 未確認；
   transv2 還有 `DATABASE_URL_LIS` 死 key、60.6 RPC、192.168.10.153 report URL。
+
+## Result content correctness — the vocabulary you don't own (VP-17524 / VP-17631, 2026-08-06)
+
+### `OUT_OF_` 是 range annotation，不是臨床分類（VP-17524）
+Report pipeline 產出的 `resultStatus` tag 家族裡，`OUT_OF_` 前綴只表示「值落在 reportable
+range 之外」；臨床分類是**去掉前綴後的 `RESULT_*` 餘部**。三個獨立 repo 都這樣編碼：
+- Producer: LIS-Report `base-report-server/src/result/report-common/util.ts:2234-2244` —
+  sentinel `±999999` + 開放式 normal range（`≤X`/`≥X`）→ `OUT_OF_RESULT_NORMAL_M`；
+  否則 `OUT_OF_RESULT_LOW_ABNORMAL_M` / `OUT_OF_RESULT_HIGH_ABNORMAL_M`。
+- Consumer: LIS-Report `result-tt/result-common/result-common.service.ts:283-287` 把
+  `OUT_OF_RESULT_NORMAL` 與 `RESULT_NORMAL` 同組。
+- Consumer: report-pdf `src/service/ReportService/FoodSummaryService.js:22,29` 同樣把
+  `OUT_OF_RESULT_HIGH_ABNORMAL_M` 與 `RESULT_HIGH_ABNORMAL_M` 同組。
+→ emr-v2 `result-status-mapper.service.ts` 現在在 normalize 時直接剝掉 `OUT_OF_` 前綴
+（注意：base tag 是 `RESULT_NORMAL`，所以剝的是 `OUT_OF_`，**不是 `OUT_OF_RESULT_`**）。
+
+**tag 取決於 range 字串怎麼被 render，不是值本身。** 同一支 sample、同樣的 `>90`：
+`EGFR`（range render 成 `60-90`）拿到 `OUT_OF_RESULT_NORMAL`，`EGFRAA`（render 成 `>=60`
+開放式）拿到 `RESULT_NORMAL_M`。這個耦合住在上游，下次看到 tag 莫名其妙時先查 range render。
+
+### Port 自 legacy 時，「誰計算分類」的契約會靜默改變（VP-17524 root cause）
+Legacy Java `MasterListClass.parseResult2SampleTestStatus()`（EMR-Backend
+`src/main/java/com/vibrant/models/MasterListClass.java:220`）是**拿值去比對 reference range
+自己算**分類；emr-v2 改成**信任 gRPC 傳來的 pre-computed `resultStatus` label`**
+（`sample-test-result.service.ts:397`）。一旦從「自己算」變成「信別人的字彙」，
+列舉式 switch 就註定短缺 —— 未列舉的 tag 掉進 `default:` → `RESULT_UNKNOWN_ERROR` → `TNP`。
+**Legacy 實作是可以在腦中執行的 spec**：`parseResult2SampleTestStatus(">90")` →
+`replaceAll("<|>","")` = 90.0 → 落在 60~90 → `RESULT_IN_RANGE` → `N`。
+這一步把「這樣改應該對」變成「這是回復原本正確的行為」，是最便宜的 tiebreaker。
+
+### TNP 在 wire 上的實際樣子 ≠ 變數名（VP-17524）
+`abnormalFlag === 'TNP'` 在 `hl7-encoder.service.ts:439,596` 讓 **OBX-8 送出空白**（不是字面
+`TNP`），並在 `:181-183` 額外附一段 **`NTE|...|Test Not Processed`**。
+所以一筆正常的 eGFR 被投遞成「沒有 abnormal flag + 明寫 Test Not Processed」——
+NTE 才是診所人員真正看到的東西。寫 result 類 bug 的症狀時，一定追到 wire。
+
+### OBR panel label：投遞成功 ≠ 內容正確（VP-17631）
+result triage 過去都停在 `transmission_status`，但 VP-17631 的錯在 **OBR 標籤**，DB 一片綠。
+診斷 result 內容問題要把 `generated_hl7_content` 與「order API 說訂了什麼」對撞。
+- 未歸屬 marker 的分節來源：`GET {api}/v1/lis/base-report-service/result/testHierarchyForReports?barcode={accession}`
+  （`Authorization: Bearer <VIBRANT_API_TOKEN>`，不帶 `Bearer` 會 401）。回傳巢狀
+  `reportType → … → category → Tests[]`，**leaf category 就是 PDF 上的分節標題**；巢狀深度依
+  產品而異（Neural Zoomer 3 層），要走到 `Tests` 葉節點取直接父層。
+- category 名稱本身就是 price mapping 的 GROUP name，可直接換既有 EMR code
+  （Anemia→VAREQUISTION36 / Hormones (all)→VAREQUISTION57 / Insulin Resistance→VAREQUISTION69 /
+  其餘→VAREQUISTION94 Other Markers）。不需要新代碼。
+- **否證過**：「取最小的包含套組」不對 —— 報告用的是自己策展的 category，不是套組成員關係。
+- 這支 API 失敗**不可**讓 generation 失敗（與 order API 相反）：ordered panel 已經正確，
+  它只決定額外 marker 的標題 → 退到 Other Markers 並記 `[REPORT_SECTIONS_UNAVAILABLE]`。
+
+### 同一支 sample 的 HL7 內容取決於哪個 pod 處理（VP-17631，2026-08-06 實測）
+兩件事疊起來的後果，**兩項都還沒修**：
+1. `findDistinctEligibleResultIntegrations` **仍然沒有 `pipeline_location` filter**
+   （VP-17312 review 標 HIGH、VP-17343 應處理，code 至今無此 filter）→ 哪個 pod 撿到 event
+   就由誰投遞，與 integration 歸屬的 location 無關。
+2. **on-prem 部署落後 cloud**：sample 2500872 從 on-prem endpoint（`192.168.60.6:31317`）重推
+   得到 #331 之前的輸出（72 marker），從 cloud pod 送才是 87。on-prem 是獨立部署、沒跟上 release。
+→ 重推/驗證 result 內容前，先確認你用的 endpoint 跑的是哪一版 code（`kubectl exec` grep dist）。
+
+### PF 資料夾空 ≠ 沒上傳（VP-17631）
+PF vendor 會**即時取走**投遞檔並移到 `/Prod/Archive`。要證明送達，去 `/Prod/Archive` 找到檔案
+（並比對 size 與 DB `file_size_bytes`），不要用「資料夾是空的」下結論。
