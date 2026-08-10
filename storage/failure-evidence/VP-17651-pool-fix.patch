@@ -1,29 +1,33 @@
-From 10c1ed55c5b5f34897d9d11e980fbce65866409d Mon Sep 17 00:00:00 2001
+From 2ee53efc71a003cbf6974ac2c613042545940eb8 Mon Sep 17 00:00:00 2001
 From: Hung Fan Lin <leolin84200704@gmail.com>
 Date: Mon, 10 Aug 2026 15:53:43 -0700
-Subject: [PATCH] [VP-17651] Raise pool acquire timeout to 30s and scale to 8
- replicas
+Subject: [PATCH] [VP-17651] Match manifest to live mitigation: 30s pool
+ acquire timeout, 8 replicas, 3 browsers/worker
 
-Burst load exhausts the browser pool (5 pods x 2 browsers = 10
-concurrent renders); with renders holding a browser 2-33s, the 10s
-generic-pool acquire timeout converted queue waits into HTTP 500
-(TimeoutError: ResourceRequest timed out) at ~10% of requests during
-the 2026-08-06 18Z and 2026-08-07 15-16Z peaks (236 occurrences
+Burst load exhausts the browser pool; with renders holding a browser
+2-33s, the 10s generic-pool acquire timeout converted queue waits into
+HTTP 500 (TimeoutError: ResourceRequest timed out) at ~10% of requests
+during the 2026-08-06 18Z and 2026-08-07 15-16Z peaks (236 occurrences
 Aug 5-10). The report viewer surfaces each as 'Failed to Download PDF'.
 
+All three values are already live on prod (set via kubectl on
+2026-08-10 by Hung-Fan Lin and Tianhao Wang); this commit syncs the
+manifest so a future kubectl apply does not revert them:
 - POOL_ACQUIRE_TIMEOUT=30000: queue during bursts instead of failing,
   while keeping acquire+render inside the ingress 60s read timeout.
-- replicas 5 -> 8: raises concurrent render capacity 10 -> 16.
-- Sync LOG_LEVEL and CORS_ORIGINS currently set live on the prod
-  deployment into the manifest so kubectl apply does not regress them.
+- replicas 5 -> 8 and BROWSERS_PER_WORKER 2 -> 3: concurrent render
+  capacity 10 -> 24. Watch pod memory: the 4Gi limit was sized for 2
+  browsers per pod.
+- Also sync LOG_LEVEL and CORS_ORIGINS already set live so apply does
+  not regress them.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 ---
- k8s/deployment.yaml | 15 ++++++++++++++-
- 1 file changed, 14 insertions(+), 1 deletion(-)
+ k8s/deployment.yaml | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
 
 diff --git a/k8s/deployment.yaml b/k8s/deployment.yaml
-index 513389d..a807780 100644
+index 513389d..a7b516f 100644
 --- a/k8s/deployment.yaml
 +++ b/k8s/deployment.yaml
 @@ -5,7 +5,7 @@ metadata:
@@ -35,10 +39,12 @@ index 513389d..a807780 100644
    selector:
      matchLabels:
        app: report-pdf-engine
-@@ -36,6 +36,19 @@ spec:
+@@ -35,7 +35,20 @@ spec:
+             - name: WORKERS
                value: "1"
              - name: BROWSERS_PER_WORKER
-               value: "2"
+-              value: "2"
++              value: "3"
 +            # Queue instead of failing during render bursts. Renders occupy a
 +            # browser for 2-33s, so a 10s acquire timeout turns any burst
 +            # deeper than the pool into user-facing 500s (VP-17651).
