@@ -1,0 +1,60 @@
+From 10c1ed55c5b5f34897d9d11e980fbce65866409d Mon Sep 17 00:00:00 2001
+From: Hung Fan Lin <leolin84200704@gmail.com>
+Date: Mon, 10 Aug 2026 15:53:43 -0700
+Subject: [PATCH] [VP-17651] Raise pool acquire timeout to 30s and scale to 8
+ replicas
+
+Burst load exhausts the browser pool (5 pods x 2 browsers = 10
+concurrent renders); with renders holding a browser 2-33s, the 10s
+generic-pool acquire timeout converted queue waits into HTTP 500
+(TimeoutError: ResourceRequest timed out) at ~10% of requests during
+the 2026-08-06 18Z and 2026-08-07 15-16Z peaks (236 occurrences
+Aug 5-10). The report viewer surfaces each as 'Failed to Download PDF'.
+
+- POOL_ACQUIRE_TIMEOUT=30000: queue during bursts instead of failing,
+  while keeping acquire+render inside the ingress 60s read timeout.
+- replicas 5 -> 8: raises concurrent render capacity 10 -> 16.
+- Sync LOG_LEVEL and CORS_ORIGINS currently set live on the prod
+  deployment into the manifest so kubectl apply does not regress them.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ k8s/deployment.yaml | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/k8s/deployment.yaml b/k8s/deployment.yaml
+index 513389d..a807780 100644
+--- a/k8s/deployment.yaml
++++ b/k8s/deployment.yaml
+@@ -5,7 +5,7 @@ metadata:
+   labels:
+     app: report-pdf-engine
+ spec:
+-  replicas: 5
++  replicas: 8
+   selector:
+     matchLabels:
+       app: report-pdf-engine
+@@ -36,6 +36,19 @@ spec:
+               value: "1"
+             - name: BROWSERS_PER_WORKER
+               value: "2"
++            # Queue instead of failing during render bursts. Renders occupy a
++            # browser for 2-33s, so a 10s acquire timeout turns any burst
++            # deeper than the pool into user-facing 500s (VP-17651).
++            # 30s keeps worst-case acquire+render inside the ingress 60s
++            # proxy-read-timeout.
++            - name: POOL_ACQUIRE_TIMEOUT
++              value: "30000"
++            # Mirror the env currently set live on the prod deployment so
++            # applying this manifest does not regress it.
++            - name: LOG_LEVEL
++              value: "info"
++            - name: CORS_ORIGINS
++              value: "https://portal.vibrant-wellness.com,https://portal.vibrant-america.com,https://mypatienthubs.com,https://report.vibrant-wellness.com,https://newdesign.report-pdf.pages.dev"
+           resources:
+             requests:
+               cpu: "500m"
+-- 
+2.39.2 (Apple Git-143)
+
