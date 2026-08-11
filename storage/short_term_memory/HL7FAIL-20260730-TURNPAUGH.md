@@ -12,6 +12,7 @@ links:
 - FHIR-ONDEMAND-RESULT
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -93,7 +94,7 @@ summary: 'hl7_file_input 6746 (order_28984_1785429636_83.hl7, /turnpaughemr/orde
   clinic 13505, active, no duplicates (core-verified). Leo direct request, no Jira
   ticket; requested_by=customer_not_found-fix-20260731.'
 jira_status: none
-score: 0.7276
+score: 0.6449
 ---
 
 # HL7FAIL-20260730 — Turnpaugh customer_not_found (Vincent Grove)

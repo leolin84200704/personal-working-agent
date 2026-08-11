@@ -3,7 +3,7 @@ id: patterns
 type: ltm
 category: repo_patterns
 status: active
-score: 0.198
+score: 0.2079
 base_weight: 0.8
 created: 2026-04-22
 updated: 2026-07-22
@@ -26,6 +26,7 @@ links:
 - VP-16784-87
 - VP-17407
 - VP-17408
+- VP-17653
 tags:
 - patterns
 - build
@@ -33,16 +34,6 @@ tags:
 - investigation
 summary: Build/deploy patterns, investigation flows, DB connections, known issues
 ---
-
-
-
-
-
-
-
-
-
-
 
 # Common Patterns & Gotchas
 
@@ -1206,6 +1197,22 @@ VP project 的 Bug type 建單必帶（field id 以 2026-07-28 createmeta 重新
 - staging 已知 quirk：`generateBarcodeForSampleID` 對每個新 sample 失敗（Go upstream `unknown time zone America/Los_Angeles`）— 非致命（barcode best-effort），staging API order 無 julien_barcode 是預期現象，prod 健康。
 - **自鑄 emr-v2 JWT（HS256, JWT_SECRET）payload 必含 `userId`**（VP-17517 E2E, 2026-07-28）：JwtStrategy.validate 對缺 userId/user_id 的 token 一律回 generic 401 "Invalid token" — customer_id/clinic_id 齊全也不夠，錯誤訊息不會告訴你缺哪個欄位。
 - **staging 的 order 資料活在 order-staging 自己的 DB，不在 .11 的 lis_core_v7**（VP-17517, 2026-07-28）：staging API 下的單在 lis_core_v7 查不到 ≠ 不存在；要證明 upstream 狀態，直接打 order-staging service（如 re-cancel 期待 409 "Order already canceled"）。
+  - **【2026-08-07 VP-17628 修正／補充，以此條為準】「自己的 DB」不等於「拋棄式的 DB」。**
+    staging pod `env=dev` → 下單確實打到 order-staging，但 **order-staging 與 prod 共用同一個
+    order/sample store**：E2E 產出的 sample id（2554042/43/44）直接**接續 prod 的序號**。
+    → **staging 下的單要當成真單處理：每筆用完必須 cancel**（VP-17628 三筆全部 patientPayLater
+    + cancel，refund 0）。上面 VP-17517 那句只證明「在 `lis_core_v7` 查不到」，
+    不能推論成「這是沙盒、可以隨便下」。
+- **改 prod 資料來測 → 同一個 session 內改回去，並用「功能面」再證一次**（VP-17628, 2026-08-07）：
+  為了測 clinic-only token 走 defaultProvider，把 clinic 153881 的 `clinic_setting.defaultProvider`
+  由 `''` 暫設為 `'50658'`（用 transformer 的 `CreateOrUpdateClinicSetting` 原樣 shape，
+  不要手寫 INSERT），測完改回 `''`。**還原的驗收不是「read-back 值對了」就算**——
+  再打一次 API 確認行為回到 `422 default_provider_not_configured` 才是真的還原。
+  收尾要能講出「零殘留」：3 筆 order 已 cancel、setting 已復原、兩種證據各一。
+- **staging JWT_SECRET 在 `lis-emr-v2-config.yaml` 裡是 UNQUOTED**（VP-17628）：自鑄 HS256 token 前
+  照抄時容易連引號一起帶進去。自鑄 token 的好處是能自由控制 scope 形狀（scoped / clinic-only /
+  scope-less），unit test 蓋不到的 matrix 才測得出來；但 **scope-less service token 測不了** ——
+  自鑄的 service-claim token 會在 `JwtAuthGuard` 的 data-access 層就 403，根本進不到 controller。
 - emr-v2 對外 POST endpoints（/orders、/order-cancel）成功回 **HTTP 201**（Nest POST 預設），不是 200 — 寫 doc/Confluence 時照 201 寫，別照直覺寫 200。
 
 ### Consult reminder 兩個 producer 並存 — Postmark tag 指紋 + Bull replay class（VP-17421, 2026-07-15）
@@ -1581,3 +1588,80 @@ VP-17503 是「騎在已驗證機制上的刪除型改動」，一個帶明確�
 `lis-emr-v2-config.yaml` / `lis-emr-v2-config.prod.yaml` 是**未被 track 的檔案，只存在於主 checkout**。
 新開的 worktree 裡沒有它們 → hook 對任何碰 `GRPC_V2_SETTING_*` 之類 env 的 commit 直接擋下。
 解法是把那兩個 yaml **複製進 worktree** 讓 hook 解析得到（不是 `--no-verify` 繞過）。
+
+## 【蒸餾 2026-08-10】CI 變慢的真正原因不在 Jenkinsfile 裡 —— 先跟 CI server 要每個 stage 的實測時間（VP-17653 / VP-17656）
+
+emr-v2 build ~20 分鐘。讀 Jenkinsfile 推理出三個嫌疑（sequential rollout waits、
+dead prepare stage、沒有 .dockerignore），修完只降到 10.4 分。**最大的那一個讀檔案永遠看不到**：
+staging build 收尾的 `docker image prune -f` **沒有 filter**，把 multi-stage build 的
+untagged 中間層全刪了 → 每一次 build 兩個 `npm ci` 都重跑。
+證據是去 Jenkins API 拉 console log 比對 cache 標記才浮出來的：tagged runtime layer 顯示 CACHED，
+untagged 的 dep/builder layer 全部 RUN。改成 `--filter "until=72h"` 之後
+main #255 的 Docker Build 從 **292s → 5.4s**（29/32 cached）。
+
+可攜的紀律：
+- **優化 pipeline 前，先從 CI server 自己的 API 抓每個 build 的 stage 耗時序列**
+  （這裡是 http://192.168.60.9:9602，multibranch job LIS-EMR-V2-BACKEND；
+  掃 8080 找到的那幾台 X-Jenkins 是別隊的實例，帳密只在 60.9:9602 有效；
+  POST 要先跟 `/crumbIssuer/api/json` 拿 crumb 並帶上 cookie；query 含 `[]` 要用 `curl -sg`）。
+- **一次 build 變長不等於 regression**：main #256 的 14 分鐘是因為 #341 動了 package.json →
+  npm ci 層合法失效（一次性）。判 regression 前先看**哪些層失效、為什麼**。
+- **`prune` 這類「清理」指令是 cache 的天敵**，而它造成的傷害只會表現為「build 有點慢」，
+  不會有任何錯誤訊息。任何無 filter 的 prune/clean 都該被視為每次 build 付一次全額成本。
+
+### `parallel` 讓「驗證了一邊」不再等於「兩邊都好」（VP-17653）
+把 on-prem 與 AKS 的 rollout 併成 `parallel` 之後，我在 AKS 側看到新 pod、正確 image、log 乾淨，
+但這**不能證明 on-prem 那一支過了**。在 parallel 結構下唯一的聯合訊號是 **build 整體 SUCCESS**
+（任一支失敗會讓整個 build 失敗）。要單獨確認某一支，就得直接查那個 cluster 的 image SHA。
+→ 併行化會改變「什麼證據證明什麼」，改完 pipeline 要同步更新自己的驗證判準。
+
+### 慢，往往是另一個 bug 的症狀（VP-17653 → 抓到跨環境覆蓋）
+追 main build 為什麼 14 分鐘，才發現 main 每次都會 apply
+`azure-lis-emr-v2-deployment.yaml`（**on-prem STAGING** 的 deployment），而它 pin 的是
+`lis-backend-emr-v2:latest` = **prod image**。自 VP-16463 起，每次 main build 都把 on-prem staging
+的 SHA 蓋成 prod code，並附帶觸發一次完整 staging rollout（等 ≤300s）與 concurrent build 競態。
+**沒人回報過**，因為結果不是錯誤而是「staging 跑著別的版本」。
+→ 效能調查會強迫你逐行讀 deploy 腳本，是發現這類靜默錯誤的少數場合之一。
+
+### 被註解掉的 stage 是一顆倒數計時的刪除彈（VP-17656）
+emr-v2 的 `stage("test")` 2025-09-17 因為別的問題被註解掉，2025-12-08 一次「remove commented code」
+就徹底消失。之後 **8 個月零 lint、零 unit test、零 typecheck**，而 repo 裡躺著 82 個 `*.test.ts`
+和完整的 jest scripts。恢復時的現況盤點也值得記：unit suite 其實**健康**
+（101 suites / 1168 tests / ~14s / SQLite test DB / 無外部相依），壞掉的是 lint
+（裝了 eslint 9 但**根本沒有 config 檔**）。
+→ (a) 註解掉 CI stage 等於刪除，要嘛修好要嘛開票；
+  (b) 接手一個「沒有測試」的 repo，先跑一次再下結論——常常測試是好的，只是沒人叫它跑；
+  (c) Jenkins multibranch 的 `WildcardSCMHeadFilterTrait` 若是 `main staging`，
+      feature branch **根本不會 build**，PR 完全無 gate——「CI 沒跑」有時是 branch filter 的事，不是 stage 的事。
+
+## 【蒸餾 2026-08-10】查不到錯誤，先確認你的查詢查得到錯誤（VP-17651）
+
+P1「Error Downloading Reports」。pod log 48 小時 3,866 筆 /pdf **全部 200**、ingress 零 4xx/5xx、
+Datadog `status:error` **零筆**。三個獨立來源都說「沒有錯誤」。實際上那週有 **236 次 500**，
+ticket 當天尖峰失敗率約 10%。三個「沒有」各有各的假象：
+- **pod log 只涵蓋 pod 的壽命**。全 cluster 的 node 在 2026-08-08 維護時換過，所有 pod 都只有 42-43h 大，
+  事故當天（08-07）的 log **在本地已經不存在**。「查了 48 小時」聽起來很久，但它從事故之後才開始。
+- **Datadog 的 `status` 不是服務的 severity**。report-pdf-engine 的 pino level-50 因為沒有 pipeline remap，
+  全部落成 **`status:info`** → `status:error` 對這個 service 永遠回零。正確查法是
+  `@err.type:*` 或 `@res.statusCode:500`。
+- **ingress 也可能看不到**：被瀏覽器 CORS 擋掉的請求，server 只留下一筆乾淨的 OPTIONS 204。
+
+→ 紀律：**把「零筆」當成證據之前，先用一個你已知存在的正例校準這個查詢**
+（換個過濾條件、換個時間窗、或直接查一筆你確定發生過的事件）。
+校準不過的查詢，它的零沒有任何資訊量。同族：[[feedback_never_conclude_breakage_from_a_quiet_window]]（那條是輸入端為空），
+這條是**儀器本身對準了錯的欄位**——兩者的「零」長得一模一樣。
+
+### 「明顯的 hardening」可能會放大故障（VP-17651，假設被證據推翻）
+初期假設是 Puppeteer browser pool 卡死，而 `/health` 不碰 pool → K8s 看不見。
+提出的修法是 pool-aware readiness probe。**Datadog 時序推翻了它**：失敗在 08-07 16:30Z 之後歸零，
+pool 自己恢復了，這是純容量問題（5 pods × 2 browsers = 10 併發，render 佔用 2-33s，acquire timeout 只有 10s）。
+若真的上了 pool-aware readiness，**尖峰時會把最忙的 pod 踢出 rotation，讓爆量更嚴重**。
+→ 對「還沒被證實的故障模式」做的加固，要先問它在**相反的故障模式**下會怎樣。
+
+### 提高併發度的同時沒有提高資源上限 = 之後才炸的 OOM（VP-17651，2026-08-10 當晚兌現）
+容量修法是 acquire timeout 10s→30s（改成排隊而不是 500，因為 ingress 讀取逾時 60s 有 headroom）
++ replicas 5→8。我刻意**沒有**動 `BROWSERS_PER_WORKER`，理由寫在 STM：memory limit 曾為了 2 個 browser
+從 2Gi 調到 4Gi。後來 report team 自行把它設成 3，**memory limit 仍是 4Gi**。
+當晚 01:18Z 就有一個 pod `OOMKilled`（exitCode 137）。
+→ **每個 instance 的併發度與它的資源上限是同一個決定**；只動其中一個，另一個會在流量尖峰時替你做決定。
+本例的具體帳：limit 4Gi 是照 2 browsers 算的，現在 3 browsers。

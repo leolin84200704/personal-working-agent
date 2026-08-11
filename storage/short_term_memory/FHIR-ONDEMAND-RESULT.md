@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.3614
+score: 0.32
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -14,6 +14,7 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656

@@ -12,6 +12,7 @@ links:
 - FHIR-ONDEMAND-RESULT
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -89,7 +90,7 @@ summary: 'Two 07-22 hl7_file_input failures (6673 Caroline Xanthakis / 6677 Ange
   retained local file on the next 15-min tick. Samples 2602089/2602090 created, correct
   customer+clinic, no duplicates. No Jira ticket (Leo direct request); requested_by=customer_not_found-fix-20260723.'
 jira_status: none
-score: 0.5573
+score: 0.4939
 ---
 
 # HL7FAIL-20260722 — MDHQ customer_not_found x2 (Caroline Xanthakis / Angela Jordan)

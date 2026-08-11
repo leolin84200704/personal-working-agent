@@ -6,7 +6,7 @@ status: active
 score: 1.1873
 base_weight: 0.9
 urgency: 3
-created: 2026-07-29
+created: 2026-08-06
 updated: 2026-08-06
 links:
 - INCIDENT-20260518
@@ -32,7 +32,6 @@ links:
 - QH-918
 - QH-919
 - VP-15460
-- VP-16009
 - VP-16164
 - VP-16168
 - VP-16169
@@ -71,7 +70,6 @@ links:
 - VP-16987
 - VP-17065
 - VP-17076
-- VP-17077
 - VP-17120
 - VP-17217
 - VP-17222
@@ -81,6 +79,7 @@ links:
 - VP-17421
 - VP-17422
 - VP-17497
+- VP-17524
 - VP-17532
 - VP-17544
 - VP-17559
@@ -100,14 +99,14 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 68 entries across STM
+summary: Auto-aggregated failure index from 69 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-05 — total 68 entries
+> Last updated: 2026-08-06 — total 69 entries
 
 ## Themes
 
@@ -118,9 +117,9 @@ summary: Auto-aggregated failure index from 68 entries across STM
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
 - [Scope / requirement / PM communication](#scope-communication) — 4 entries
+- [Error handling / throw vs log](#error-handling) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
 - [gRPC / network / timeout](#grpc-network) — 2 entries
-- [Error handling / throw vs log](#error-handling) — 2 entries
 - [Auth / permission / role](#auth-permission) — 1 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
 - [GraphQL / API design](#graphql-api) — 1 entries
@@ -809,6 +808,41 @@ ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktre
 
 ---
 
+## Error handling / throw vs log <a id='error-handling'></a>
+
+### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
+
+1. per-customer `catch` 只 `logger.error(msg, error.message)` 且 error.message 對 Prisma 錯誤為空 → 失敗幾乎不可見、無告警。
+2. 失敗時不寫任何 record（連 failure record 都沒）→ 監控無從得知 0 交付。
+3. upload 成功但 record 失敗 → 狀態不一致。
+4. 自動產的 xlsx 內容 (per-accession csvReport, 7.4MB) 與手動精簡版 (139KB) 差異大 → 正式內容規格需與 PM 對齊。
+
+### **[[VP-17524]]**
+
+None that cost rework. Two near-misses worth naming:
+- Ran `npx jest` instead of `npm test` on a fresh worktree and got 5 red suites that looked like a
+  regression. They were the missing `.prisma/test-client` — the `pretest` hook builds it. Nearly
+  reported a false failure.
+- Broad `grep -r --include="*.java"` failed silently under zsh (`no matches found`) because the
+  glob was unquoted. An unquoted `--include` pattern in zsh aborts the command instead of passing
+  it through; an empty result would have read as "the legacy code has no such mapping".
+
+### **[[VP-17544]]** — `2026-08-03` — 誤用 `rg -r` 汙染了好幾輪探索結論
+
+`rg -rn 'pattern' path` 中 **`-r` 是 `--replace`**，`-rn` 被解析成 `-r n` → 把每個匹配
+內容替換成字面 `n` 再輸出。所以我看到 "eligibility" 變成 "lnility"/"liy"/"n"，
+**我還誤判成終端顯示層在吃字元**（甚至聯想到 memory 裡的 WezTerm hyperlink_rule 事件）。
+同一輪還用了 `--include='*.go'`（那是 grep 的語法，rg 要 `-g`）配上 `2>/dev/null`，
+把 rg 的 unknown-flag 錯誤吞掉 → **假的「0 hits」**，讓我一度以為 order-management
+沒有任何 DOB/Gender 處理。
+**教訓 (a)**：短選項簇不要跟需要參數的 flag 混寫（`-rn` ≠ `-n -r`）。
+**教訓 (b)**：`2>/dev/null` 會把「工具用錯」偽裝成「查無資料」。搜尋若回 0 命中，
+先確認命令本身有沒有報錯，再下結論。
+**教訓 (c)**：輸出看起來被亂改時，先懷疑自己的命令，再懷疑環境。我上次（Jira link 事件）
+的正確答案是「顯示層」，這次同樣的直覺是錯的 —— 前一次的結論不是這一次的先驗。
+
+---
+
 ## Test / mock / spec <a id='test-mocking'></a>
 
 ### **[[INCIDENT-2604156666]]** — `2026-05-21` — spec 在 HEAD 已壞（pre-existing，Leo 要求併本 hotfix 修）
@@ -840,31 +874,6 @@ ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktre
 ### **[[VP-17532]]**
 
 - (none blocking) setting_audit table in lis_frontend_service does not record the `timezone` setting; had to query core SettingService via gRPC (grpcurl + client-credentials OAuth token from transformer .env) — worked.
-
----
-
-## Error handling / throw vs log <a id='error-handling'></a>
-
-### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
-
-1. per-customer `catch` 只 `logger.error(msg, error.message)` 且 error.message 對 Prisma 錯誤為空 → 失敗幾乎不可見、無告警。
-2. 失敗時不寫任何 record（連 failure record 都沒）→ 監控無從得知 0 交付。
-3. upload 成功但 record 失敗 → 狀態不一致。
-4. 自動產的 xlsx 內容 (per-accession csvReport, 7.4MB) 與手動精簡版 (139KB) 差異大 → 正式內容規格需與 PM 對齊。
-
-### **[[VP-17544]]** — `2026-08-03` — 誤用 `rg -r` 汙染了好幾輪探索結論
-
-`rg -rn 'pattern' path` 中 **`-r` 是 `--replace`**，`-rn` 被解析成 `-r n` → 把每個匹配
-內容替換成字面 `n` 再輸出。所以我看到 "eligibility" 變成 "lnility"/"liy"/"n"，
-**我還誤判成終端顯示層在吃字元**（甚至聯想到 memory 裡的 WezTerm hyperlink_rule 事件）。
-同一輪還用了 `--include='*.go'`（那是 grep 的語法，rg 要 `-g`）配上 `2>/dev/null`，
-把 rg 的 unknown-flag 錯誤吞掉 → **假的「0 hits」**，讓我一度以為 order-management
-沒有任何 DOB/Gender 處理。
-**教訓 (a)**：短選項簇不要跟需要參數的 flag 混寫（`-rn` ≠ `-n -r`）。
-**教訓 (b)**：`2>/dev/null` 會把「工具用錯」偽裝成「查無資料」。搜尋若回 0 命中，
-先確認命令本身有沒有報錯，再下結論。
-**教訓 (c)**：輸出看起來被亂改時，先懷疑自己的命令，再懷疑環境。我上次（Jira link 事件）
-的正確答案是「顯示層」，這次同樣的直覺是錯的 —— 前一次的結論不是這一次的先驗。
 
 ---
 

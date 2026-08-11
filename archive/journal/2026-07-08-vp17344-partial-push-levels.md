@@ -3,6 +3,7 @@ date: 2026-07-08
 slug: vp17344-partial-push-levels
 related_tickets: [VP-17344, VP-17312]
 distilled: true
+archived: '2026-08-09'
 ---
 
 # VP-17344: configurable partial result push levels — investigation → design → ship in two sessions

@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.188
+score: 1.2004
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -16,6 +16,7 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -1205,6 +1206,24 @@ Legacy Java `MasterListClass.parseResult2SampleTestStatus()`（EMR-Backend
 `replaceAll("<|>","")` = 90.0 → 落在 60~90 → `RESULT_IN_RANGE` → `N`。
 這一步把「這樣改應該對」變成「這是回復原本正確的行為」，是最便宜的 tiebreaker。
 
+#### 【已驗證的續集】同一個 switch 也吞掉 critical（INCIDENT-20260808，2026-08-08 發現）
+上面那句「列舉式 switch 就註定短缺」不是預測，**已在 prod 兌現，而且送到病人的 EMR**：
+`mapReferenceTypeToStatus()` 沒有 `RESULT_HIGH_CRITICAL` / `RESULT_LOW_CRITICAL` 的 arm →
+`default:` → `RESULT_UNKNOWN_ERROR` → **TNP**。
+sample 2607611（2026-08-07，customer 18879 / MDHQ）的**血糖 467 mg/dL（range 70-100）**
+就是這樣以「Test was not done due to an error」投遞出去的，`SFTP upload success=true`。
+下游其實早就備好了：`getStatusDescription()` 有 `Critical! Higher/Lower range`、
+`getAbnormalFlagFromDescription()` 有 `HH`/`LL` —— 只缺這一個 arm，所以那兩個 flag 從來到不了 wire。
+- **不是 VP-17524 的 regression**：`git log -S "RESULT_HIGH_CRITICAL"` 對該檔零命中，字串從未存在過。
+  VP-17524 加的 loud `default:` 才是它終於被看見的唯一原因 —— 在那之前是**靜默降級**。
+- `RANGE_ERROR` 是另一個獨立缺口（TNP 對它可能是合理的，需 product 裁決，別跟 critical 混談）。
+- 費率：2026-08-08 那次 32h 窗約 1 支 critical-typed sample；2026-08-09 dream 再量 22h 窗
+  （週日低流量，1,882 行 log、`RESULT_NORMAL_M` 185）→ **critical/RANGE_ERROR 皆 0 次、0 error line**。
+  低流量窗的 0 不等於已修，只代表尚無新增受害者。
+- 修的方向不是再補兩個 `case`，而是**換成 total mapping + 啟動時對已知 vocabulary 斷言**，
+  讓下一個沒對到的 label 在 deploy 時就炸，而不是靜靜落在某個病人的 result 上。
+細節與待辦（歷史 blast radius 尚未量、尚未開票）見 STM `INCIDENT-20260808-critical-result-tnp`。
+
 ### TNP 在 wire 上的實際樣子 ≠ 變數名（VP-17524）
 `abnormalFlag === 'TNP'` 在 `hl7-encoder.service.ts:439,596` 讓 **OBX-8 送出空白**（不是字面
 `TNP`），並在 `:181-183` 額外附一段 **`NTE|...|Test Not Processed`**。
@@ -1237,3 +1256,36 @@ result triage 過去都停在 `transmission_status`，但 VP-17631 的錯在 **O
 ### PF 資料夾空 ≠ 沒上傳（VP-17631）
 PF vendor 會**即時取走**投遞檔並移到 `/Prod/Archive`。要證明送達，去 `/Prod/Archive` 找到檔案
 （並比對 size 與 DB `file_size_bytes`），不要用「資料夾是空的」下結論。
+
+## 【跨 ticket 蒸餾 2026-08-09】result path 只監看「有沒有送到」，沒有任何東西監看「送的內容對不對」
+
+素材：VP-17524、VP-17631、INCIDENT-20260808（外加 VP-17589 的反例）。三件事互不相干，
+**失效形狀完全相同**：產出一份格式合法、投遞成功、DB 全綠的臨床文件，而內容是錯的。
+
+| | 錯的是什麼 | DB 看起來 | 怎麼被發現的 |
+|---|---|---|---|
+| VP-17524 | 正常 eGFR 被標成 Test Not Processed | TRANSMITTED、無 error | 我自己 dream 掃 log |
+| VP-17631 | OBR panel 標成別的套組名 | TRANSMITTED、無 error | **診所打來抱怨** |
+| INCIDENT-20260808 | 血糖 467 critical 被標成 TNP | `upload success=true` | VP-17524 順手加的 loud `default:` |
+
+→ 三次都**不是監控抓到的**。`result_transmission_records` 這一層的 status 對內容錯誤永遠是綠的，
+因為它衡量的是 SFTP/HL7 傳輸，不是語意。DailyJob 的 `hl7_fail` 也只看 order 側。
+**目前 result 內容正確性的偵測機制 = 客訴 + 偶然的 log 掃描。**
+
+三條可操作的推論：
+1. **診斷 result 類抱怨時，`transmission_status` 綠不能結案。** 一定要把
+   `generated_hl7_content` 跟「上游說這支 sample 是什麼」對撞（order API 說訂了什麼 /
+   reference range 說這個值是什麼類別）。stopping at status 會直接把 class-C bug 判成 no-issue。
+2. **凡是「把上游詞彙翻成 wire 上一個值」的地方，都是同一族的下一個候選。**
+   已知三個都在 emr-v2 result path 的 mapping 層。列舉式 mapping + `default:` 兜底 = 生成合法但錯誤的
+   臨床文件。要嘛 total mapping + 啟動斷言，要嘛 fail loud，**不要有靜默的 best-effort 猜測**
+   （VP-17631 的 legacy first-match grouping 是最極端的例子：superset package 天生會贏）。
+3. **loud log 是目前唯一有效的偵測面，但沒人固定在看。** VP-17524 的 `default:` ERROR
+   是 INCIDENT-20260808 被發現的全部原因，而發現它的是 dream 的 closeout 掃描，不是告警。
+   在有真正的 content assertion 之前，**dream 的 prod error-log 掃描實質上就是這條 path 的監控**。
+
+反例對照（VP-17589）：它的問題正好相反 —— 沒有內容錯誤，而是**沒有任何 input 可看**。
+連續兩晚（08-06、08-09）掃 prod log 都是 0 筆 `[CUSTOMER_PROMO_APPLIED]`，
+但 22h 窗內整個 prod 連一筆 order assembly 都沒有。**空窗不是證據**
+（[[feedback_never_conclude_breakage_from_a_quiet_window]]）——
+量 input 側才能分辨「沒壞」與「沒跑到」。這兩種零長得一模一樣，結論相反。

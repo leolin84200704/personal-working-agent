@@ -14,6 +14,7 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -77,7 +78,7 @@ links:
 - VP-17631
 - emr-integration
 - fhir-api
-score: 0.5573
+score: 0.4939
 ---
 
 # BIOINSIGHTS-SFTP-KEY — key-based SFTP auth support

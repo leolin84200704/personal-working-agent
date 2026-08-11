@@ -20,6 +20,7 @@ links:
 - FHIR-ONDEMAND-RESULT
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -99,7 +100,7 @@ summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck pa
   Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
   team scope) — hand-off package given to Leo.'
 jira_status: n/a
-score: 0.6807
+score: 0.6033
 ---
 
 # hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap
