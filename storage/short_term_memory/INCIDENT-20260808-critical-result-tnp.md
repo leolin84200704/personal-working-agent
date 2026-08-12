@@ -3,7 +3,7 @@ id: INCIDENT-20260808-critical-result-tnp
 type: stm
 category: emr_integration
 status: active
-score: 0.9672
+score: 0.9355
 base_weight: 1.0
 created: 2026-08-08
 updated: 2026-08-09

@@ -3,7 +3,7 @@ id: _OPEN-TICKETS-OVERVIEW-20260606
 type: stm
 category: process
 status: reference
-score: 0.0086
+score: 0.0083
 base_weight: 0.6
 created: 2026-06-06
 updated: 2026-06-06

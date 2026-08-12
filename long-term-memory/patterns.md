@@ -1665,3 +1665,35 @@ pool 自己恢復了，這是純容量問題（5 pods × 2 browsers = 10 併發�
 當晚 01:18Z 就有一個 pod `OOMKilled`（exitCode 137）。
 → **每個 instance 的併發度與它的資源上限是同一個決定**；只動其中一個，另一個會在流量尖峰時替你做決定。
 本例的具體帳：limit 4Gi 是照 2 browsers 算的，現在 3 browsers。
+
+### 修完之後同一個人回報同樣的症狀 ≠ 沒修好（VP-17651 / VP-17659，2026-08-11）
+
+pool exhaustion 修掉、容量從 10 併發拉到 24、Datadog 自 08-07 16:30Z 起零筆 500。
+隔天同一位客戶連續回報兩次「還是不行」，看起來像「你根本沒修好」。實際上是**第二種故障類別**
+打在同一個使用者身上。分辨它靠三個互相獨立的訊號，任何一個單獨都不夠：
+
+1. **錯誤字串本身就是分類器**。axios 的 `Network Error` = 根本沒收到 HTTP response；
+   真的 500 會顯示 `Request failed with status code 500`。使用者截圖裡的那行字要當證據讀，不要當抱怨讀。
+2. **她的 accession 在 server 端有沒有留下痕跡**。針對該 accession 查 ingress + engine：
+   全部 200、零 5xx、零 499 → 那次失敗**從來沒有到達我們的 edge**。
+   （反例校準見上一節：查不到錯誤前先確認查詢查得到錯誤。）
+3. **ingress 的 499 有沒有固定秒數**。同一 sample 的 retry pair 兩次都在 **~19.8s** 被切斷
+   = 中間某個 proxy/VPN 的固定 timeout 簽名；axios 那邊沒有設 timeout，人手動取消也不會這麼準。
+   499 秒數散亂才是使用者自己關頁面。
+
+**定位到「哪一段網路」的技巧**：比對同一個頁面上**成功**與**失敗**的請求各自打到哪個 domain。
+本例 viewer 的資料走 `api.vibrant-wellness.com`（她可以）、下載走 `api.vibrant-america.com`（她不行、
+且我們完全沒有 log）→ 不是「網路慢」而是 **domain-specific 的阻斷**（她公司防火牆/DNS filter/SSL inspection，
+或 Cloudflare WAF 把她擋掉 —— CF 的 block page 沒有 ACAO header，瀏覽器就報成 `Network Error`，
+而且被 CF 擋掉的請求**不會進 origin log**，跟「純 client-side」長得一樣）。
+
+**要給使用者的東西是一個 discriminator，不是一句「再試一次」**：請她在瀏覽器直接開失敗那個 domain 上
+一個**公開、無需 auth、回應極小**的 URL（本例 `/v1/report-pdf-engine/health` → `{"status":"ok"}`）。
+開得起來 → 問題在那個特定請求（查 CF Security Events）；開不起來 → 她的 IT 要放行該 domain，
+且瀏覽器的錯誤碼會直接告訴你被擋在哪一層。一次來回就把「我們 vs 她的網路」切乾淨，
+不必再收第四支 Loom。
+
+→ 紀律：**「同樣的症狀」不是同一個 bug 的證據**。修完之後的回報要重新走一次分類，
+先問「這次的失敗在我們這邊留下什麼痕跡」——沒有痕跡的失敗和有痕跡的失敗是兩張不同的票。
+同族：[[project_result_push_has_no_idempotency_gate]] 那種「row 看起來乾淨」的假象，
+以及上一節的查詢校準。
