@@ -254,8 +254,8 @@ class PermissionManager:
             PermissionRule(
                 tool="run_bash",
                 action="deny",
-                pattern=r"git\s+push\s+\S+\s+(main|master)\b",
-                reason="Blocked: push to protected branch (main/master)",
+                pattern=r"git\s+push(\s+\S+)*\s+(main|master|staging|stage_test|develop)(\s|$|:)",
+                reason="Blocked: push to protected branch (main/master/staging/stage_test/develop)",
                 _is_default=True,
             ),
 
