@@ -3,10 +3,10 @@ id: INCIDENT-20260808-critical-result-tnp
 type: stm
 category: emr_integration
 status: active
-score: 0.9355
+score: 1.0125
 base_weight: 1.0
 created: 2026-08-08
-updated: 2026-08-09
+updated: 2026-08-12
 links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
@@ -76,6 +76,7 @@ links:
 - VP-17591
 - VP-17628
 - VP-17631
+- VP-17685
 - emr-integration
 - fhir-api
 relations:
@@ -187,6 +188,34 @@ So the result path *was* running, and no critical-typed test came through it in 
 Volume is ~60x lower than the 32h discovery window (11,008 `RESULT_NORMAL_M`) — a Sunday.
 **This is consistent with the ~1-per-day estimate, not evidence the defect is gone.** Nothing was
 changed; the missing switch arms are still missing. Still unticketed, still awaiting Leo.
+
+### [2026-08-12] Dream re-probe — the default arm fires ~15x/day; the 08-09 zero was the anomaly
+
+Datadog, `service:lis-emr-v2-deployment-prod "Unknown reference range type"`:
+
+- **111 occurrences of the unmapped-type error, 2026-08-06 01:08Z → 2026-08-13 00:59Z**, continuous,
+  still firing at probe time. This is the whole `default:` arm — the pattern search wildcards the
+  type name, so the 111 covers every unmapped label, including the two `RESULT_HIGH_CRITICAL_M`
+  occurrences already documented above. It is **not** a RANGE_ERROR-only count.
+- **Last 2 days: 6 occurrences, and all 6 are `RANGE_ERROR`** (2026-08-11 19:00Z, 08-12 19:40Z,
+  08-13 00:29/00:55/00:55/00:59Z) — raw lines read individually, all
+  `Unknown reference range type: "RANGE_ERROR" (normalized: "RANGE_ERROR")`. No critical-typed
+  label appears in this 2-day slice.
+
+This changes two things in the record above:
+
+1. The 2026-08-09 "0 occurrences in 22h" re-probe was a **quiet window, not a low base rate** —
+   exactly the trap in [[feedback_never_conclude_breakage_from_a_quiet_window]], read in the other
+   direction. The `default:` arm is hit ~**15x/day** averaged over the week, not ~1/day.
+2. But the frequency and the **harm** are carried by different labels. `RANGE_ERROR` dominates the
+   recent volume and step 3 below already parks it as possibly-legitimate TNP; the critical-high/low
+   labels are rare and are the ones that put a real patient value behind a "not processed" flag.
+   Anyone triaging on error count alone will mis-prioritise this: silencing `RANGE_ERROR` would
+   remove most of the log noise and none of the patient-facing defect.
+   **The per-label split, not the total, is the number to act on** — so the historical sizing in
+   step 2 must break down by label rather than counting `default:` hits.
+
+Still unticketed, still awaiting Leo. Nothing changed; the missing switch arms are still missing.
 
 ## Immediate next steps for a work session
 

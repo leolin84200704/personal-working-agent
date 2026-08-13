@@ -1697,3 +1697,42 @@ pool exhaustion 修掉、容量從 10 併發拉到 24、Datadog 自 08-07 16:30Z
 先問「這次的失敗在我們這邊留下什麼痕跡」——沒有痕跡的失敗和有痕跡的失敗是兩張不同的票。
 同族：[[project_result_push_has_no_idempotency_gate]] 那種「row 看起來乾淨」的假象，
 以及上一節的查詢校準。
+
+## 【家族延伸 2026-08-12】mock 掉的 collaborator 沒辦法驗證「你叫它的那個名字存在」（VP-17685）
+
+VP-17685 把 julien barcode 從 coresamples v2 換去 v1。第一次 ship（PR #343 + promotion #344）
+上線後，staging 立刻噴：
+
+```
+generateBarcodeForSampleID failed for sample 2554096-2554098:
+  client.generateBarcodeForSampleID is not a function
+```
+
+gRPC client 物件上的 method 是用 **proto 名字**掛的；code 用的 camelCase 別名把結尾的縮寫
+吃掉了（`...ForSampleID` → `...ForSampleId`），於是那個 property 是 `undefined`，call 直接 throw。
+PR #348 只改名字就修好。
+
+**三道綠燈全部沒擋住，而且是同一個原因**：
+- `npx jest src/modules/grpc src/modules/hl7-order-processing` → 31 suites / **375 passed**
+- `npx tsc --noEmit` → 0 errors、`nest build` clean
+- VP-17656 剛修好的 CI gate 也跑了也綠了
+
+因為 spec 裡那個 client 是 **mock**。mock 對你發明的任何名字都會乖乖回答，所以 spec 用錯的名字
+去 assert 用錯的名字，自己跟自己一致。`tsc` 也擋不住 —— 動態產生的 gRPC client 型別上那個
+method 名字本來就不在編譯期存在（`any` / index signature / `keepCase` 產物）。
+
+→ **判準**：unit test 綠燈證明的是「呼叫方的邏輯自洽」，不是「被呼叫方接得住」。凡是
+**跨 process 邊界、名字在編譯期不存在**的呼叫（gRPC/proto 產生的 client、`grpcurl` 的
+service.method、dynamic dispatch、字串 key 的 event/topic 名），mock 的斷言價值趨近於零，
+必須有**一次真的呼叫**才算驗過 —— 一次 live call、或退一步用 `grpcurl` 打同一個 method 名。
+同族既有變體見 line 1145（測試 mock 掉相依路徑 → 假信心）與 line 652（mock-seam 盲區：
+fixture 設了 live pipeline 從不設的欄位）。這次是**第三種**：mock 掉的是**名字本身**。
+
+配套的錯誤字串辨識（跟 line 1089 的 grpcurl 三種錯誤並列）：
+- `client.X is not a function` → **本地** client 物件上沒這個 property，名字拼錯 / 大小寫 /
+  縮寫尾巴被 camelCase 轉換吃掉。**還沒送出任何 request**。
+- `Code: Unimplemented` (12) → 送出去了，server 沒註冊。
+兩者差一個 network hop，但看起來都像「RPC 壞了」。
+
+→ 紀律延伸（同 family，line 1342）：這次「沒驗證它真的在做我以為的事」的那個環節，
+是**測試自己**。綠燈的來源如果是自己寫的替身，它證明的只有替身的行為。

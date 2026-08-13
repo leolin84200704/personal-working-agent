@@ -79,6 +79,7 @@ links:
 - VP-17591
 - VP-17628
 - VP-17631
+- VP-17685
 - emr-integration
 - fhir-api
 tags:
@@ -86,7 +87,7 @@ tags:
 summary: 'Deleted all 3 VEJO integrations (vendors 17/18/43) from prod lis_emr: 41
   rows across 7 tables, transaction with count guards, full backup at ~/src/credential/vejo-deletion-backup-20260804.json.
   Zero activity ever (0 hl7, 0 results, 0 samples). Reverse-audit clean.'
-score: 0.7127
+score: 0.698
 ---
 
 # VEJO integration deletion — 2026-08-04

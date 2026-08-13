@@ -1,7 +1,8 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-11 (dream run; no new entries since 2026-08-06, all distilled)
+> Last updated: 2026-08-12 (dream run; no new entries since 2026-08-06, all distilled —
+> note that 4 tickets shipped on 2026-08-12 without producing either a journal entry or an STM)
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|

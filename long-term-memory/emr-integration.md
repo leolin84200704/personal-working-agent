@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.2004
+score: 1.2127
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -90,6 +90,7 @@ links:
 - VP-17591
 - VP-17628
 - VP-17631
+- VP-17685
 - fhir-api
 tags:
 - emr

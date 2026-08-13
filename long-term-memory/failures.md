@@ -6,8 +6,8 @@ status: active
 score: 1.1873
 base_weight: 0.9
 urgency: 3
-created: 2026-08-06
-updated: 2026-08-06
+created: 2026-08-11
+updated: 2026-08-11
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -57,7 +57,6 @@ links:
 - VP-16760
 - VP-16766
 - VP-16784
-- VP-16784-87
 - VP-16785
 - VP-16786
 - VP-16787
@@ -99,19 +98,19 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 69 entries across STM
+summary: Auto-aggregated failure index from 68 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-06 — total 69 entries
+> Last updated: 2026-08-11 — total 68 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 19 entries
-- [Other / uncategorized](#other) — 10 entries
+- [Other / uncategorized](#other) — 9 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 8 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
@@ -451,10 +450,6 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
 
 
-
-### **[[VP-16784-87]]**
-
-（無 — verification-only session）
 
 ### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
 
