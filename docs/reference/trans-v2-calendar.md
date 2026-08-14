@@ -3,6 +3,7 @@
 > **Purpose**: let an AI agent answer most questions about the trans-v2 calendar module WITHOUT re-reading the codebase.
 > **Scope**: `/Users/hung.l/src/LIS-transformer-v2/src/calendar/` (plus app-level wiring it depends on).
 > **Snapshot date**: 2026-07-28 (code on branch `stage_test` @ a453397; prod DB stats queried live same day).
+> **Partial refresh 2026-08-14** (VP-17714, code @ `stage_test` ead3fee): §4.1 reschedule, §11 gotchas, §12 Zoom/integration facts, §13. Everything else is still the 2026-07-28 snapshot.
 > **Caveats**: `file:line` refs drift as code changes — treat them as anchors, re-grep the method name if a line doesn't match. DB row counts are a point-in-time snapshot. For "current state" questions (is X deployed? did Y change?), verify against ground truth (repo / prod DB / Jira) per RETRIEVAL.md.
 
 ---
@@ -84,7 +85,9 @@ Accession delta handled by `syncForEventUpdate`.
 
 **Reschedule (Clinical Consult, 150105 only)** — `rescheduleClinicalConsult` (`:4882`) + `fireRescheduleSideEffects` (`:5040`), from VP-16520/16521:
 - same clinician ⇒ in-place update (email `appointment_updated`, Kafka UPDATED)
-- different clinician ⇒ **cancel-and-rebook**: original event `is_canceled=true`, new event on new clinician's calendar copying `creator_calendar_id`/`practice_event_type`/`accession_ids`; same transaction releases→claims accessions (avoids VP-16410 1:1 collision). Kafka fires CANCELLED + CREATED pair (`:5025-5028`); emails = cancel(old) + create(new) + update(provider)
+- different clinician ⇒ **cancel-and-rebook**: original event `is_canceled=true`, new event on new clinician's calendar copying `creator_calendar_id`/`practice_event_type`/`accession_ids`/`event_title`/`event_type`/`color_id`/`location`/`timezone`/**`external_url`**; same transaction releases→claims accessions (avoids VP-16410 1:1 collision). Kafka fires CANCELLED + CREATED pair (`:5025-5028`); emails = cancel(old) + create(new) + update(provider)
+- **Every clinician switch is traceable**: the accession release carries `reason = 'clinician switch reschedule, original event N'` in `v2_event_accession_audit_log` — the only reliable fingerprint for this path (only 4 switches total as of 2026-08-14). `updateEvent`/`updateEventByPatient` can also swap the clinician participant in place via `replaceEventParticipants` (`:3633/:3641` deleteMany+createMany) and leaves NO such fingerprint; that path also never touches `external_url`.
+- ⚠️ **Cloning `external_url` on a switch is VP-17714** (still live in prod as of 2026-08-14; fix in PR #565, base `stage_test`, not deployed). See §11 for why it breaks Zoom but not phone consults.
 
 **Patient-facing variants** (150105 provider-as-patient flows): `createEventByPatient` (`:1549`), `updateEventByPatient` (`:1895`), `deleteEventByPatient` (`:2078`). Participation/RSVP: `updateMyEventStatus` (`:1283`), per-occurrence via `v2_event_participant_exception`.
 
@@ -310,6 +313,9 @@ Distinct legacy service: `Portal-Calendar` repo answers `/v1/portal/calendar/*/c
 
 - **`CLINICIAN_PRACTICE_ID = 150105`** ("Vibrant Clinical Team") hardcoded in reminder/accession-claim/daily-report constants; gates *ByPatient event mutations, reminders, daily report, accession claiming, clinician email-template override.
 - `v2_event` has NO status enum — only `is_canceled`. Reschedule (clinician switch) = cancel-and-rebook, so "cancelled" rows ≠ user cancellations.
+- **`external_url` is the "meeting info" column and its OWNER depends on the medium**: a Zoom consult stores the **clinician's** personal meeting room (PMI), a phone consult stores the **patient's** phone number. Any code that copies an event must decide per-medium — cloning is correct for phone, wrong for Zoom (VP-17714). Shapes in practice 150105: blank 5,870 / `zoom.us` 995 / bare phone 333 / other-text 6 — no Teams, Meet, or other URLs, so `includes('zoom.us')` is a safe discriminator here.
+- **PMI vs one-off meeting id**: a personal meeting room is a **10-digit** `/j/` number reused across dozens of events (Suzette 5613862727 ×69, Dana 5114365088 ×81); an **11-digit** `/j/` number is a one-off scheduled meeting. Useful when auditing whether a link belongs to the assigned clinician.
+- `ZoomService.generateLinkForProvider` returns the provider's `pmiUrl` **but also creates a scheduled meeting** (`POST /users/me/meetings`) every call — never put it on a hot path. Read-only PMI lookup is `getPersonalMeetingUrl` (added by VP-17714, PR #565, not yet deployed).
 - Two email topic casings: Azure `notification-email-template` vs on-prem `'Notification-Email-Template'` — different clusters, both intentional.
 - Settings live on `v2_calendar` columns; `v2_user_settings` / `v2_event_type_color_override` are dead (stale comment at user-settings.service.ts:527).
 - Availability fallback Mon–Fri 9–5 when provider has no `v2_schedule` rows.
@@ -326,11 +332,13 @@ Distinct legacy service: `Portal-Calendar` repo answers `/v1/portal/calendar/*/c
 - Events/month (start_time): 2026-01: 104, 02: 979, 03: 1,104, 04: 895, 05: 794, 06: 895, 07: 786; future-dated tail through 2026-12 + one 2027-05. `is_canceled` counts tiny (≤7/mo) — real cancels mostly live as exceptions/cancel-and-rebook.
 - Event types: Call 2,417; Zoom Meeting 1,434; Clinical Consult 1,191; Follow-up 283; Meeting 181; VCT 165; Sales Event 154; Zendesk/Teams 129; Task 120; General 118.
 - Calendars: 48,800 total (patient 27,736 / clinicadmin 12,482 / provider 8,582; all is_active) across 32,429 distinct owners / 18,129 practices — mostly bootstrap. **Only 764 calendars have ever created events, across 4 practices** ⇒ real usage concentrated in Clinical Team consults.
-- Integrations: 44 rows (zoom 24, google 19, outlook 1). Events synced externally: google_event_id 17, outlook_event_id 94, zoom_event_id 0 (zoom links likely stored as external_url/manual).
+- Integrations: 44 rows (zoom 24, google 19, outlook 1). Events synced externally: google_event_id 17, outlook_event_id 94, zoom_event_id 0.
+- **Zoom links are stored ONLY as `external_url`, never as `zoom_event_id`** (re-checked 2026-08-14: `zoom_event_id` still 0 across all 1,434 `Zoom Meeting` events). Consequence: the `event.zoom_event_id &&` guards in `fireRescheduleSideEffects` / `ZoomEventService.handleEvent*` are dead code in practice — no Zoom meeting is ever created, updated, or deleted by the event lifecycle for practice 150105.
+- **Practice 150105 has zoom integrations ONLY** (8 rows, one per clinical educator except Mary Augustine) — no google, no outlook, and 0 events have ever carried a `google_event_id`/`outlook_event_id`. So external-calendar sync is a no-op for the clinical-team consults, whatever `calendar-sync.service.ts` is wired to do.
 - Empty-but-live features: v2_meeting_request, v2_meeting_type*, v2_clinic_location, v2_clinic_settings.
 
 ## 13. Related tickets / history anchors
 
-VP-16410 (accession 1:1 claim), VP-16463 (nearby: emr-v2 cutover — different module), VP-16512/16514 (meeting types), VP-16520/16521 (Clinical Consult reschedule, cancel-and-rebook design), VP-16547/16558 (RS256 auth), VP-16612 (exclude clinicadmin from reminders), VP-16685 (gRPC cloud fallback), VP-16850 (public booking slot validation + verify scripts in `scripts/`), VP-17065 (daily report; PR #531 External_url), VP-17190 (timezone source of truth), VP-17261/17272 (checkCustomerAccess patient_id), VP-17421 (legacy Bull reminder incident — belongs to LIS-transformer, NOT this repo), PR #515 (disable introspection).
+VP-16410 (accession 1:1 claim), VP-16463 (nearby: emr-v2 cutover — different module), VP-16512/16514 (meeting types), VP-16520/16521 (Clinical Consult reschedule, cancel-and-rebook design), VP-16547/16558 (RS256 auth), VP-16612 (exclude clinicadmin from reminders), VP-16685 (gRPC cloud fallback), VP-16850 (public booking slot validation + verify scripts in `scripts/`), VP-17065 (daily report; PR #531 External_url), VP-17190 (timezone source of truth), VP-17261/17272 (checkCustomerAccess patient_id), VP-17714 (clinician switch cloned the old clinician's Zoom room into the rebooked event; PR #565 resolves the new clinician's PMI instead), VP-17421 (legacy Bull reminder incident — belongs to LIS-transformer, NOT this repo), PR #515 (disable introspection).
 
 Related STM/LTM: `long-term-memory/repos.md` §LIS-transformer-v2 (prod DB connection recipe, reschedule design), `patterns.md` (consult reminder dual-producer fingerprint).
