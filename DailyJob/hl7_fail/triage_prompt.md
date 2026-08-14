@@ -26,6 +26,23 @@ ORDER BY received_time DESC;
 - **Type B (order failure):** `order_input` 有值 且 `emr_code_not_found` 為 NULL → payment/order 失敗
 - **Type C (parse failure):** `order_input` 為 NULL 且 `emr_code_not_found` 為 NULL → HL7 parse exception
 
+### Step 2.5: Customer Resolution（每筆記錄必做，結果進報告）
+每筆失敗記錄都要解析出實際歸屬並附在報告：**customer_id, clinic_id, customer_npi, clinic_name**。
+
+> Routing 事實（emr-order-customer-resolution skill）：order 的 customer 由 **ORC.12 NPI →
+> `ehr_integrations`** 決定，`order_clients` 已不參與 routing（~VP-16968 後）。
+> 只用 sftpDir 反查 order_clients 會得到一串模糊 customer_id（2026-08-13 報告的問題），不可作為歸屬結論。
+
+1. 取 NPI：`order_input` 非 NULL 時從 JSON 取 provider NPI；為 NULL 時改用 sftpDir 匹配
+   `ehr_integrations.sftp_ordering_path` / `sftp_result_path` 找候選 NPI
+2. 查該 NPI 的 `ehr_integrations` WHERE `status='LIVE'` AND `ordering_enabled=1`
+3. 依 resolveOrderingIntegration 規則取勝出者：typeRank（FULL_INTEGRATION=0 < ORDER_ONLY=1 < 其他=2）
+   → `updated_at` DESC，第一筆的 customer_id / clinic_id / customer_npi 即為實際歸屬
+4. 拿不到 NPI（order_input NULL 且 sftpDir 匹配不到）→ 列出 sftpDir 下所有 LIVE integration 的
+   customer_id / clinic_id / customer_npi，並在報告明確標註「歸屬模糊，未能確定勝出者」
+5. 同一 NPI 有多筆 LIVE+ordering integration 時，把所有候選列出並標明勝出者 — 這種情況本身就是
+   emr_code_not_found 的常見根因（bundle 綁在輸家 customer 上）
+
 ### Step 3: Type A 處理 — Code 分析（依 prefix 選 API，不要全部用 bundle mapping）
 
 > 2026-07-10 教訓：舊版此步驟對所有 code 都查 bundle mapping，導致 VATEST79（05-22）和
@@ -41,7 +58,7 @@ ORDER BY received_time DESC;
    - **`VAREQUISTION{groupId}`**（panel/requisition）→ 同 Package Price Mapping API，但用
      lowercase EMR code 比對 `emrCodeToPackagePriceMap`；同樣有 isOrderable 閘門
    - 其他 prefix → 兩個 API 都查過再下結論，並在報告標記「未知 prefix」
-2. 用 sftpDir 反查 order_clients → ehr_integrations 取得 clinic_name, clinic_id, customer_id
+2. 歸屬資訊直接用 Step 2.5 的解析結果（customer_id / clinic_id / customer_npi / clinic_name），不要再用 order_clients 反查
 3. 記錄時**區分三種診斷**（處方不同，寫錯會把 PM/order team 帶去錯的方向）：
    - `code 不存在` → 需要 pricing 註冊新 code
    - `存在但 isOrderable=false / priceVa=-1` → catalog 設定缺口（開 isOrderable + 補 VA 價，
@@ -79,13 +96,14 @@ ORDER BY received_time DESC;
 - Type C (parse failure): X
 
 ## Type A — EMR Code Not Found
-(每個 code 列出: code, clinic, clinic_id, customer_ids, count, bundle mapping 狀態)
+(每筆記錄先列: customer_id, clinic_id, customer_npi, clinic_name, emr_service；
+ 再逐 code 列出: code, isOrderable, priceVa, 診斷)
 
 ## Type B — Payment/Order Recovery
-(每筆列出: id, file_name, clinic, recovery status, new sample_id 或 error)
+(每筆列出: id, file_name, customer_id, clinic_id, customer_npi, clinic_name, recovery status, new sample_id 或 error)
 
 ## Type C — Parse Failures
-(每筆列出: id, file_name, emr_service, sftpDir)
+(每筆列出: id, file_name, emr_service, sftpDir, customer_id, clinic_id, customer_npi — 拿不到就標「歸屬模糊」)
 ```
 
 ### JWT Token Generation
