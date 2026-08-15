@@ -3,7 +3,7 @@ id: repos
 type: ltm
 category: technical
 status: active
-score: 1.0024
+score: 1.0135
 base_weight: 0.9
 created: 2026-04-22
 updated: 2026-04-22
@@ -77,6 +77,7 @@ links:
 - VP-17559
 - VP-17561
 - VP-17577
+- VP-17714
 - business-model
 - business-model-deep
 - failures

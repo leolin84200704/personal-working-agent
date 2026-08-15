@@ -3,7 +3,7 @@ id: business-model
 type: ltm
 category: technical
 status: active
-score: 0.5123
+score: 0.5235
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
@@ -40,6 +40,7 @@ links:
 - VP-17422
 - VP-17559
 - VP-17577
+- VP-17714
 - business-model-deep
 - emr-integration
 - failures

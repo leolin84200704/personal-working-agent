@@ -8,7 +8,7 @@ related:
 - VP-16410
 - VP-16881
 - VP-17065
-distilled: false
+distilled: true
 ---
 
 # VP-17714 — 轉手 Clinical Consult 沒換 Zoom 房間

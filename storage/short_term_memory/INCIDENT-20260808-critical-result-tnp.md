@@ -3,10 +3,10 @@ id: INCIDENT-20260808-critical-result-tnp
 type: stm
 category: emr_integration
 status: active
-score: 1.0125
+score: 1.0375
 base_weight: 1.0
 created: 2026-08-08
-updated: 2026-08-12
+updated: '2026-08-14'
 links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
@@ -77,6 +77,8 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17691
+- VP-17715
 - emr-integration
 - fhir-api
 relations:
@@ -228,3 +230,24 @@ Still unticketed, still awaiting Leo. Nothing changed; the missing switch arms a
 4. Replace the enumerated switch with a total mapping + a startup assertion over the known
    reference-range-type vocabulary, so the next unmapped label fails at deploy rather than
    silently on a patient result.
+
+### [2026-08-14] Dream re-probe — rate dropped ~4x, and the split is now 100% RANGE_ERROR
+
+Datadog `"Unknown reference range type"` over the last **48h** (2026-08-12 18:30Z → 2026-08-14 18:30Z):
+**7 occurrences**, service `lis-emr-v2-deployment-prod`, all on `aks-userpool-...vmss000001`,
+newest 2026-08-14T01:05:07Z. **Every one of them is `RANGE_ERROR`** — zero
+`RESULT_HIGH_CRITICAL*` / `RESULT_LOW_CRITICAL*` in the window.
+
+Two things follow, and they pull in opposite directions:
+- **The noise is smaller than the 08-12 reading suggested.** ~3.5/day here vs the ~15/day implied
+  by 111-over-7-days. The rate is not stable enough to extrapolate from any single window — this
+  is the third window in a row (0/22h on 08-09, 111/7d on 08-12, 7/48h tonight) to give a
+  materially different rate. Per [[feedback_never_conclude_breakage_from_a_quiet_window]], stop
+  quoting a rate for this signal; quote the window and the label split.
+- **The patient-facing defect is unchanged.** The critical-high/low arms are still missing from
+  `mapReferenceTypeToStatus`; they are simply rare. A 48h window with zero critical labels is
+  entirely consistent with the two documented occurrences being weeks apart. **Do not read the
+  drop as the bug going away** — it is the same "per-label split, not the total" trap already
+  written up in the section above, seen from the other side.
+
+Still unticketed, still awaiting Leo. No code has changed.

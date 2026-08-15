@@ -1,3 +1,10 @@
+---
+date: 2026-08-14
+slug: vp17715-report-group-push
+related: [VP-17715, VP-17723, VP-17344, VP-17493, VP-17441]
+distilled: true
+---
+
 # 2026-08-14 — VP-17715 PER_REPORT_GROUP: from customer escalation to live in one day
 
 Related: VP-17715, VP-17344, VP-17493, VP-17441

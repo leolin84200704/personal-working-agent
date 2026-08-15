@@ -3,11 +3,11 @@ id: failures
 type: ltm
 category: technical
 status: active
-score: 1.1873
+score: 1.2017
 base_weight: 0.9
 urgency: 3
-created: 2026-08-11
-updated: 2026-08-11
+created: 2026-08-12
+updated: 2026-08-12
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -23,7 +23,6 @@ links:
 - QH-1159
 - QH-1591
 - QH-1775
-- QH-1860
 - QH-211
 - QH-2259
 - QH-2648
@@ -85,6 +84,8 @@ links:
 - VP-17561
 - VP-17577
 - VP-17591
+- VP-17685
+- VP-17714
 - business-model
 - business-model-deep
 - feedback_batch_db_verify
@@ -98,20 +99,20 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 68 entries across STM
+summary: Auto-aggregated failure index from 69 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-11 — total 68 entries
+> Last updated: 2026-08-12 — total 69 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 19 entries
+- [Build / TypeScript / Tooling](#build-tooling) — 9 entries
 - [Other / uncategorized](#other) — 9 entries
-- [Build / TypeScript / Tooling](#build-tooling) — 8 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
@@ -424,61 +425,6 @@ for (PatientAddress a : patient.getPatient_address())
 
 ---
 
-## Other / uncategorized <a id='other'></a>
-
-### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
-
-Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
-
-預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
-
-### **[[LBS-1541]]**
-
-(none yet)
-
-### **[[PO-256]]**
-
-- az CLI MFA expired — could not inspect RBAC Container App directly; bounded diagnosis at the coresamples→container-app hop via error strings and timing.
-
-### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
-
-- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
-- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
-- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
-- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
-
-### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
-
-
-
-### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
-
-- endpoint no-auth → 401（route live + guard）。
-- 簽 JWT(staging JWT_SECRET, HS256, payload 需 userId + 未過期；JwtStrategy 不檢 issuer) 打 dry-run（`scripts/_vp16934-staging-test.js`）：
-  - 假 provider → `201 {rejected, customer_not_found}`（auth/dryrun/富化都跑）。
-  - 缺 testCodes → `400`。
-  - **真客戶 5794 → `201 {rejected, unrecognized_test_codes:[VACP1001]}`** = customer 解析成功 + 代碼分類有跑（VACP1001 是假 code 才被擋）。
-- **結論：order intake 在 staging dry-run 全程跑通**（auth/gating/validation/customer 查詢/代碼分類）。差「完整成功單(sampleId:-1)」需對 staging 客戶有效的真 test code。
-- staging order_intake 留了 2 筆 VP16934-TEST-* rejected 測試列（無害，可清）。
-
-### **[[VP-17120]]** — `2026-07-02 23:05` — ROOT CAUSE UPGRADED during replay (filed VP-17318, branch bugfix/leo/VP-17318 pushed)
-
-- emr-v2 generateSampleID NEVER worked: proto field is `sampleId` (camelCase in proto) but client reads `response.sample_id` with keepCase:true → undefined → `|| '0'` → always 0 since the VP-16463 port. Pre-5/28 nonzero patientPayLater ids were written by Java EMR-Backend.
-- sendOrder with sampleId=0 self-assigns a correct id (70/74 zero-id orders succeeded). The stuck rows are occasional sendOrder failures on that path.
-- coresamples v2 GenerateSampleID sequence is ~311k STALE: live probes returned ids 2277991-2278000, ALL existing patient samples in lis_core_v7.sample. A field-name-only fix would inject colliding ids → order path must NOT consume this RPC until their sequence is repaired (needs a coresamples-team ticket).
-- Fix on branch: finalizer skips pre-generation (sends 0 explicitly), client reads correct field + rejects invalid, [RETRY-EXHAUSTED] loud log, decrement floored. 21/21 targeted tests pass, build clean.
-
-### **[[VP-17217]]**
-
-- 首次 build TS2322：provider 陣列 union 型別 → 加 `Provider[]` 顯式型別修正。
-- spec 原以 class token 注入 → 改 inbound token 才能解析。
-
-### **[[VP-17283]]**
-
-(none yet)
-
----
-
 ## Build / TypeScript / Tooling <a id='build-tooling'></a>
 
 ### **[[INCIDENT-20260518]]** — [2026-05-18 後續] 看到 c0852d0 部署後 Leo 仍見舊行為，沒立刻意識到 image age
@@ -538,6 +484,84 @@ Production NestFactory crash at startup: `TypeError: redlock_1.default is not a 
 - **Fix**（commit 7e61af2，**hotfix PR #157** → staging）：`Hl7OrderProcessingModule` imports `AuthModule`（比照 ResultModule/SftpModule）。
 - **驗證（這次有做開機驗證）**：`scripts/_vp16934-boot-check.ts` 用 `Test.compile(AppModule)` → **DI_OK**（重現 InstanceLoader 階段、不連 DB/不 listen）；build + 58 tests + ground-truth 0 diffs 全過。
 - prod 未掛（舊 pod 2/2 服務中），新 pod rollout 卡 crash；待 merge #157 重部署。
+
+### **[[VP-17685]]**
+
+**The fix as first shipped could not call the RPC at all.** Datadog, staging:
+
+```
+generateBarcodeForSampleID failed for sample 2554096-2554098:
+  client.generateBarcodeForSampleID is not a function
+```
+
+×3, 2026-08-12 20:03:53Z → 20:15:06Z — i.e. after #343/#344 were live and after Jira said Done.
+The gRPC client object exposes the method under its **proto** name; the camelCase alias the code
+used drops the trailing acronym (`...ForSampleID` → `...ForSampleId`), so the property was
+`undefined` and the call threw. #348 fixed it.
+
+Nothing caught this before prod:
+- `npx jest src/modules/grpc src/modules/hl7-order-processing` → 31 suites, **375 passed**
+- `npx tsc --noEmit` → 0 errors; `nest build` clean
+- the restored CI gate (VP-17656) ran and passed
+
+All three were green because the client is **mocked** in the specs — a mock happily answers to
+whatever name the caller invents, so the specs asserted the wrong name and agreed with themselves.
+See the lesson extracted to `long-term-memory/patterns.md`.
+
+---
+
+## Other / uncategorized <a id='other'></a>
+
+### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
+
+Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
+
+預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
+
+### **[[LBS-1541]]**
+
+(none yet)
+
+### **[[PO-256]]**
+
+- az CLI MFA expired — could not inspect RBAC Container App directly; bounded diagnosis at the coresamples→container-app hop via error strings and timing.
+
+### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
+
+- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
+- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
+- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
+- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
+
+### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
+
+
+
+### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
+
+- endpoint no-auth → 401（route live + guard）。
+- 簽 JWT(staging JWT_SECRET, HS256, payload 需 userId + 未過期；JwtStrategy 不檢 issuer) 打 dry-run（`scripts/_vp16934-staging-test.js`）：
+  - 假 provider → `201 {rejected, customer_not_found}`（auth/dryrun/富化都跑）。
+  - 缺 testCodes → `400`。
+  - **真客戶 5794 → `201 {rejected, unrecognized_test_codes:[VACP1001]}`** = customer 解析成功 + 代碼分類有跑（VACP1001 是假 code 才被擋）。
+- **結論：order intake 在 staging dry-run 全程跑通**（auth/gating/validation/customer 查詢/代碼分類）。差「完整成功單(sampleId:-1)」需對 staging 客戶有效的真 test code。
+- staging order_intake 留了 2 筆 VP16934-TEST-* rejected 測試列（無害，可清）。
+
+### **[[VP-17120]]** — `2026-07-02 23:05` — ROOT CAUSE UPGRADED during replay (filed VP-17318, branch bugfix/leo/VP-17318 pushed)
+
+- emr-v2 generateSampleID NEVER worked: proto field is `sampleId` (camelCase in proto) but client reads `response.sample_id` with keepCase:true → undefined → `|| '0'` → always 0 since the VP-16463 port. Pre-5/28 nonzero patientPayLater ids were written by Java EMR-Backend.
+- sendOrder with sampleId=0 self-assigns a correct id (70/74 zero-id orders succeeded). The stuck rows are occasional sendOrder failures on that path.
+- coresamples v2 GenerateSampleID sequence is ~311k STALE: live probes returned ids 2277991-2278000, ALL existing patient samples in lis_core_v7.sample. A field-name-only fix would inject colliding ids → order path must NOT consume this RPC until their sequence is repaired (needs a coresamples-team ticket).
+- Fix on branch: finalizer skips pre-generation (sends 0 explicitly), client reads correct field + rejects invalid, [RETRY-EXHAUSTED] loud log, decrement floored. 21/21 targeted tests pass, build clean.
+
+### **[[VP-17217]]**
+
+- 首次 build TS2322：provider 陣列 union 型別 → 加 `Provider[]` 顯式型別修正。
+- spec 原以 class token 注入 → 改 inbound token 才能解析。
+
+### **[[VP-17283]]**
+
+(none yet)
 
 ---
 

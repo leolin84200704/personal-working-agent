@@ -1194,7 +1194,8 @@ VP project 的 Bug type 建單必帶（field id 以 2026-07-28 createmeta 重新
 - **不用 VPN/DB 找 staging 測試病人**：portal staging API `GET https://api.vibrant-wellness.com/v1/portal/order/staging/orderTest/searchPatient?inputPatient=...`（dev-secret JWT，scoped by token customer）；`orderTest/patient?patientId=` 取完整 demographics。`allTests` 在 staging 是 404 — 測試代碼改查 prod Azure MySQL `package_price_mapping.uniqueemrcode`。
 - **不用 VPN 查 emr-v2 staging DB**：`kubectl exec` 進 AKS staging pod，把 node script 寫進 `/app/temp/` 再跑 — `require('@prisma/client')` 從該目錄向上解析得到（放 `/tmp` 會解析失敗）。
 - zsh 陷阱：shell loop 變數命名 `path` 會 clobber `PATH`（curl 直接消失）。
-- staging 已知 quirk：`generateBarcodeForSampleID` 對每個新 sample 失敗（Go upstream `unknown time zone America/Los_Angeles`）— 非致命（barcode best-effort），staging API order 無 julien_barcode 是預期現象，prod 健康。
+- ~~staging 已知 quirk：`generateBarcodeForSampleID` 對每個新 sample 失敗（Go upstream `unknown time zone America/Los_Angeles`）— 非致命（barcode best-effort），staging API order 無 julien_barcode 是預期現象，prod 健康。~~
+  **【2026-08-14 dream 更新】此條已被 VP-17685 推翻兩次，不要再照抄**：(1) 根因是 coresamples **v2** scratch image 沒有 tzdata，barcode 已於 2026-08-12 21:51Z 改走 **v1**，這個 quirk 的成因消失了；(2) 「prod 健康」是錯的——同一支 RPC 在 prod 也是 100% 失敗，只是被非致命 catch 吃掉。**新狀態未知**：改版後 Datadog 對 `generateBarcodeForSampleID|julien_barcode` 查不到任何一筆（成功或失敗都沒有），沒有人做過 VP-17685 自己寫的驗收步驟。要用到 julien barcode 前先實際下一單看。
 - **自鑄 emr-v2 JWT（HS256, JWT_SECRET）payload 必含 `userId`**（VP-17517 E2E, 2026-07-28）：JwtStrategy.validate 對缺 userId/user_id 的 token 一律回 generic 401 "Invalid token" — customer_id/clinic_id 齊全也不夠，錯誤訊息不會告訴你缺哪個欄位。
 - **staging 的 order 資料活在 order-staging 自己的 DB，不在 .11 的 lis_core_v7**（VP-17517, 2026-07-28）：staging API 下的單在 lis_core_v7 查不到 ≠ 不存在；要證明 upstream 狀態，直接打 order-staging service（如 re-cancel 期待 409 "Order already canceled"）。
   - **【2026-08-07 VP-17628 修正／補充，以此條為準】「自己的 DB」不等於「拋棄式的 DB」。**
@@ -1325,6 +1326,36 @@ emr-v2 的 result consumer 從 on-prem Kafka 切到 cloud Event Hub，71 分鐘�
    或反過來，永久票不要在 code 還標 TEMPORARY 時關。
 4. 唯一乾淨的一張是 VP-16934（Epic，無 code 無 deploy）—— 也就是說**這批只有「沒有東西可驗」的那張
    通過得毫無爭議**，其餘四張都需要 audit 補證據。
+
+### Cross-ticket review 2026-08-14（marker 2026-08-09 後 5 張 completed：VP-17651, VP-17653, VP-17685, VP-17691, VP-17715）
+
+上面 07-31 那批的結論是「Done 被當成流程的第一步」。這批**同意那個結論，但把預測因子換掉了**——
+真正能預測一張票會不會乾淨結案的，不是票寫得好不好、也不是變更大不大，而是
+**工作進行中有沒有一份活著的 STM**。
+
+把五張按「STM 何時存在」排開，結果是單調的：
+
+| ticket | STM 何時寫的 | 結案品質 |
+|---|---|---|
+| VP-17715 | **工作進行中即時寫**，agent 自己走完 chain 才轉 Done | 唯一全綠：merge→DDL→2-signal deploy→prod E2E→config flip→Done，全部有證據 |
+| VP-17651 | 工作中有，closeout 分多晚追加 | PASS，但 audit 推翻了自己前一晚的因果判讀（19.8s 499 是 OOM 的受害者，不是 proxy timeout） |
+| VP-17653 | 工作中有 | 自己 PASS，但**順手抓到同批的 VP-17657/17658 在 Jira 是 Done、code 一行沒動** |
+| VP-17685 | **事後由 closeout audit 補寫** | Done 比修好的 commit 早 60 秒；票上自己寫的驗收步驟從未執行 |
+| VP-17691 | **完全沒有**，兩晚前就被 dream 點名，仍然沒補 | 只能在兩天後由 audit 從 Jira + PR 反向重建；至今沒有任何 live probe |
+
+三條可以直接拿來用的推論：
+
+1. **STM 不是工作的紀錄，是工作的一部分。** 沒有 STM 的票，缺的從來不只是記憶——
+   VP-17691 缺的是「還有哪些 AC 沒做」這件事本身沒有任何地方在追蹤。
+   事後補寫的 STM（VP-17685）可以還原事實，但**還原不了當時該做而沒做的那個決定**。
+2. **唯一乾淨的那張，是 agent 自己按 closure chain 逐項驗完才轉 Done 的那張。**
+   對照 07-31 那批「唯一乾淨的是沒有東西可驗的 Epic」，這是一個實質的進步：
+   VP-17715 有 DDL、有 deploy、有 config flip，全部驗過。
+   → 所以問題不在「chain 太難走」，走得完；問題在**誰按下 Done 的那一刻有沒有在走 chain**。
+3. **closeout audit 的產出有一半是別人的票。** VP-17653 那晚抓到的是 VP-17657/17658，
+   今晚抓到的是 VP-17691——兩次都不是被 audit 的那張票有問題，是**同批一起被轉 Done 的鄰居**。
+   → 紀律：audit 一張票時，把**同一個時間窗內一起 transition 的票**都拉出來看，
+   批次轉 Done 是個獨立的風險訊號，跟票的內容無關。
 
 ## Agent repo 自身的環境陷阱（2026-07-31 MiniLM 清除 arc 蒸餾）
 
@@ -1736,3 +1767,59 @@ fixture 設了 live pipeline 從不設的欄位）。這次是**第三種**：mo
 
 → 紀律延伸（同 family，line 1342）：這次「沒驗證它真的在做我以為的事」的那個環節，
 是**測試自己**。綠燈的來源如果是自己寫的替身，它證明的只有替身的行為。
+
+## 【家族延伸 2026-08-14】非致命的 catch 會把「100% 失敗」轉成「零訊號」（VP-17685 lesson 3）
+
+同一張 ticket 的第三條教訓，和上面那條（mock 掉名字）是同一次事故的另一面。
+`generateBarcodeForSampleID` 這支 RPC **失敗了大約 18 個月**，代價只有一行 warn。
+沒人看，因為 barcode 是 best-effort、失敗不影響下單。它之所以在 2026-08 浮出來，
+純粹是 staging 的 charging 壞掉、逼得每一單都走 no-charge path 才撞上。
+
+→ **判準**：`catch { logWarn(...) }` 把「這個功能從來沒有成功過」和「這個功能一切正常」
+壓成同一種可觀測狀態（都是安靜的）。凡是包在非致命 catch 裡的外部呼叫，
+**成功路徑也必須留下訊號**（成功 log / metric / 一個會被寫進 DB 的欄位），
+否則你永遠只能證明它有沒有大聲壞掉，不能證明它有沒有在運作。
+- 反向操作（診斷用）：要判斷一段非致命邏輯是死是活，**先確認你的查詢查得到「成功」長什麼樣**。
+  查不到失敗 ≠ 健康（同 line 1637 VP-17651）；查不到**任何**紀錄 = 這條路徑對你完全不可觀測，
+  此時唯一的答案是「不知道」，不是「正常」。VP-17685 部署後正是這個狀態。
+- 連帶：`fail-loud vs fail-silent` 的決策（line 1470 家族）不只發生在**錯誤**路徑上，
+  也發生在**可觀測性**上。一個永遠安靜的成功，和一個永遠安靜的失敗，長得一模一樣。
+
+## 【journal 蒸餾 2026-08-14】要證明 prod 上實際跑的是哪條路：找只有那條路會寫的字串（VP-17714）
+
+VP-17714 要回答「使用者說的『轉手』到底走哪個 code path、歷史上發生過幾次」。三種嘗試，
+只有一種站得住：
+
+1. **event pair 推論**（同 accession、一取消一新建）→ 撈到 4 組。這是**推論**，不是證據。
+2. **`v2_event_accession_audit_log.reason = 'clinician switch reschedule, original event N'`**
+   → 同樣 4 筆。這串字**只有 `rescheduleClinicalConsult` 會寫**，所以它同時證明了兩件事：
+   數量是 4，**而且前端確實在打這個 mutation**（不是還停在舊的 `updateEventByPatient`）。
+3. **`participant.created_at > event.create_time`**（想抓另一條 in-place 換人的路）→ **不可用**。
+   `replaceEventParticipants` 是 deleteMany + createMany，每次帶 participants 的 update
+   都重寫 `created_at`，抽樣 30 筆多數根本不是換人。
+
+→ **判準三條**：
+- **要指認執行路徑，找「指紋字串」**——只有那條路會寫進 DB/log 的常數（audit reason、
+  scope key、特定的 error message）。它比任何用資料形狀反推的 heuristic 都硬，
+  而且順便驗證了呼叫端真的在用新介面。
+- **衍生訊號的可用性取決於寫入模式**：任何 delete-and-recreate 的實作都會重置
+  `created_at`/`id` 序，用它們做時間推論就是雜訊。查之前先看那張表是怎麼被寫的。
+- **另一條路沒有指紋 = 你無法量化它**。這時要回報的是「這條路存在、無法追溯」，
+  不是估一個數字。VP-17714 的殘留路徑（`updateEvent` → `replaceEventParticipants`
+  原地換人）就是這樣交回給 Leo 的，他一句「換人一律走 reschedule」把它變成非問題——
+  **誠實說不知道，換來的是一個規則，比一個假數字有用**。
+
+附帶兩條同 ticket 的實作紀律：
+- **解不出來時清空 + warn，不要保留舊值**。保留舊的 meeting url = 保證把人導向錯誤的房間；
+  清空只是缺資訊。**「錯的指標」比「沒有指標」傷害大**，前者無法察覺，後者可補。
+- **外部 HTTP 解析放 `$transaction` 之前**。交易期間不能卡一個 outbound call。
+- **repo 本來就有 pre-existing 失敗 suite 時，測試結論一律用 baseline 對照**（同 line 791
+  的 tsc 手法，套到 jest）：base 17 fail / branch 16 fail，逐 suite diff 出唯一差異是
+  已知 flaky 的 `auth.guard.spec.ts` → 才敢說「零新增失敗」。不做對照，「還有 16 個紅的」
+  這句話沒有任何資訊量。
+
+### 兩個小陷阱（VP-17715 實作時撞到，emr-v2）
+- **worktree 的 node_modules 從舊 branch checkout 複製過來會少東西**（staging 新加的
+  `@azure/identity`、`@sentry/node` → 5 個 TS2307）。複製完先 `npm install` 再相信 build。
+- **`npx jest <完整路徑>` 在 emr-v2 會 match 0 tests**（testRegex 與路徑形式不合）——
+  用名稱 pattern：`npx jest kafka-report-finished-listener`。

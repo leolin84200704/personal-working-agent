@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.3029
+score: 0.29
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -82,6 +82,8 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17691
+- VP-17715
 - emr-integration
 - fhir-api
 tags:

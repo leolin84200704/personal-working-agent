@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.2127
+score: 1.2375
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -91,6 +91,8 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17691
+- VP-17715
 - fhir-api
 tags:
 - emr
@@ -960,9 +962,21 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **記錄定位**：partial job 帶 `transmission_record_id`，processor 的 retry/failure 更新精準打該 row——不能用 scope filter updateMany（會改寫較舊的 TRANSMITTED sibling）。已知 latent：whole-order updateMany 仍會打 >24h 舊 sibling（pre-existing，未動）。
 - **Ops doc**：Confluence「Result Granularity」folder（pages/2542501892）。測試 integrations `cvp17344e2etest0000000001/2`（customer 999997 → Vibrant 自家 SFTP /Test/Input/EMR_V2/VP17344*）。
 
+### 第四個 level：`PER_REPORT_GROUP` — 「一張單只送兩次」契約（VP-17715 / VP-17723，2026-08-14 同日 ship + prod live）
+
+- **客戶語言 vs 實驗室語言**：specimen type 是**實驗室內部單位**，客戶無法推理（Urine vs Metal Free Urine 是不同採檢容器；Serum vs SERUM 是 catalog 重複條目）。cust 4953 一張綜合單在 PER_SAMPLE_TYPE 下噴 6–8 次 interim push。**report 才是客戶的心智模型**——遇到「推太多次」的客訴，先問「客戶用什麼單位數次數」，不要在既有 granularity 上調參數。
+  - **但也不要替客戶重新詮釋。** Leo 問過她會不會其實想要 per-fluid（urine/saliva/stool）分組——聽起來更自然，但證據說不是：她自己列的清單把 urine panels（OAC/HM2/MY2/ET2）和血液**混在同一次投遞**裡；真實 push 時間軸顯示血液與尿液在幾天內交錯完成、只有 stool 落後數週；而且她的語氣（"I couldn't possibly be clearer"）本身就是在防止再一次的重新詮釋。**判準：想把客戶的規格「翻譯」成更漂亮的模型之前，先看他自己給的那份清單有沒有否證你的翻譯。** 設計仍留了後路（deferred 欄位是 N-group config 的 2-group 特例），但出貨的是他要的那個。
+- **機制**：enum += `PER_REPORT_GROUP`；`ehr_integrations.deferred_report_short_names` VARCHAR(500) JSON array（如 `["GUT5"]`）。trigger 是 `new_report_status_updated`，其 addon 同時帶 `total_reports_short_names`（**含尚未生成的**）與 `generated_reports_short_names`——所以「還缺什麼」是可算的，不必自己維護狀態。
+- **條件**：`mainReports = total − deferred`；送 `GROUP:MAIN` iff `mainReports ≠ ∅ ∧ mainReports ⊆ generated ∧ remaining ≠ ∅`。第二次投遞**不寫任何新 code**——既有 `report_finished` whole-order push 就是它（push level 從不過濾 final push）。`remaining ≠ ∅` 這個條件正是防止兩者重疊的閂。
+- **所有邊界情況都往 final push 掉**：deferred-only accession（Gut-Zoomer-only barcode）、沒訂 deferred report、deferred 先完成 → 都收斂成「一次完整的 final push」。config 空/無法解析亦然（fail-safe）。
+- **`ehr_integrations.status` enum 只有 PENDING/APPROVED/LIVE/REJECTED — 沒有 PAUSED**。要停用一筆（如測試用）integration 走 `result_enabled=0`（eligibility 硬性要求它）。
+- **prod E2E 安全模式（VP-17344 手法的延伸）**：在**同一個真實 customer** 底下開測試 integration 是安全的，只要新功能自己的過濾條件保證兩者不會同時命中——這裡 push-level 精確比對 + 測試列指向 Vibrant 自家 SFTP `/Test/Input/EMR_V2/VP17715`，所以重放真事件不可能碰到客戶的 MDHQ 目錄。重放來源 = prod pod 打 cloud Event Hub `general-sample-events`（SASL 密碼走 Key Vault `kafka-sas-connection-string`，pod 上 DefaultAzureCredential 直接可用）。驗完把測試列 `result_enabled=0` 收掉。
+
 ### general_sample_events 事件語意（設計 partial push 時查證，ClickHouse 192.168.62.85:8123 kafka db）
 
 - **`sample_type_all_finish`**（lis-result，2026-07-08 Yekai 新增）：某 tube/sample type 全部 tests finished 即發、不管 TNP；是 `sample_type_all_finish_with_tnp` 的 superset（後者仍在 TNP≥1 時另發，獨立訊息、既有 consumer 不受影響）。~4-5k/day。
+  - **一個 (sampleId, sampleType) 這輩子只發一次**（VP-17493 二次客訴查證，2026-08-13）：producer `sendSampleTypeFinishMessage` 用 Redis `finish_sent` marker（45 天 TTL）擋。同 type 之後才 approve 的 test **不會**再觸發。只有 result reset（`reset-results.service.ts` resetSampleTypeHandle）會清 marker → re-finish 時重發；另有 staleness gate 跳過最後 finish 超過 45 天的 type。
+  - **所以「晚到的結果」的實際歸宿**：搭下一個**任何** type 的 push 順風車（每次 push 都是完整累積快照 + 累積 PDF，覆寫同一個 `{barcode}.hl7`），並保證出現在 final whole-order push。**已知缺口**：單子卡在 not-final（例如缺 stool）且沒有其他 type 再完成 → 晚到結果就只活在 portal，要人工 repush。這正是 PER_REPORT_GROUP 想解掉的形狀。
 - **`new_report_status_updated`**（lis-report）：每次 per-report status 變化都發（**ready 和 viewed 都算**），consumer 要自己 diff 哪些 report 新 ready；producer 送 **sample_id=0**，要用 `getSampleIdByBarcode(accession)` 反查。~1.3k/day partial。
 - **`personalized_report_ready`** = barcode 下**全部** reports 完成才發，不是 per-report——per-report trigger 別用它。
 - **lis-result 系事件 customer_id NULL / clinic_id 0** → 必須 `grpcClient.getSampleRelevantInfo(sample_id)` 解析 customer/clinics（回全部 clinicIds，eligibility 查詢要 `clinic_id IN (...)` 不能只拿第一個）。
@@ -1230,6 +1244,19 @@ sample 2607611（2026-08-07，customer 18879 / MDHQ）的**血糖 467 mg/dL（ra
 `TNP`），並在 `:181-183` 額外附一段 **`NTE|...|Test Not Processed`**。
 所以一筆正常的 eGFR 被投遞成「沒有 abnormal flag + 明寫 Test Not Processed」——
 NTE 才是診所人員真正看到的東西。寫 result 類 bug 的症狀時，一定追到 wire。
+
+### 「客戶說少東西」的內容驗證：拿不到 ground truth 就用自己的兩次快照互減（VP-17493 二次客訴, 2026-08-13）
+Leo 要求「比對 portal 確認缺的結果有進檔案」，但 **core replica `test_results` 表是空的**——
+預期中的 ground truth 不可用。改用**自己的歷史投遞互減**：同一 sample 的新 push vs 前一次 push，
+對 `generated_hl7_content` 做 OBX 集合 diff（排除 PDF 的 `ED` OBX）。結果乾淨可讀：5 支各自
+**多了同樣的 +12 個晚核可分析項**（wellness scores + lipid calcs，某批 calculation 在 07-31 後才核可）、
+**0 個消失**；3 支 +0（當天已自然重推過）。
+→ 判準：**「我送的東西變多了、而且沒少東西」本身就是一個可驗證的命題**，不需要外部真值。
+沒有 ground truth 表時，先問「同一個東西我有沒有兩個時間點的副本」。
+- **`generated_hl7_content` 只存 DATA 部分**（~26–80KB）；檔案 multi-MB 的差額是 base64 PDF OBX。
+  所以做 OBX/OBR/PID 解析不需要進 pod 撈檔案，查 DB 就夠。
+- **客戶的 accession/order 配對經常是亂的**：T Demos「缺 OAT」的真相是那張 accession 純 Gut Zoomer，
+  她的 OAT 在**兄弟 accession** 上、早就投遞成功。回覆客訴前先確認「他看的那張 accession 到底該不該有這個東西」。
 
 ### OBR panel label：投遞成功 ≠ 內容正確（VP-17631）
 result triage 過去都停在 `transmission_status`，但 VP-17631 的錯在 **OBR 標籤**，DB 一片綠。
