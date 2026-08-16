@@ -21,6 +21,22 @@
             "if": "Bash(git clean*)",
             "command": ".claude/hooks/validate-git-destructive.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": ".claude/hooks/validate-repo-language.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-verification-assets.sh",
+            "timeout": 5
           }
         ]
       }
