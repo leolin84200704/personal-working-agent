@@ -12,6 +12,10 @@ Formula: score = (base_weight * recency * reference_boost * urgency_boost) / 8.0
   reference_boost 1.0 + 0.1 * incoming_link_count
   urgency_boost   1.0 + 0.15 * (urgency - 1), urgency 1-5 from frontmatter
 
+Pinning: a file with `score_frozen: true` in frontmatter keeps its stored
+`score:` untouched by the formula (add a `note:` explaining why). Use for
+files the formula mis-ranks (e.g. an archived reference that must stay hot).
+
 Usage:
   python3 scripts/memory_scoring.py            # link + rescore + rebuild indexes
   python3 scripts/memory_scoring.py --stats    # print stats only, no writes
@@ -76,19 +80,42 @@ def _parse_scalar(raw: str):
 
 
 def _parse_flat_yaml(text: str) -> dict:
-    """Minimal parser for the flat `key: value` + flow-list frontmatter used
-    in this repo. Only used when PyYAML is unavailable."""
+    """Minimal parser for the `key: value` + list frontmatter used in this repo.
+    Only used when PyYAML is unavailable.
+
+    Handles BOTH block lists (`tags:` then `- item`) and flow lists (`[a, b]`).
+    Block-list support is load-bearing: without it `tags:` parsed to the empty
+    string, which silently (a) blanked the Tags column in every _index.md,
+    (b) starved auto-linking of its keywords, and (c) made write_frontmatter
+    emit `tags:` with no items — destroying the tags of every file it rewrote.
+    Tags are retrieval triggers, so that was silent memory loss (2026-08-15).
+    Same defect class as the run-regression.py grader parser fixed the same day;
+    when fixing a hand-rolled fallback parser, grep for its siblings."""
     meta: dict = {}
+    list_key: str | None = None
     for line in text.splitlines():
-        if not line.strip() or line.strip().startswith("#") or ":" not in line:
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        # A block-list item belongs to the most recent bare `key:` line. Checked
+        # before the ':' test — an item may itself contain a colon (e.g. a URL).
+        if line.lstrip().startswith("- ") and list_key is not None:
+            meta.setdefault(list_key, []).append(_parse_scalar(line.lstrip()[2:]))
+            continue
+        if ":" not in line:
             continue
         key, _, raw = line.partition(":")
-        raw = raw.strip()
+        key, raw = key.strip(), raw.strip()
+        list_key = None
         if raw.startswith("[") and raw.endswith("]"):
             inner = raw[1:-1].strip()
-            meta[key.strip()] = [_parse_scalar(x) for x in inner.split(",")] if inner else []
+            meta[key] = [_parse_scalar(x) for x in inner.split(",")] if inner else []
+        elif not raw:
+            # Bare `key:` — a block list opens here, or it is genuinely empty.
+            # Default to [] and let following `- ` items fill it.
+            list_key = key
+            meta[key] = []
         else:
-            meta[key.strip()] = _parse_scalar(raw)
+            meta[key] = _parse_scalar(raw)
     return meta
 
 
@@ -96,7 +123,10 @@ def _dump_flat_yaml(meta: dict) -> str:
     lines = []
     for key, val in meta.items():
         if isinstance(val, list):
-            lines.append(f"{key}: [{', '.join(str(v) for v in val)}]")
+            # Block list — matches PyYAML's default_flow_style=False output, so
+            # the with-/without-PyYAML paths round-trip to the same shape.
+            lines.append(f"{key}:")
+            lines.extend(f"- {v}" for v in val)
         elif isinstance(val, str) and (":" in val or "#" in val or val != val.strip()):
             escaped = val.replace('"', '\\"')
             lines.append(f'{key}: "{escaped}"')
@@ -238,6 +268,12 @@ def rescore_and_reindex(write: bool = True) -> dict:
         for f in list_tier_files(tier):
             meta = metas[f]
             file_id = meta.get("id", f.stem)
+            if str(meta.get("score_frozen", "")).lower() == "true":
+                # Pinned against the formula (user/dream intent — e.g. an
+                # archived reference the formula over-ranks). Keep the stored
+                # score; set score_frozen: true + score: + note: in frontmatter.
+                scored.append((float(meta.get("score", 0.0) or 0.0), file_id, meta))
+                continue
             score, _ = score_file(f, meta, incoming.get(file_id, 0), today)
             if write and abs(float(meta.get("score", 0.0) or 0.0) - score) > 0.0001:
                 meta["score"] = score
@@ -260,10 +296,12 @@ def rescore_and_reindex(write: bool = True) -> dict:
                     lines.append(f"| {score:.2f} | {file_id} | {meta.get('summary', '')} | "
                                  f"{meta.get('original_tier', 'stm')} | {meta.get('updated', '')} |")
             else:
-                lines += ["| Score | ID | Summary | Status | Category | Updated |",
-                          "|-------|-----|---------|--------|----------|---------|"]
+                lines += ["| Score | ID | Summary | Tags | Status | Category | Updated |",
+                          "|-------|-----|---------|------|--------|----------|---------|"]
                 for score, file_id, meta in scored:
-                    lines.append(f"| {score:.2f} | {file_id} | {meta.get('summary', '')} | "
+                    tags = meta.get("tags", [])
+                    tag_str = " ".join(str(t) for t in tags) if isinstance(tags, list) else str(tags or "")
+                    lines.append(f"| {score:.2f} | {file_id} | {meta.get('summary', '')} | {tag_str} | "
                                  f"{meta.get('status', 'active')} | {meta.get('category', 'technical')} | "
                                  f"{meta.get('updated', '')} |")
             lines.append("")
