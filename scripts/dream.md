@@ -97,11 +97,11 @@ Execute applicable operations:
    - **Cross-domain evidence**: supported by >=2 cases from *different* domains (e.g. one LIS incident + one calendar/billing incident is still ONE employer-domain — that does not count). Two incidents from the same subsystem never qualify.
    - **Discipline, not behavior**: it must prescribe a way of working (verify X before Y), not describe how a particular class of system behaves.
 
-   Default is DO NOT PROMOTE. Expect most dream runs to promote nothing; a lesson PR should be rare (roughly monthly, not nightly). When a lesson is strong but fails a bar, write it to `~/project-agent-factory/framework/proposals/{date}-{slug}.md` (committed to project-agent-factory main as an unreviewed inbox item) instead of opening a PR — Leo triages the inbox on his own schedule.
+   Default is DO NOT PROMOTE. Expect most dream runs to promote nothing; a lesson PR should be rare (roughly monthly, not nightly). When a lesson is strong but fails a bar, write it to `~/src/project-agent-factory/framework/proposals/{date}-{slug}.md` (committed to project-agent-factory main as an unreviewed inbox item) instead of opening a PR — Leo triages the inbox on his own schedule.
 
-   For the rare lesson that clears all bars, propose via PR per `~/project-agent-factory/CONTRIBUTING.md`:
-   1. If `~/project-agent-factory` does not exist on this machine, skip and note it in the dream log.
-   2. `git -C ~/project-agent-factory pull`, then grep `framework/ENGINEERING-LESSONS.md` — skip if already covered.
+   For the rare lesson that clears all bars, propose via PR per `~/src/project-agent-factory/CONTRIBUTING.md`:
+   1. If `~/src/project-agent-factory` does not exist on this machine, skip and note it in the dream log.
+   2. `git -C ~/src/project-agent-factory pull`, then grep `framework/ENGINEERING-LESSONS.md` — skip if already covered.
    3. Create branch `lesson/lis/{slug}`, append the **de-identified** lesson to the matching section, commit + push, open a PR with `gh pr create` using the CONTRIBUTING format: `[lesson:lis]` title, body with Source / Why universal (must cite the cross-domain cases) / Example / Target. Identifying details (VP ids, customers, incidents) belong in the PR body as evidence, not in the file. Do NOT merge — Leo reviews.
    4. Job-specific knowledge stays in this repo's LTM only. List proposed lesson PRs and inbox proposals in the dream log.
 
