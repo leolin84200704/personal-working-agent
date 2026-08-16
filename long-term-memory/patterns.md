@@ -319,6 +319,17 @@ LIS-transformer / LIS-setting-consumer 是 **push 即 deploy**（GitHub Actions�
 ### order_clients 無 updated_at 欄位
 `lis_emr.order_clients` schema **沒有 `updated_at` 欄位**（不像 `ehr_integrations` 有）。寫 raw `UPDATE order_clients SET ... updated_at=NOW()` 會 fail with `Unknown column 'updated_at' in 'field list'`。寫 SQL 前先驗 schema，或避開 updated_at。完整欄位：id, customer_name, customer_id, customer_provider_NPI, customer_practice_name, clinic_id, kits_options, emr_name, remote_folder_path, old_clinic_id。
 
+### ehr_integrations.updated_at 不會自動更新 — 不可當「config 何時被改」的證據（2026-08-15 dream closeout audit）
+`SHOW COLUMNS FROM ehr_integrations LIKE 'updated_at'` → `datetime / NOT NULL / Default NULL / Extra 空`。
+**沒有 `ON UPDATE CURRENT_TIMESTAMP`、沒有 DEFAULT** — 只有應用層或人手在 SET 清單裡明寫才會前進。
+VP-17715 的 rollout SQL（`UPDATE ehr_integrations SET result_push_level=..., deferred_report_short_names=...`）
+沒帶 `updated_at`，所以 8/14 flip 之後那筆 row 的 `updated_at` 還停在 `2026-07-16 23:26:51`。
+夜審時我差點據此判定「flip 根本沒生效」。
+- **紀律**：驗 config 變更看**欄位值本身**（`result_push_level='PER_REPORT_GROUP'`），不要看 `updated_at`。
+  想留時間軌跡就在 UPDATE 裡明寫 `updated_at = UTC_TIMESTAMP()`。
+- 對照 line 320：「有 `updated_at` 欄位」≠「這個欄位被維護」。判斷任何表能不能拿來做時間推論之前先 `SHOW COLUMNS` 看 `Extra`。
+- 反例（同 DB 不同表）：`result_transmission_records.updated_at` **會**前進，重播偵測（line 1299）靠的就是它。逐表確認，不要跨表類推。
+
 ### "IN (lookup-list) + 取 first row" 必須在同 WHERE 把所有 lookup criteria filter（不要靠 PK ASC 取 first）
 模式錯誤：`SELECT * FROM table WHERE id IN (?,?,?)` 然後 caller 取 first row 當作 match — 如果 IN list 含 noise（譬如 NPI gRPC over-return）或 row 的 lookup column 寫錯，PK ASC 會放大 data inconsistency 取錯 row。**修法**：把所有 lookup column 都 filter 進 SQL。
 - **EMR-Backend `ParseHL7.fetchCustomerDetailsByNpi` 教訓**：原 SQL 只 `customer_id IN (gRPC NPI lookup result)` 沒驗 `customer_provider_NPI = inputNpi`。當 vendor onboarding 寫錯某 row NPI（譬如 Ashley row 的 NPI 寫成 Bassett 的 1790962041），SELECT 回兩 rows，loop 取 PK ASC first → 提交 order 時 customer_id 用了 Ashley (47549) 而非 Bassett (47715)。修法：MyBatis criteria 加 `.andCustomerProviderNpiEqualTo(npiNumber)`
@@ -1823,3 +1834,27 @@ VP-17714 要回答「使用者說的『轉手』到底走哪個 code path、歷�
   `@azure/identity`、`@sentry/node` → 5 個 TS2307）。複製完先 `npm install` 再相信 build。
 - **`npx jest <完整路徑>` 在 emr-v2 會 match 0 tests**（testRegex 與路徑形式不合）——
   用名稱 pattern：`npx jest kafka-report-finished-listener`。
+
+## 【蒸餾 2026-08-15】排程 job 寫出 "BLOCKED" 報告 = 那天沒有訊號，不是那天沒有問題
+
+`DailyJob/hl7_fail` 與 `DailyJob/result_fail` 的 launchd job **連兩天（8/14、8/15）**在 pre-flight
+就撞到 `lisportalprod2:3306` 不可達（VPN 隔夜自動斷線，腳本的 headless 重連被
+`Connect capability is unavailable. Another Cisco Secure Client application acquired it.` 擋掉），
+於是各寫了一份只有 `## BLOCKED — prod DB unreachable` 的報告就退出。
+
+腳本本身做對了：它明講「**This is NOT a "no failures" result**」。真正的破口是**下游沒有人讀那句話**
+—— 8/14 的 dream 照常跑完、digest 照常出，沒有人注意到當天的失敗監控其實沒跑。連續兩天盲區。
+
+8/15 晚上 VPN 恢復後手動補跑，兩份都拿到真結果：
+- HL7 triage：乾淨（72h 內 11 筆，`parse_finished=0 AND retry_num=0` 為 0 筆，且有連線 sanity check）。
+- result_fail：**不乾淨** — undelivered 從 8/13 的 23 筆漲到 26 筆；`Cascades` 新增一筆
+  8/13 13:46 的 `PERMANENT FAILURE`（累計 6 筆失敗，**last success 停在 2026-06-01**）。
+  也就是說補跑真的撈到了新東西，盲區不是空的。
+
+紀律（可直接套到任何有 pre-flight 的排程 job）：
+1. **消費排程 job 產出前，先驗它那天真的跑完了** — 讀報告的第一段、比對檔案 mtime，
+   不要看到「有檔案」就當作「有結果」。`BLOCKED` / `SKIPPED` 檔案要當成缺漏處理。
+2. **連續兩天缺訊號要升級**，一天可能是巧合，兩天是系統性（這次正是兩天）。
+3. **前提條件恢復後要補跑**，不要等下一次排程 — 排程只看當下，不會回填昨天的窗口。
+4. 呼應 memory「empty result ≠ no failures」：這是同一條原則的**上游版本** ——
+   連查詢都沒發出時，連「空結果」都不存在，只有一份看起來很正常的檔案。
