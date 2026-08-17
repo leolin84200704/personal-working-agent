@@ -108,6 +108,10 @@ stale — it describes `~/agent-core` as live, which is the dead clone), and nin
 
 - `DailyJob/` carries a plaintext prod DB password across 8 committed files.
 - The `~/personal/remote-agent/` instance still has auto memory unset in both its repos.
-- `project_emr_v2_git_hooks` records three guards living in `.git/hooks/` — uncommittable by
-  nature, so they vanish on any fresh clone of emr-v2. Worth deciding whether they should be
-  a tracked hook path (`core.hooksPath`) instead.
+- ~~`project_emr_v2_git_hooks` records three guards living in `.git/hooks/`~~ — **closed the
+  same day.** Leo chose `core.hooksPath`; the guards moved into the factory as tracked,
+  repo-aware, chaining hooks wired globally (factory PR #41). While wiring it, the
+  working-agent repo turned out to have a *local* `core.hooksPath` pointing at a directory the
+  July rename deleted — its git hooks had been silently dead for six weeks, and a local setting
+  overrides the global one, so it would have stayed dead. Same failure shape as everything else
+  this rename caused: a path-derived assumption that fails by doing nothing.

@@ -2011,21 +2011,40 @@ client registry 在 staging Auth0 postgres（192.168.60.11:5432，secret 已 has
 > coresamples v2 sample id、trans-v2 calendar service、cloud migration endpoints、
 > VP-17065 daily report）不重寫；原件在 `archive/native-auto-memory-workspace-2026-08-16/`。
 
-### emr-v2 有兩個 git hook，但它們**不在版控裡**
+### 三道 git guard 現在走 factory 的 `core.hooksPath`（2026-08-16 搬家）
 
-`lis-backend-emr-v2/.git/hooks/` 從 2026-06-26 起有 pre-commit 與 pre-push
-（2026-08-16 確認仍在）。因為住在 `.git/hooks/`，**瀏覽 repo 看不到、重新 clone 不會帶過去**；
-worktree 共用主 repo 的 hooks 所以涵蓋得到。全部可以 `--no-verify` 故意略過。
+**現況**：`framework/githooks/{pre-commit,pre-push}`（factory，有版控、有 13 案 test），
+以 **global** `git config --global core.hooksPath` 接線。全部可 `--no-verify` 略過。
 
-- **pre-commit guard 1 `config-yaml-coupling`** — staged 新增的 `process.env.X`（字面形式；
-  刻意不涵蓋解構與 `ConfigService.get`）若沒有同時出現在 `lis-emr-v2-config.yaml` 和
-  `lis-emr-v2-config-prod.yaml` 的 `data:` 區 → 擋 commit。對應 INCIDENT-20260601（重犯 3 次）。
-- **pre-commit guard 2 `no-chinese-in-code`** — staged 新增的 `.ts/.js/.sql` 行含 CJK
-  （用 perl `-CSD`，因為 BSD grep 沒有 `-P`）→ 擋。markdown/docs 不查。
-- **pre-push `start:dev iron rule`** — push 前跑 `npx prisma generate` + `npm run build`
-  （= nest build），任一失敗就擋 push。log 在 `/tmp/emr-v2-prepush-*.log`。
+- **guard 1 config coupled with code** — staged 新增的 `process.env.X`（字面形式；刻意不涵蓋
+  解構與 `ConfigService.get`）若沒有同時出現在 repo 根目錄那對 ConfigMap（`*-config.yaml` +
+  `*-config-prod.yaml`）的 `data:` 區 → 擋 commit。對應 INCIDENT-20260601（重犯 3 次）。
+  **範圍靠形狀判定**：repo 有那對檔案就生效，沒有就跳過。
+- **guard 2 no CJK in code** — staged 新增的 `.ts/.js/.sql` 行含 CJK（perl `-CSD`，因為 BSD
+  grep 沒有 `-P`）→ 擋。markdown/docs 不查。全 repo 生效。
+- **pre-push build gate** — `npx prisma generate` + `npm run build`，任一失敗擋 push。
+  **明確 opt-in**（hook 內 `BUILD_GATE_REPOS`，目前只有 `lis-backend-emr-v2`），不是「有
+  build script 就跑」——在沒講好的 repo 上每次 push 都 build 是沒人同意過的流程變更。
 
-重新 clone emr-v2 之後這三道全部消失。要復原就從這裡重建。
+**兩個必須知道的性質**：
+
+1. **會串接 repo 自己的 hook。** 設了 `core.hooksPath` 之後 git 會**完全忽略** `.git/hooks/`，
+   而 git-lfs 正是把 pre-push/post-commit/post-merge/post-checkout 裝在那裡（EMR-Backend 就
+   有這四個）——把它們靜音會弄壞 LFS pointer。所以 shared hook 先跑 repo 自己那份並尊重其
+   exit code。解析那個路徑要用 `--git-dir`，**不能**用 `git rev-parse --git-path hooks`：後者
+   在 hooksPath 設好之後回傳的就是 shared 目錄本身，會遞迴。
+2. **repo 的 local `core.hooksPath` 會蓋過 global。** 查 stale 設定：
+   `git -C <repo> config --local core.hooksPath`。
+
+**為什麼搬**：原本三道住在 `lis-backend-emr-v2/.git/hooks/`（2026-06-26 起）。那個目錄不能
+commit、瀏覽 repo 看不到、**重新 clone 就消失**——已經在 prod 出過事的規則，靠一個沒人看得到
+也沒人拿得到的檔案在守。注意 per-repo 的 `core.hooksPath` 有一模一樣的毛病（它在
+`.git/config` 裡），只有 global 設定才 clone-proof。
+沒有把 hook commit 進 emr-v2：那是 team-owned repo，agent 自創慣例不進去（AGENTS.md 所有權層級）。
+
+**同場發現**：`vibrant-america-working-agent` 的 local `core.hooksPath` 指著
+`/Users/hung.l/src/lis-code-agent/.git/hooks`——七月改名時就刪掉的目錄。這個 repo 的 git hook
+因此**靜默失效六週**，而且 local 蓋 global，不清掉就會一直失效。已 unset。
 
 同期還有兩個 user-level hook（`~/.claude/hooks/`，2026-08-16 確認仍在）：
 `skillsmp-reminder.sh`（UserPromptSubmit，週二/週五 LA 時間中午前第一次 prompt 注入提醒，
