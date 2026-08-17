@@ -1317,3 +1317,116 @@ PF vendor 會**即時取走**投遞檔並移到 `/Prod/Archive`。要證明送�
 但 22h 窗內整個 prod 連一筆 order assembly 都沒有。**空窗不是證據**
 （[[feedback_never_conclude_breakage_from_a_quiet_window]]）——
 量 input 側才能分辨「沒壞」與「沒跑到」。這兩種零長得一模一樣，結論相反。
+
+## 【遷移 2026-08-16】原生 auto-memory 退役時保留的 EMR/order 事實
+
+> 來源同 `patterns.md` 的遷移節。已被本檔覆蓋的（result push 沒有 idempotency gate、
+> customer_not_found 修復流程、core 才是 sample 的 ground truth、charging paymethod endpoint）
+> 一律不重寫；原件在 `archive/native-auto-memory-2026-08-16/`。
+
+### Ghost-rescue 重新上傳前，必須先讓原本那筆失效
+
+2026-07-16（VP-17312，MDHQ order_354 / patient CARMEN ALLISON 3256645）：
+把 ghost-stranded 的 row 6614 用新檔名重新上傳，救出 order 11445283 / sample 2597033。
+但**原本那筆 6614 後來自己又處理成功了**（2026-07-16 11:04 UTC），生出第二筆
+order 11445319 / sample 2597069 → 重複下單、$870 customerPay 有雙重扣款風險。
+最後 order team 取消 2597033/11445283、保留原本的 2597069/11445319。Leo：「未來要避免這種重複下單的情況」。
+
+**為什麼**：ghost-rescue playbook（把封存的原檔換名重傳）假設 stranded row 已經永久死亡。
+這個假設沒有保證 — 原檔可能重新出現在 vendor SFTP，stranded row 也可能被 retry/重跑，
+於是**兩條路都會變成真實訂單**。
+
+**重新上傳前**：
+1. 先讓原本那筆不可能再自己解出訂單 — 例如綁定明確 id 標成 terminal
+   （`parse_finished=1` + `RESCUE-SUPERSEDED` 的 error_detail），**在重傳之前**做。
+   如果原檔還可能被 vendor SFTP 抓到，一併協調移除。
+2. 能讓**原本那筆**解出來就讓它解，只有在原檔真的救不回來（無封存、檔案已刪）才重傳；
+   要重傳就只選**一條**規範路徑。
+3. 事後在接下來幾個 watch tick 對 ground truth `lis_core_v7.sample` + `order_info`
+   （**不是** `emr_sample`）重驗「這個病人剛好只有一筆 active order」；有兩筆立刻帶著兩個 order_id 通報 order team。
+4. 重複單的處置（void/cancel）是 order team 的決定，不是 agent 的。
+   為什麼一筆 `/tmp`-stranded（localDir=/tmp、舊 pod 名）的 row 會在 11:04 自己變成真實訂單，root cause 仍未查明。
+
+### emr_code_not_found 要**先看 prefix** 再決定查哪個 API
+
+daily `hl7_file_input` triage 的 Step 3 指示（`DailyJob/hl7_fail/triage_prompt.md`，
+launchd prompt 裡也有一份）叫 agent 一律用 bundle mapping（`getLegacyBundleMapping`）查 `panelId`。
+**那只對 `VACP{panelId}` 成立。**
+
+各 prefix 的正確查法（2026-07-10 讀 emr-v2 `obr-parser.service.ts` /
+`order-mapping-cache.service.ts` 與 EMR-Backend `ParseHL7.java` 確認）：
+
+| Prefix | API | 對法 |
+| --- | --- | --- |
+| `VACP{panelId}` | `getLegacyBundleMapping` | dict 以 bundleId 為 key，比對 `oldOrderTypeId` |
+| `VATEST{orderTypeId}`（單項） | `GET https://api.vibrant-wellness.com/v1/pricing/item/price/getLegacyPackagePriceMapping?currency=usd` | dict 以數字 id 為 key，比對 `orderTypeId`；**必須 `isOrderable === "true"`** |
+| `VAREQUISTION{groupId}`（panel/requisition） | 同上 `getLegacyPackagePriceMapping` | 走 `emrCodeToPackagePriceMap`（小寫 EMR code 當 key），一樣看 `isOrderable` |
+
+**存在但 `isOrderable: "false"` 的 code，會跟真正不存在的 code 一樣落進 `emr_code_not_found`。**
+
+**為什麼重要**：2026-05-22（`VATEST79`）與 2026-07-09（`VATEST2287,...`）兩份 triage 報告
+都拿 bundle mapping 去查 VATEST，查無結果就寫「not found in mapping」。
+2026-07-10 用正確 API 重查，07-09/07-10 那 6 個 code **全部存在**（都是單項 vitamin serum test），
+只是 `isOrderable: "false"` 且 `priceVa: -1`（沒有 VA 價，只有 `priceVw`）——
+這是 pricing/catalog 的設定缺口（可能是 VW-only 測項沒對 VA 開放），不是 mapping 缺漏。
+淺層診斷會把 PM/Order team 帶去錯的方向（「去註冊這個 code」而不是「開 isOrderable + 設 priceVa」）。
+
+一個 `emr_code_not_found` 欄位裡有多個逗號分隔的 code 時要**逐個拆開各自判斷**，prefix 可能不同。
+`triage_prompt.md` Step 3 的指示本身需要修（2026-07-10 已回報 Leo，尚未動 — automation 行為檔要走 PR）。
+
+### BestDeal 會**靜默丟掉** add-on 測項（與上面的 discount-panel 缺口是兩回事）
+
+`POST https://api.vibrant-america.com/v1/bestdeal/GetBestDealSuggestion`（order team 的服務，
+沒有 staging URL — emr-v2 的 staging 與 prod 都打這一個）會靜默漏掉某些可下單品項：
+**不在 `left_over_test_id_list`、不在 `non_existing_test_ids`、`best_deal_price` 是 `0.00`**。
+確定性重現，不是 flaky。2026-08-12 VP-17686 確認。
+
+真正亂編的 id **會**正確出現在 `non_existing_test_ids` — 這個對比就是「這是缺陷、不是那些 id 沒開通」的證據。
+
+**受影響（sandbox 掃過全部 64 個 catalog code）**：APOE_BLOOD、APOE_SALIVA、CELIAC_GENETICS、
+FACTOR_II_V_BLOOD、FACTOR_II_V_SALIVA、MTHFR_BLOOD、MTHFR_SALIVA — 單基因 genetics add-on（id 含 855、861、866）。
+**結果跟組合有關**：`["861"]` 單獨送會被丟，`["855","861"]` 就回得出 861。
+這個集合會隨 catalog 變動，舊證據可能不再重現。
+
+**request 長相**（emr-v2 與 legacy Java 完全相同，所以不是 emr-v2 的 regression）：
+body 只有 `{test_id_list, discount_panel_id_list}` — 沒有 customer/clinic/patient。
+auth 是固定的共用 system JWT（`ORDER_API_TOKEN`，customer 999997，exp 2044）。
+所以 BestDeal **無從得知是誰在下單**；它的定價是否 customer-scoped 值得問 order team。
+
+**覆蓋範圍可以從 response 讀出來**：每個 `suggest_bundle_list[]` 的 `zoomers` / `supplements`
+就是該 bundle 涵蓋的 test id。兩個都 null = 純 bundle、內容不揭露 → 算不出漏了什麼，就不要宣稱有漏。
+
+**稽核查法**：`emr_sample.test_input`（要求的）對 `best_deal_output_test`（剩下的）+ `best_deal_output_bundle`。
+prod 掃出 61 筆有無法解釋的缺漏 id（hs-CRP 339、Ferritin 300、Insulin 336、SHBG 311、Testosterone 313 最多）。
+很多「缺漏」其實是正常的 bundling — 判定損失前先展開 bundle 的 `zoomers`/`supplements`。
+
+emr-v2 這側已處理：全損 → 422，部分損 → 只記 `[BESTDEAL_DROPPED_ITEMS]` log
+（不擋部分訂單是 Leo 明確的決定：照樣下單）。移交 order team 至 2026-08-12 仍待辦。
+
+### customerPay「收了沒」的 ground truth 在 charging，不在 LIS
+
+- `hl7_file_input.order_input` 是 intake 當下的快照，**收款失敗後不會回寫**。
+  之後在 charging 系統手動收款是另一筆交易，LIS 端不留痕跡。
+- `lis_emr` schema **沒有任何 payment / charge / transaction 表**
+  （`information_schema` 查 `%pay%` / `%charg%` / `%transac%` 皆空）。
+- 所以 `payment_id=null` + `order_input` still `Credit Card Error` **不代表未收款**。
+  VP-17411 的 6390/6502/6504 就是：LIS 顯示未收，實際三筆都已在 charging 收掉、ticket 也 mark done。
+
+**能說什麼**：只能說「LIS 沒有收款痕跡」，不能說「未收款」。
+兩套系統各自 ground truth — order/sample 看 `lis_core_v7`，收款看 charging。
+
+**本地 mysql-client 被網路/VPN 擋住時**可以從 AKS pod 內查（pod 有 node + `mysql2` + `DATABASE_URL`，
+但 Azure MySQL 需顯式 `ssl:{rejectUnauthorized:false}`，且 mysql2 會忽略 prisma URL 的 sslmode 參數）：
+`kubectl exec deploy/lis-emr-v2-deployment-prod -c lis-emr-v2-prod -- node -e '...'`。
+
+### lis_core_v7 不需要 VPN — 它跟 lis_emr 同一台 Azure
+
+`lis_core_v7`（core ground truth：sample / order_info / customer / clinic）和 `lis_emr`
+同在 `lisportalprod2.mysql.database.azure.com:3306`，所以 core 驗證不必等 VPN。
+
+creds 從 AKS 拿：
+`kubectl get secret -n coresamplesv2 lis-coresamples-secret -o jsonpath='{.data.MYSQL}' | base64 -d`
+→ `coresamplesv2:{pass}@tcp(lisportalprod2...)/coresamplesv2`，該 user 同時讀得到 `lis_core_v7`。
+
+欄位注意：`customer.customer_npi_number`（不是 `customer_npi`）；`sample` 沒有 clinic_id（要 join `order_info`）。
+192.168.60.3:3307 與 ClickHouse 192.168.62.85 仍需 VPN，但日常 core 驗證走這條就夠。

@@ -44,6 +44,7 @@
 - **EMR / Integration / Provider / Practice / HL7 / SFTP / Bundle** → `emr-integration.md`
 - **Code change / bug fix / feature** → `ticket-routing.md` → `repos.md`
 - **Build / deploy / config / gotchas** → `patterns.md`
+- **Leo 的工作方式 / 回報格式 / Jira 操作機制 / repo 衛生** → `leo-working-rules.md`
 - **不確定** → 先讀 `ticket-routing.md` 分類
 
 > Note: `knowledge/` 是 `long-term-memory/` 的 symlink，舊路徑仍可用。

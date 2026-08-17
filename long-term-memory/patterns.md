@@ -1858,3 +1858,149 @@ VP-17714 要回答「使用者說的『轉手』到底走哪個 code path、歷�
 3. **前提條件恢復後要補跑**，不要等下一次排程 — 排程只看當下，不會回填昨天的窗口。
 4. 呼應 memory「empty result ≠ no failures」：這是同一條原則的**上游版本** ——
    連查詢都沒發出時，連「空結果」都不存在，只有一份看起來很正常的檔案。
+
+## 【遷移 2026-08-16】原生 auto-memory 退役時保留的操作性事實
+
+> 來源：`~/.claude/projects/{slug}/memory/` 的 `project_*` 條目。只搬「本檔還沒有」的，
+> 已被本檔或 `emr-integration.md` 覆蓋的直接丟（archive 有原件）。
+
+### Atlassian MCP 的 JQL search 上限是 5 筆，且無法分頁
+
+`mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql` 不管 `maxResults` 設多少都只回 **5 筆**，
+其餘記在 `remainingCount`，而且 `pageInfo.hasNextPage: false`、**沒有 `endCursor`** — 不能翻頁。
+砍 `fields` 也不會提高上限（`summary`/`description` 沒要也會回）。
+
+需要完整結果集（daily digest、「今天更新的所有 ticket」、逐票 transition）就直接打 Jira REST：
+
+```bash
+EMAIL=$(grep -m1 -oE '[A-Za-z._-]+@[A-Za-z.-]+' ~/src/credential/atlassian-api-token.md)
+TOKEN=$(grep -m1 '^token:' ~/src/credential/atlassian-api-token.md | sed 's/^token:[[:space:]]*//')
+curl -s -u "$EMAIL:$TOKEN" -G "https://vibrantamerica.atlassian.net/rest/api/3/search/jql" \
+  --data-urlencode 'jql=project = VP AND updated >= "2026-08-12 00:00" AND updated < "2026-08-13 00:00"' \
+  --data-urlencode 'maxResults=100' \
+  --data-urlencode 'fields=key,summary,status,assignee,issuetype,created,updated,priority' \
+  --data-urlencode 'expand=changelog'
+```
+
+`expand=changelog` 是關鍵：沒有它只看得到現況 status + `updated` timestamp，說不出「誰在什麼時候改了什麼」。
+加 `fields=comment` 可在同一次呼叫拿到留言。
+
+**為什麼不只是方便**：`updated` 這個數字本身會騙人。2026-08-12 的 50 張「已更新」VP ticket 裡，
+有 17 張只是 `Automation for Jira` 在 09:00 寫 `Duration`/`Start date` — **34% 是自動化雜訊**。
+只有 changelog 分得出來。憑證在 `~/src/credential/atlassian-api-token.md`（HTTP Basic）。
+
+### macOS TCC 會讓 ~/Downloads 的檔案「看起來不見」
+
+TCC 可以擋掉目錄列舉（`ls: Operation not permitted`、zsh glob "no matches"、find/mdfind 靜默漏），
+但**仍允許直接存取已知完整路徑**（`stat` / `cp ~/Downloads/exact-name` 都會成功）。
+
+2026-07-23 BioInsights SFTP 重測時，ls/find/mdfind 全都找不到 `bioinsights_key.ppk`，
+於是結論「被移走或刪了」，又找了 20 分鐘 — `stat` 打原本記得的完整路徑，檔案一直都在。
+
+**做法**：`~/Downloads`（或 Desktop/Documents）底下的檔案「消失」時，**先 stat 記憶中的完整路徑**，
+再去別處找或下結論。shell 列不出來時 `osascript` 的 System Events 也列得到。
+
+### Session transcript 是以「工作目錄路徑」為 key 的
+
+Claude Code 把 session transcript 存在 `~/.claude/projects/<escaped-path>/`。
+2026-07-06 本 repo 從 `/Users/hung.l/src/lis-code-agent` 改名成
+`/Users/hung.l/src/vibrant-america-working-agent`，`claude --resume` 就看不到之前的 session 了
+（「上個 session 東西不見了」）— 目錄改名會把 transcript 孤兒化在舊資料夾，實際沒有遺失。
+
+154 個改名前的 session 已 rsync **複製**（非搬移）到新的 escaped-path 資料夾；
+舊資料夾 `-Users-hung-l-src-lis-code-agent/` 保留不動，因為背景 job 可能還在往那裡寫。
+若日後再改名：把 `*.jsonl` 與 session 子目錄複製到新路徑資料夾，合併前先 diff。
+
+### project-agent-factory 有兩份 clone，舊的那份會拖垮 session context
+
+Factory 活的 clone 在 **`~/src/project-agent-factory`**（remote `project-agent-factory.git`）。
+`~/agent-core` 是 2026-07 改名前留下的殘骸，remote 還指著舊的 `agent-core.git`，
+2026-08-16 落後 origin/main **93 個 commit**。
+
+`~/.claude/CLAUDE.md` 原本 symlink 到 `~/agent-core/AGENTS.md`，所以每個 session 載入的
+user-level context 都是舊的（缺核心原則 0、wave-doc 規則、以及點名本 instance 的 sync 指令）。
+**檔案存在、也沒改名，只是活檔案躺在死掉的 clone 裡**，所以什麼都不會報錯。
+2026-08-16 已把 symlink（含 `~/.claude/skills/` 兩條、`~/src/.claude/skills/` 兩條壞掉的）全部重指。
+
+另一個相關陷阱：factory 常停在未 merge 的 `lesson/...` / `fix/...` branch 等 Leo review，
+所以 `ENGINEERING-LESSONS.md` 可能有 `main` 沒有的條目，直接 `checkout main` 會像是被刪了。
+本機 `main` 也會獨立於 `origin/main` 變舊 — 兩邊都要看。
+
+### trans-v2 calendar 的問題先查 reference doc
+
+`docs/reference/trans-v2-calendar.md`（本 repo）是 2026-07-28 寫的完整參考：17 個子模組、
+7 個核心功能含 file:line 錨點、calendar_prod 表目錄 + prod row counts、GraphQL/REST 介面、
+auth roles、Kafka topics（只有 producer；v2 沒有 BullMQ，Bull 在 legacy LIS-transformer）、
+4 個 cron、以及 gotchas（150105 magic practice、只有 is_canceled 的狀態、dead tables）。
+Calendar 問題先從這份回答，只需重驗行號與「現況」類主張。
+
+### calendar audit log 的 actor id 怎麼還原成人
+
+`v2_event_accession_audit_log.actor` / `v2_event_accession_claim.claimed_by` 是
+`'user:' + getUserId(jwt)`（LIS-transformer-v2 `auth.guard.ts`）：clinic-user token → `user_id`，
+patient token → `patient_id`。
+
+那些數字是 **`lis_core_v7.user.user_id`** — 不是 `internal_user_id`（`internal_user` 表裡一個都沒有）、
+不是 `customer_id`、也不是 `calendar_owner_id`（1147 筆 claimed row 裡 0 筆 actor == creator calendar owner）。
+
+```bash
+CH="http://192.168.62.85:8123/?user=portalclick&password=ebRiCiTypIRa"
+curl -sS "$CH" -d "SELECT user_id, username, email_user_id FROM lis_core_v7_replica.user WHERE user_id IN (...) FORMAT TSVWithNames"
+# 要名字：join lis_core_v7_replica.customer ON customer.user_id = user.user_id
+```
+
+用 `lis_core_v7_replica.*`，不要用 `lis_core_v7.*` — 非 replica 的 ClickHouse 快照停在 2024-10，
+新帳號會靜默回零筆。
+
+**陷阱：id 命名空間會撞。** `user_id=173014` 是 David Thayer（customer 47292），
+而 `patient_id=173014` 是完全另一個人（PAUL POPKIN）。audit row 不記錄是哪種 payload 產生的，
+所以指名道姓前要先確定 code path（clinic-user mutation 還是 patient mutation）。
+發現於 VP-17577（重複 consult booking）triage。
+
+### Beta program 的管理 API 叫 FeatureAccess，不叫 beta
+
+Beta program 是全公司 practice 層級的 feature-flag 機制（`betaProgram` +
+`beta_program_participations`，consumer 走 gRPC `CustomerService.FetchCustomerBetaProgramsForClinic`）。
+
+**REST base URL**（LIS-backend-coreSamples，那個 Nest 的，**不是** Go 的 v2 service）：
+prod `https://api.vibrant-wellness.com/v1/lis/lis-core-service/api/...`、
+staging `.../lis-corestaging-service/api/...`。**`/api` 這段不能省**（`app.setGlobalPrefix("api")`），
+省掉會拿到很誤導的 `404 {"message":"ENOENT: ... '/client/index.html'"}`。
+不要跟 `/v2/lis/coresamples/...` 搞混，那是 Go 的 v2 service，這些路徑會回純文字 `404 page not found`。
+Auth 是 HS256 JWT（同 emr-v2 上游呼叫用的 `JWT_SECRET_PROD`），**不加 `Bearer ` prefix**。
+
+**gRPC 才是主要介面，而且名字裡沒有 beta** — VP-16490 "Feature Access Management"
+在 `lis.CustomerService`（prod v1 `192.168.60.6:30276`，2026-08-03 驗證可用）：
+
+| RPC | Request | 備註 |
+| --- | --- | --- |
+| `GetFeatureAccessWhitelist` | `beta_program_id`, `search_input` | 列出某 program 全部 entry，含 customer_name / clinic_name / added_by / added_date |
+| `AddFeatureAccessRecord` | `beta_program_id`, `customer_id`, `clinic_id`, `internal_user_id` | **`customer_id` 有值 = provider 層級，`clinic_id` 有值 = practice 層級；不適用的那個填 0** |
+| `RemoveFeatureAccessRecord` | `id`（participation record id）, `internal_user_id` | |
+| `SearchProvidersAndPractices` | `search_input`, `limit` | admin picker |
+
+**為什麼之前找不到**：搜的是 `beta` / `program` / `participation` / `enroll`，但 RPC 叫 **FeatureAccess**；
+而且第一輪只搜了 emr-v2 的 `src/proto/customer.proto`，那是個 **subset copy**，這些 RPC 一個都沒有。
+要用權威版 `LIS-backend-coreSamples/protos/customer.proto`（coreSamples 沒裝 deps 就借 emr-v2 的 node_modules 載）。
+
+兩個花掉真實時間的坑：(1) participation 只吃數字 `beta_program_id`，不吃名字，而且
+`addBetaProgramParticipation` 走 `findUniqueOrThrow` — program row 必須先存在；
+(2) **沒有 create-program API**，全 codebase 零個 `prisma.betaProgram.create`，
+新 program 仍要手動 insert DB。所以「讓 practice 加入」是自助的，「開一個新 flag」不是。
+另外**不要拿 `FetchCustomerBetaProgramsForClinic` 判斷 program 存不存在** — 它只回某 clinic
+有參加的 program，分不出「program 不存在」和「存在但零參與」（VP-17584 就踩了這個）。
+已知 id：`express_checkout`=2、`gz_ny`=33（VP-17117 的 NY routing gate）；2026-08-03 共 39 個 program。
+
+### api-product sandbox 測試 client 的憑證與 OCR 陷阱
+
+api-sandbox（`api-sandbox.vibrant-america.com`）的測試 client 憑證與 token recipe 存在
+`~/src/credential/api-product-sandbox-test-client.md`（client `api-product-test-client-3194`，
+scope result/report；`POST /v1/oauth2/token` 帶 `algorithm=RS256`）。任何 api-sandbox 認證測試先讀那份。
+
+2026-07-28 的 FHIR 503 triage 花了一小時重推怎麼拿 sandbox RS256 token 才寫下這條。
+client registry 在 staging Auth0 postgres（192.168.60.11:5432，secret 已 hash —
+用 ephemeral `kubectl run --image=postgres:16` pod 讀），secret 本身只走 out-of-band 發放。
+
+**截圖貼過來的 client_id 會被 OCR 弄壞**（大寫 I 與小寫 l），要對 `Client` 表的
+`clientId` / `secretLast4` 核對。另：2026-07-28 起所有 client_credentials 的 CUSTOMER token
+過不了 FHIR session check（403，VP-17522 — session row 的 customer/clinic 是 NULL）。
