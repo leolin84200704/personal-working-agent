@@ -1,0 +1,56 @@
+# Memory Index
+
+- [agent-core split](project_agent_core_split.md) — 2026-07-04 個人層拆到 ~/agent-core repo（symlink ~/.claude/CLAUDE.md）；lis-code-agent 只剩 Vibrant instance；src/CLAUDE.md 只是 @import 別加規則；Vibrant skills 移到 lis-code-agent/.claude/skills
+- [Skill description optimization reminder](feedback_skill_desc_optimization.md) — skill-creator 有 run_loop.py 自動優化 description 觸發準度；定稿 skill 或發現 mis-trigger 時主動問 Leo 要不要跑（別每次自動跑）；PostToolUse hook 已當 backstop
+- [emr-v2 git hooks enforce IRON RULES](project_emr_v2_git_hooks.md) — .git/hooks 機器強制 config-yaml-coupling + no-chinese-in-code (pre-commit) + prisma generate/build (pre-push); hooks 不進版控/重 clone 不帶/worktree 共用；+weekly skillsmp cloud routine trig_01PLD8qERLCgc5NMQ7uggHDL
+- [EMR-v2 SFTP pod-role gap](project_emr_v2_sftp_pod_role.md) — result-push hangs when order-fetch cron fires (shared SFTP singleton); on-prem pods=all, AKS Phase A pod=web (2026-07-02 首次部署 POD_ROLE)；6/23-7/2 AKS 測試 pod 沒 role/沒 HL7_LOCAL_ROOT → 雙 fetcher 搶單+檔案進 /tmp 蒸發+retry_num 互踩（VP-17120 卡單真因）；REDIS_HOST=localhost blocks intake/pusher split → connection pool is the real fix
+- [Pursue cleaner design](feedback_pursue_cleaner_design.md) — 每次都想更好的做法並 apply，但宣稱「更乾淨」前先驗隱藏相依（REDIS_HOST/cache 等）
+
+- [Vibrant daily digest job](project_vibrant_daily_digest.md) — launchd local 00:00 nightly; worktree /Users/hung.l/.lis-daily-digest/main; headless claude reads gh org commits + Jira VP → writes long-term-memory/daily-digest/<DATE>.md → as of 2026-07-02 pushes STRAIGHT TO main (fetch+merge origin/main→commit→push HEAD:main); push hook relaxed to allow main in this personal repo; old auto/daily-digest branch consolidated + deleted; cloud routine infeasible (no creds in sandbox)
+- [FHIR order API study](project_fhir_order_api_study.md) — feasibility verdict: 條件式GO, native FHIR premature; finalize() 格式無關可重用; 難點=刷卡冪等/信任模型/(code映射被高估); doc at src/FHIR-ORDER-API-FEASIBILITY.md
+- [EMR cloud migration](project_emr_cloud_migration.md) — lis-backend-emr-v2 on-prem→AKS: design B, doc pageId 2457108486, AKS↔on-prem reachable, Azure Files perm OK, storage A pending Leo 5/28
+- [EMR shortcut sync](project_emr_shortcut_sync.md) — VAREQUISTION=test/package(全域,uniqueemrcode,pricing API) vs VACP=custom bundle(customer/clinic 專屬,getLegacyBundleMapping); 架構結論=shortcut sync 非一次性且資料在上游→該上游/portal catalog 做,不該 emr-v2 蓋 endpoint(只是下游轉發);2026-06-17 huddle 待釐清 portal 是否已有 per-customer catalog API
+- [EMR-Backend retired](project_emr_backend_retired.md) — Java EMR-Backend 完全停用(2026-06-10); 所有 EMR order 走 emr-v2; live prod 仍在 on-prem 非 AKS; config yaml 是 gitignored 本地檔 Leo 自己 apply
+- [VP-17065 daily appointments report](project_vp17065_daily_report.md) — LIS-transformer-v2 cron per-member XLSX email (practice 150105 outage backup); MERGED PR#525, prod template 45401442 live; External_url col follow-up PR#531 open to stage_test (external_url can be a phone# for Call events)
+- [transv2 prod test-send pattern](reference_transv2_prod_test_send.md) — controlled prod email test from Mac: new the real service + monkeypatch sendBuiltMessage To/Cc/Bcc→hung.l, DRY_RUN first; .env calendar DB=dev(calendar_dev_new) but .env Kafka=prod channel; prod DB in ConfigMap lis-transv2-config (calendar_prod); NODE_ENV/SERVER_ENVIRONMENT=prod for prod template; timezone gRPC unreachable from Mac→stub PST
+- [VP-16945 reminder provider TZ](project_vp16945_reminder_provider_tz.md) — design A 定案(同欄位+migration清legacy UTC→NULL)，deferred 等 VP-16943；UTC sentinel 矛盾、時序鐵則、per-recipient 語意仍未決
+- [Agent workflow preferences](feedback_agent_workflow.md) — confirm requirements before letting lis-code-agent execute code changes
+- [API doc format](feedback_api_doc_format.md) — use team-standard structured markdown, not raw OpenAPI YAML
+- [Batch DB verify](feedback_batch_db_verify.md) — verify 100% of rows after batch INSERT/UPDATE, never spot check (VP-16175 stuck PENDING for 33 days)
+- [EMR scope](feedback_emr_scope.md) — HL7 encoding is emr-v2's responsibility, trace full data flow before scope claims
+- [Jira comment approval](feedback_jira_comment.md) — draft Jira comments for Leo, never post directly
+- [Jira in English](feedback_jira_english.md) — write Jira ticket summary + description in English, not zh-TW (replies stay zh-TW)
+- [Reference lis-code-agent first](feedback_lis_code_agent_first.md) — always consult /Users/hung.l/src/lis-code-agent (Work Loop, knowledge, STM) before LIS work
+- [Ticket vs migration scope](feedback_ticket_scope.md) — prod-wide audit findings go to EMR-Backend→lis-backend-emr-v2 migration umbrella, not the originating ticket
+- [Tool notice filtering](feedback_tool_notice_filtering.md) — verify a tool-emitted deprecation/notice is actionable by THIS user before forwarding it
+- [Cleanup filter scope](feedback_cleanup_filter_scope.md) — prod DELETE WHERE clauses must always bound scope to current session (time + explicit IDs); never widen filter "just to be safe"
+- [End-to-end equivalence before swap](feedback_end_to_end_equivalence.md) — RPC/service primary 替換前必須 diff 前後 output 完全相同，proto 相同 ≠ marshalling 相同
+- [Config yaml coupling with code](feedback_config_yaml_coupling.md) — **IRON RULE** 任何新 process.env.X 同 turn 主動更新兩份 lis-emr-v2-config*.yaml 並明說，不准等 Leo 問（INCIDENT-20260601 第 3 次重犯）
+- [Push triggers deploy](feedback_push_triggers_deploy.md) — feature/bugfix branch push 不 auto-deploy；要 deploy 開 PR target staging（不准 git push staging）；main 絕對不准動
+- [Audit callers when adding fallback](feedback_audit_callers_when_adding_fallback.md) — 加 fallback infrastructure 必同 PR audit + migrate 所有同類 v2-direct caller；revert 一個 v2 service 必 audit 同 server 其他 RPC 同類風險（INCIDENT-20260601 gap 1+2 疊加）
+- [Sync sibling encodings of an invariant](feedback_sync_sibling_encodings.md) — 改一個值/邊界的語意時，同 function 內所有衍生點（顯示/驗證/查詢窗/search 邊界）用 single source 一起改；測試別 mock 掉共用路徑（假綠燈）— VP-17260 Bugbot 連抓同類 2 次
+- [Test before push](feedback_test_before_push.md) — prod-impacting push 前必跑 unit test 並涵蓋新 logic 分支；compile pass ≠ behavior correct（INCIDENT-20260601 SFTP verify patch 我只跑 build 就 push）
+- [Verified means live not mock](feedback_verified_means_live_not_mock.md) — 別把 mock unit test 講成「線上驗證」；prod 行為結論用真實 DB/dist service 重現（VP-16850 空結果其實是 max_advance_days=28，非我修的 bug）
+- [v1 Java → emr-v2 migration parity](feedback_v1_to_emr_v2_migration_parity.md) — port Java behavior 時逐欄位 enumerate Java DB write，cover 所有 branch 不只 happy path
+- [Schema migration before deploy](feedback_schema_migration_before_deploy.md) — emr-v2 prod 非 Prisma-managed；schema 加 non-optional 欄位必先手動 ALTER 到 prod DB 才部署，否則該 model 全部讀取 500 Unknown column (VP-16832 gz_ny_routing_enabled 漏 apply→prod 500)
+- [Capability flag enables a pipeline](feedback_capability_flag_enables_pipeline.md) — backfill/設 flag 前確認下游 pipeline 有 config；result_enabled=true 需 vendor+sftp_result_path，否則發不了 report (VP-16968 把 225 order_clients 設 FULL 結果發不了報告)
+- [No overgeneralize from single case](feedback_no_overgeneralize_from_single_case.md) — 寫 LTM 通則前 grep 多個 case 確認真正原因，別從單一 case 反推普遍規則 (VP-16734 report_option)
+- [start:dev iron rule](feedback_start_dev_iron_rule.md) — npm run start:dev / build 必須過,不要把自己造成的問題當「pre-existing/stale 假象」(VP-16521 切 branch 沒 prisma generate)
+- [Preserve evidence before restart](feedback_preserve_evidence_before_restart.md) — hang pod 任何 rollout restart / pod delete 前先 dump logs + describe，否則 root cause 隨 GC 永久遺失 (INCIDENT-20260528)
+- [JOIN scope reverse audit](feedback_join_scope_reverse_audit.md) — prod UPDATE-WHERE-JOIN 跑完後反向用更廣 criterion SELECT 漏網 row；SQL NULL=NULL=false 會 silently miss (INCIDENT-20260529 customer 508387)
+- [CORS debug 204 not pass](feedback_cors_debug_204_not_pass.md) — debug CORS 永遠 grep `access-control-allow-origin` 本身；NestJS 對 origin 不在 allowlist 仍回 204 + 其他 CORS header，靜默缺 Allow-Origin
+- [Azure MySQL prod](reference_azure_mysql.md) — lisportalprod2.mysql.database.azure.com cred; patient_user is in lis_core_v7 (emr_backend now access-denied)
+- [PNS 2FA email pipeline](reference_pns_2fa_email_pipeline.md) — patient-portal create-account email flow + debug access; PNS emails use ZymeBalanz Postmark server (not LIS); trans hangs on local-kafka outage
+- [appserver04 SSH access](reference_appserver04_ssh.md) — ssh leo@192.168.60.5 to kubectl V1 + V2 EMR pods on on-prem; AKS context can't see them; expect+base64 pattern for automation
+- [Prefer stable id over name matching](feedback_prefer_stable_id_over_name_matching.md) — when matching keys on a display name but a unique id exists, proactively recommend id-matching (VP-17076 name→VP-17136 VASC{shortcut_id})
+- [Worktree for parallel branches](feedback_worktree_for_parallel_branches.md) — default to git worktree for multi-branch / parallel or stacked tickets (not in-place checkout); per-worktree prisma generate + node_modules; in-place OK only for single linear ticket
+- [Owner-scoped not actor](feedback_owner_scoped_not_actor.md) — resolve per-owner attrs (timezone/settings) from the RESOURCE OWNER's ids, not the JWT actor's; admin-on-behalf-of breaks actor lookups (VP-17190 zoom)
+- [Migrate all readers, no mirror](feedback_migrate_all_readers_no_mirror.md) — swapping a source-of-truth: migrate EVERY reader incl generic DTO mappers, then stop writing the old store; a mirror nothing reads only diverges + adds non-atomic gap (VP-17190 mapToGraphQL + dual-write)
+- [No Chinese in code](feedback_no_chinese_in_code.md) — all source/comments/migrations English-only; grep CJK before commit (replies stay zh-TW)
+- [No direct push to staging](feedback_no_direct_push_to_staging.md) — always PR to stage_test for approval, never direct push, even if branch unprotected
+- [Analysis format](feedback_analysis_format.md) — **IRON** ticket analysis 必先 4 部結構：目的 / 改前 / 改後為何有效 / 改什麼。VP-16832 重犯一次
+- [Verify peer-observed state](feedback_verify_peer_observed_state.md) — network lifecycle fix 必驗 peer-side observable，不只 my-side log；INCIDENT-20260601 patch 只驗 pod hang 沒驗 MDHQ session count → 留 leak 3 天
+- [Check live prod before migration ticket](feedback_check_live_prod_before_migration_ticket.md) — 遷移/cutover ticket 開工前先讀 live ConfigMap + pod env，Jira 狀態≠prod 實際 (VP-16784-87 四張 Dev To Do 但 prod 早已全切 cloud)
+- [emr-v2 order customer resolution](reference_emr_v2_order_customer_resolution.md) — HL7 order customer = ehr_integrations winner (LIVE+ordering, typeRank→updated_at DESC), NOT order_clients (VP-16968); 1 NPI + 2 integrations → bundle on non-winner customer → emr_code_not_found (NPI 1396844346: 3057 vs 4953)
+- [coresamples v2 GenerateSampleID stale](reference_coresamples_v2_generate_sample_id.md) — 回傳的是已用過的 sample id（序列落後 ~311k）；order path 一律送 sampleId=0 讓 order API 自配（VP-17318）；proto 欄位是 camelCase `sampleId`
+- [transv2 calendar service](reference_transv2_calendar_service.md) — LIS-transformer-v2/getClinic 在 AKS `transv2` ns `lis-transv2-deployment`(非 default lis-trans=舊v1;appserver04 看不到);getClinic 故障=per-pod stale gRPC channel,restart 修;logger:false 吞錯誤→用 in-pod localhost:3390 mint-token 逐 pod 驗;core v1=CORE_RPC_STAGE / v2=CORE_SAMPLE_V2_RPC(資料不互通)
