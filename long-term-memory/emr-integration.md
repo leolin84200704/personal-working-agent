@@ -747,7 +747,14 @@ ORDER BY received_time DESC;
 
 **Anti-pattern:** 看到 `emr_code_not_found` 就直接查 bundle mapping。先看 prefix；VAREQUISTION 走 `packagePriceMapping` whitelist，跟 VACP custom bundle 完全是兩回事。
 
-**EMR shortcut auto-sync 架構結論 (2026-06-17 huddle 討論，未定案):** 把可下的 shortcut code 清單同步給 EMR（讓 provider 在 EMR 端選）**不該由 emr-v2 蓋新 endpoint**。理由：(1) **非一次性** — catalog 動態，emr-v2 自己每 30 分鐘 `@Cron` re-pull (`order-mapping-cache.service.ts:50`)，custom bundle 有 `expireTime` 會到期；(2) **資料/控管權在上游** — VAREQUISTION 來自 pricing `getLegacyPackagePriceMapping`、VACP 來自 `getLegacyBundleMapping`，custom bundle 由上游 pricing/ops 建，emr-v2 只是下游消費者。→ 正解是接**上游 / 既有 portal 的 per-customer orderable catalog API**（portal 本來就在顯示給人下單，很可能已有）。emr-v2 唯一獨有的是 **code 格式規則**（package.uniqueemrcode→VAREQUISTION；bundle.oldOrderTypeId+customer_id→VACP），頂多提供格式規則，不該當 catalog publisher。詳見 auto-memory `project_emr_shortcut_sync`。
+**EMR shortcut auto-sync 架構結論 (2026-06-17 huddle 討論，未定案):** 把可下的 shortcut code 清單同步給 EMR（讓 provider 在 EMR 端選）**不該由 emr-v2 蓋新 endpoint**。理由：(1) **非一次性** — catalog 動態，emr-v2 自己每 30 分鐘 `@Cron` re-pull (`order-mapping-cache.service.ts:50`)，custom bundle 有 `expireTime` 會到期；(2) **資料/控管權在上游** — VAREQUISTION 來自 pricing `getLegacyPackagePriceMapping`、VACP 來自 `getLegacyBundleMapping`，custom bundle 由上游 pricing/ops 建，emr-v2 只是下游消費者。→ 正解是接**上游 / 既有 portal 的 per-customer orderable catalog API**（portal 本來就在顯示給人下單，很可能已有）。emr-v2 唯一獨有的是 **code 格式規則**（package.uniqueemrcode→VAREQUISTION；bundle.oldOrderTypeId+customer_id→VACP），頂多提供格式規則，不該當 catalog publisher。**OBR.4 兩種 battery code 的語意差（同一次 huddle 釐清，是上面那個結論的依據）：**
+- `VAREQUISTION{id}` = **TEST / package** — 標準項目，全域 catalog，所有診所通用。key 是 `uniqueemrcode`（全局唯一），來源 pricing API `getLegacyPackagePriceMapping`。例：`VAREQUISTION463` = Gut Zoomer 5.0、`VAREQUISTION325` = Tick Borne 2.0。（拼字是 REQUIS**T**ION，少一個 I。）
+- `VACP{id}` = **custom bundle** — 客製套餐，**customer/clinic 專屬**。key 是 `oldOrderTypeId, customer_id`（clinic_id fallback），來源 bundle API `getLegacyBundleMapping`。例：`VACP148201` 是某客戶專屬，換一個客戶可能查無或對到別的東西。
+- 另有 `VATEST{id}` = 單一 test、`discountpanel{id}` = 折扣 panel、純數字 = 等同 VACP 的 custom bundle。
+
+**三個當時沒定案的問題**（2026-06-17 起未再推進）：(1) 上游 / VW portal 是否已有 per-customer orderable catalog API — portal 本來就要顯示給人下單，很可能已經有，有的話 emr-v2 完全不用動；(2) shortcut sync 的 owner 是上游 catalog 團隊還是 EMR 整合（資料在上游，偏前者）；(3) 若最後仍要 emr-v2 出 endpoint，那是包一層 workaround，不是正解。
+
+> 出處：2026-06-17 huddle（Xiaoye Li / Terry Zhang / Ray / Leo）。內容原本只存在於 workspace-keyed > 的 native auto-memory store（`~/.claude/projects/-Users-hung-l-src/memory/`），本檔一度只留指標；> 2026-08-16 內聯進來，原件封存於 `archive/native-auto-memory-workspace-2026-08-16/`。
 
 ### 手動 Payment + Order Recovery
 
