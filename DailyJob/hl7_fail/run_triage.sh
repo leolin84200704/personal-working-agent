@@ -8,6 +8,10 @@ LOG_FILE="${LOG_DIR}/run_$(date +%Y-%m-%d).log"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
+# Headless runs must not touch Claude Code's native auto memory — the agent repo
+# (STM/LTM/journal) is the system of record; a shadow store diverges silently.
+export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+
 # Wait up to 60s for network
 for i in $(seq 1 30); do
     if curl -sS --max-time 3 -o /dev/null https://api.anthropic.com/; then
