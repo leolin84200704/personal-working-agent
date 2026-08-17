@@ -13,6 +13,12 @@ PROMPT_FILE="${WATCH_DIR}/watch_prompt.md"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
+# Headless runs must not touch Claude Code's native auto memory (the agent repo
+# is the system of record), and must pin the model — an unpinned `claude -p`
+# inherits the user's interactive default and silently bills it every 2 hours.
+export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+BUGWATCH_MODEL="${BUGWATCH_MODEL:-sonnet}"
+
 # Dynamic lookback: hours since the newest previous report, +1h overlap.
 LAST_REPORT=$(ls -t "${WATCH_DIR}"/watch_*.md 2>/dev/null | head -1)
 if [[ -n "$LAST_REPORT" ]]; then
@@ -62,6 +68,7 @@ while [[ $ATTEMPT -le $MAX_ATTEMPTS ]]; do
     echo "=== Bug watch attempt $ATTEMPT/$MAX_ATTEMPTS started at $(date) ===" >> "$LOG_FILE"
     TMP=$(mktemp)
     cd "$AGENT_ROOT" && claude -p "$PROMPT" \
+        --model "$BUGWATCH_MODEL" \
         --allowedTools "Bash,Read,Write,Edit,Grep,Glob" \
         --max-turns 80 \
         > "$TMP" 2>&1

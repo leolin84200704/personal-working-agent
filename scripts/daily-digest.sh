@@ -14,6 +14,12 @@ set -u
 # launchd runs with a minimal PATH; make sure brew tools (claude, gh, git) resolve.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+# Headless runs must not touch Claude Code's native auto memory (the agent repo
+# is the system of record), and must pin the model — an unpinned `claude -p`
+# inherits the user's interactive default and silently bills it nightly.
+export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+DIGEST_MODEL="${DIGEST_MODEL:-sonnet}"
+
 REPO="/Users/hung.l/.lis-daily-digest/main"
 JOB_HOME="/Users/hung.l/.lis-daily-digest"
 LOG_DIR="$REPO/logs/daily-digest"
@@ -58,7 +64,7 @@ PROMPT="$(cat "$REPO/scripts/daily-digest-prompt.md")"
   rc=1
   for attempt in 1 2; do
     echo "--- claude attempt $attempt ---"
-    caffeinate -i claude -p "$PROMPT" --dangerously-skip-permissions 2>&1
+    caffeinate -i claude -p "$PROMPT" --model "$DIGEST_MODEL" --dangerously-skip-permissions 2>&1
     rc=$?
     echo "--- claude exit code: $rc (attempt $attempt) ---"
     [ "$rc" -eq 0 ] && break

@@ -11,6 +11,12 @@ cd "$AGENT_ROOT"
 # the headless side, which that setting does not reach.
 export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 
+# Pin the model explicitly: headless `claude -p` without --model inherits the
+# user's interactive default from ~/.claude/settings.json — if that default is a
+# premium model, every nightly dream silently bills it (same failure class as
+# the jac/gpa incidents fixed 2026-08-15).
+DREAM_MODEL="${DREAM_MODEL:-opus}"
+
 DATE=$(date +%Y-%m-%d)
 LOG_DIR="$AGENT_ROOT/logs"
 mkdir -p "$LOG_DIR"
@@ -19,7 +25,7 @@ if [[ "${1:-}" == "--dry" ]]; then
     echo "DRY RUN: would execute dream pipeline"
     echo "  Agent root: $AGENT_ROOT"
     echo "  Date: $DATE"
-    echo "  Command: claude -p \"\$(cat scripts/dream.md)\" --allowedTools Read,Write,Edit,Glob,Grep,Bash"
+    echo "  Command: claude -p \"\$(cat scripts/dream.md)\" --model $DREAM_MODEL --allowedTools Read,Write,Edit,Glob,Grep,Bash"
     exit 0
 fi
 
@@ -79,6 +85,7 @@ while [[ $ATTEMPT -le $MAX_ATTEMPTS ]]; do
     echo "[$(date)] === Dream attempt $ATTEMPT/$MAX_ATTEMPTS ===" | tee -a "$LOG_FILE"
     TMP=$(mktemp)
     claude -p "$PROMPT" \
+        --model "$DREAM_MODEL" \
         --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
         > "$TMP" 2>&1
     CLAUDE_EXIT=$?
