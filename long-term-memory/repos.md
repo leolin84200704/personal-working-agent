@@ -184,6 +184,7 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
   - **VP-16987 坑**: 舊 code 讀 `column[12]`(ReportableRangeMax 數字)當 timestamp→`new Date("170")`=年0170<MySQL DATETIME 下限→`createMany` 對全部 customer throw、被 per-customer catch 靜默吞→`periodic_report_records` 全空、客戶斷交付。修法(PR #175): quote-aware parse + 用 header 名定位欄 + 日期範圍驗證 + record 寫入獨立於 SFTP try（bookkeeping 失敗不可 mask 成功交付）。**debug 此類隱形失敗：先把 catch 改印 stack / 觸發真實路徑復現，別信 error.message（Prisma error message 為空）。**
 
 ### LIS-backend-v2-coreSamples
+  - **這條 flow 的 JWT 用 Leo 的 admin 身分，且只限這條 flow**（2026-08-16 遷入自 auto-memory；code 現況已如此）：`base-report.service.ts` 的 `generateJwtToken()` 簽的 payload 是 `userId/user_id 142346`、`internal_user_id 1201`、`internal_user_name "hung.l"`、`role/internal_user_role "admin"`，其餘 customer/clinic/patient 欄位皆 null，取代原本寫死的假 user 54674 / role `"ss"`。理由：這是 server 主動跑的 scheduled job，不是 end-user 觸發的。**不要把這組 payload 套到其他下載 report 的場景**——end-user 透過 API 下載自己的 report 時應該用 caller 自己的 JWT。`iat`/`exp` 交給 `JwtService.sign()` 依 `expiresIn` 產生，不要寫死；仍用 env `JWT_SECRET` 簽發。
 - **Purpose**: Core lab samples, orders, customers
 - **Tech**: Go 1.19+, go-micro v4, Ent ORM, MySQL, Redis, Kafka
 - **Ports**: gRPC 8084, HTTP 8083

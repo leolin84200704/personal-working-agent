@@ -1437,3 +1437,81 @@ creds 從 AKS 拿：
 
 欄位注意：`customer.customer_npi_number`（不是 `customer_npi`）；`sample` 沒有 clinic_id（要 join `order_info`）。
 192.168.60.3:3307 與 ClickHouse 192.168.62.85 仍需 VPN，但日常 core 驗證走這條就夠。
+
+## 【遷移 2026-08-16 第二批】workspace-keyed auto-memory store 的 EMR/order 事實
+
+> 來源 `~/.claude/projects/-Users-hung-l-src/memory/`（4–7 月那一代）。同批已被本檔或
+> `fhir-api.md` / STM 覆蓋的（EMR-Backend 退役、SFTP singleton / POD_ROLE、FHIR order API
+> 可行性研究、VP-16945 provider timezone、cloud migration、customer resolution）一律不重寫。
+
+### HL7 encoding 100% 是 emr-v2 的責任 —— 不要先宣告「不在範圍內」
+
+「EMR 端資料缺了 / 錯了」的調查，**先把整條鏈追完再談範圍**：
+gRPC 源資料 → panel mapping → HL7 輸出。
+
+VP-16270 我說「Total Toxins 不見是 HL7 encoder layer 的問題，不在 emr-v2 範圍」，被 Leo 糾正——
+**emr-v2 就是那個 HL7 encoder**。正確做法是先用 gRPC 查源資料（不是只看 HL7 輸出），
+再逐段找資料在哪一跳掉的。任何 scope claim 都要等追完鏈才能講。
+
+### 從 Java EMR-Backend port 行為過來時，要**逐欄位**對齊，且要對齊「所有分支」
+
+「主要欄位有寫 = OK」是錯的。Java 那邊通常在 success / fail / replay 多條路徑都寫同一組
+欄位，emr-v2 的 port 常常只覆蓋 happy path。
+
+實例（INCIDENT-2604156666）：Leo 發現 emr-v2 處理的 order 裡 `hl7_file_input.julien_barcode`
+與 `sample_id_payment` 全是 NULL，Java 版有值。根因：`order-finalizer.service.ts` 只在
+`transactionPay` 成功路徑 set 這兩個欄位，replay / no-stax / 非 CUSTOMER_PAY / 收款失敗
+等路徑全漏；而 Java 是拿 `SampleService.GenerateBarcodeForSampleID` RPC（proto 早就定義）
+的結果在**所有路徑**都寫。emr-v2 的 `grpc-client-v2.service.ts` 根本沒實作那個 wrapper。
+
+做法：port 前先 `git grep` Java repo 對應的 mybatis mapper / Mapper.xml，列出所有
+UPDATE/INSERT 涉及的欄位；在 emr-v2 對應路徑的**每一個 branch** 確認都有寫；各 branch 的
+**來源**也要對齊（Java 從哪支 RPC 拿值，emr-v2 就要走同一支）。
+常見陷阱：**proto 已定義但 client wrapper 沒實作的 RPC** —— `grep -n "rpc " *.proto` 對照
+client wrapper 檔，看哪些有 method、哪些沒有。
+
+### bundle 的 `clinicId` 是可空的，空與不空是兩種層級
+
+`getLegacyBundleMapping` response 帶 `clinicId`（camelCase）：
+- `null` → **customer-level** bundle
+- 整數 → **clinic-level** bundle
+
+（Java `Bundle.java` 用 Gson 自動反序列化這個欄位，欄名與 JSON key 相同所以不需要
+`@SerializedName`——EMR-Backend 已退役，僅供讀舊 code 時參考。）
+
+### clinic_id fallback 必須在 **expireTime 檢查之後**，而且每一層各自檢查
+
+正確順序：
+1. 用 `customer_id` 查 → 找到**且未過期** → 用它
+2. 否則（沒找到**或**已過期）→ 用 `clinic_id` 查 → 找到且未過期 → 用它
+3. 否則 → 回 errorCodes
+
+**為什麼順序會出事**：如果先 fallback 再用一個統一步驟檢查 expireTime，一個「找得到但已
+過期」的 customer-level bundle 會**整個跳過 clinic-level fallback**——code 看到「有找到
+bundle」就去檢查過期，永遠不會再試 clinic 層。每一層都要有自己的過期檢查才能正確落到下一層。
+
+### Azure MySQL `lis_core_emr` 這組帳號讀得到什麼（2026-05-26 / 06-10 驗證）
+
+Host `lisportalprod2.mysql.database.azure.com:3306`，SSL required
+（mysql client 加 `--ssl-mode=REQUIRED`；連線字串裡密碼含 `?` 要 URL-encode 成 `%3F`）。
+
+- `lis_core_v7` ✓ — patient portal / PNS 使用者在這（`patient_user`：user_id, username,
+  email_user_id, isActive…）
+- `lis_emr` ✓
+- `emr_backend` ✗ **ACCESS DENIED**（2026-05-26 起；舊筆記寫「Database: emr_backend」可能
+  已過時或需另外授權。假設之前先 `SHOW DATABASES` 確認）
+
+**欄位命名陷阱**（2026-06-10 由 order-intake live test 驗證）：
+- `lis_core_v7.patient` 的姓名欄是 `patient_first_name` / `patient_last_name`，
+  **不是** `first_name`；此表**沒有** email / phone 欄。
+  其他欄：patient_id, user_id, original_patient_id, patient_middle_name,
+  patient_legal_firstname/lastname, patient_birthdate, officeally_id, customer_id。
+- `lis_core_v7.address` 用 `patient_id` 關聯（也有 customer_id / clinic_id /
+  internal_user_id）：address_id, address_type, street_address, apt_po, city, state,
+  zipcode, country, is_primary_address…
+- emr-v2 的 `createPatientV2` gRPC 兩張都寫。**emr-v2 自己的 `emr_sample` 沒有
+  patient_id**，要從 order 追到 patient 只能先用姓名對 `lis_core_v7.patient`，再用
+  patient_id join `address`。
+
+> 密碼不寫在這裡。這組憑證目前硬編在本 repo `DailyJob/` 底下 8 個已提交的檔案中
+> （2026-08-16 盤點所見），那本身是待處理的問題，不是取用管道。

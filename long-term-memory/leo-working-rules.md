@@ -137,3 +137,69 @@ links:
 - **Diff sent-vs-returned at every integration boundary and log the difference.**
   "No error" ≠ "nothing lost" — see [[project-bestdeal-silently-drops-addon-tests]]
   in `emr-integration.md`.
+
+---
+
+> 以下 6 條於 2026-08-16 從 **workspace-keyed** 的 auto-memory store
+> （`~/.claude/projects/-Users-hung-l-src/memory/`，4–7 月那一代，54 個檔）遷入。
+> 同批 36 條 `feedback_*` 有 30 條已被 factory `ENGINEERING-LESSONS.md` 或
+> AGENTS.md / 本 repo CLAUDE.md 覆蓋，直接丟；只有這 6 條沒有歸屬。
+
+## 報告格式
+
+- **Ticket 分析一律先用四段開場（IRON）** — 順序固定 1→2→3→4，先白話 user-facing
+  邏輯，再進 tech detail：
+  1. **目的** — PM 想達到什麼 user-facing 效果（不是 AC 字面複述，是底層意圖）
+  2. **改之前長什麼樣子** — current state / behavior，含具體 user 路徑或 system 行為
+  3. **改之後為什麼能達到這個效果** — change → effect 的因果鏈
+  4. **要改什麼東西** — 具體動哪個 file / table / endpoint / field / config
+
+  Leo 原話：「不然這樣我看不懂」。純 tech 報告（endpoint X 改 Y、table Z 加欄位 W）
+  把「為什麼這樣做」和「對 user 的影響」藏起來，而他是 reviewer，要先看到 PM intent
+  跟 cause→effect 才判斷得出方向對不對。**這條有重犯紀錄**（2026-06-04 VP-16832 用了
+  別的結構被當場點出，而且當時 memory 裡已經有這條），所以每次交分析前自檢一次。
+
+- **API 文件用團隊的結構化 markdown，不要丟原生 OpenAPI/Swagger YAML** — 順序：
+  Overview → Ticket → URL → Architecture → Key Behaviors 表 → Database → Endpoints
+  （含 curl 範例 + JSON response）→ Status Flow → Frontend Notes。
+  參考 emr-v2 repo 的 `docs/agent-enrollment-pipeline.md`、`docs/vendor-inquiry-swagger.md`。
+  Leo 明確退過原生 YAML 格式。
+
+## 工作方式
+
+- **每個任務都要主動想「有沒有更乾淨的做法」並實作** — 寫更好的 code 是預設要求，
+  不是 nice-to-have（Leo 2026-06-23, VP-17117：「這種更好的做法一定要每次都思考並且
+  apply」）。交方案前自問：單一職責點？少一層 hack/fallback？用權威來源而非 hardcode？
+  對未來情境 robust？
+  **但「更乾淨」要先驗證再套用。** 同一張 VP-17117：我一度斷言 pre-pipeline swap 更乾淨，
+  深查才發現 NY twin 不在 emr-v2 的本地 bundle cache，那條路會讓 orderItem 被靜默丟掉；
+  反而是原本那個「先從標準 bundle 建 orderItem 再換 item_id」才正確。refactor 前先驗
+  新做法的隱藏相依（cache / 資料 / 時序），別把未驗證的直覺當定論。
+
+- **build 過不了先假設是自己造成的（IRON）** — 任何我動過的 branch，
+  `npm run start:dev` / `npm run build` 必須 100% 過。看到 type / runtime / build error
+  時**不要**當成 pre-existing 或「stale 環境假象」放掉，先假設是我造成的，追到底；
+  就算真的對應到別人的 issue 也要修到能起。
+  實例（VP-16521，LIS-transformer-v2）：切 branch 後 build 噴 18 個 `specialties` 型別
+  錯誤，我下了「stale prisma client 假象」的草率結論。真因是前一個 branch 跑過
+  `prisma generate`（那邊 schema 有 `specialties`），client 寫進 node_modules，切 branch
+  後沒重跑 → client/schema drift。**該 repo 的 `prebuild` 只是 `rimraf dist`，不會跑
+  prisma generate；`start:dev` 也不會**，雙 schema 要各跑一次。
+
+## Ticket 範圍
+
+- **順手查出來的 prod-wide drift 不屬於觸發它的那張 ticket** — 做整合類 ticket 時
+  audit 出來的缺漏 integration、schema gap、死 vendor 殘留、跨 customer 清理，屬於
+  EMR-Backend → lis-backend-emr-v2 的 migration umbrella，不是原 ticket。
+  Leo 退過一次：「已經不是這個 ticket 的範疇了。這個 ticket 已經 done。」
+  判準：**in-scope** = 指名的那個 integration 上線 + 由它直接推導出的 invariant 對齊；
+  **out-of-scope** = 其餘全部。追蹤檔名也不要綁原 ticket id（`vp16617-pm-questions.csv`
+  應改成 `emr-backend-migration-followups.csv`）。廣泛 audit 結果永遠先給 Leo 草稿，
+  不要自動貼到那張 ticket 的 comment。
+
+- **skill 定稿後主動問要不要跑 description 優化** — skill 的 description 是觸發的唯一
+  機制，寫壞會 under-trigger 或亂觸發。`~/.claude/skills/skill-creator/scripts/run_loop.py`
+  背景跑 `claude -p` 測觸發準度（~5 輪，取 held-out 分數最高者）。Leo：「你要記得有這個
+  東西，每次檢查我是不是該跑。」定稿一個 skill、或事後發現某 skill 該觸發沒觸發時主動問；
+  草稿階段和小編輯跳過（每次都跑本身就是 over-engineering）。機器 backstop：
+  `~/.claude/hooks/skill-desc-opt-reminder.sh`（PostToolUse，動到 `*/SKILL.md` 時注入提醒）。

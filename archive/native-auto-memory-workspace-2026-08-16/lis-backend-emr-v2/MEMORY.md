@@ -1,0 +1,1 @@
+- [Scheduled report → SFTP JWT payload](report_download_jwt_payload.md) — 限定 server 端 scheduled-reports flow 下載 CSV 上傳到 customer SFTP 時，改用 hung.l (internal_user_id 1201, role admin) 的 payload

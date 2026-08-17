@@ -2004,3 +2004,103 @@ client registry 在 staging Auth0 postgres（192.168.60.11:5432，secret 已 has
 **截圖貼過來的 client_id 會被 OCR 弄壞**（大寫 I 與小寫 l），要對 `Client` 表的
 `clientId` / `secretLast4` 核對。另：2026-07-28 起所有 client_credentials 的 CUSTOMER token
 過不了 FHIR session check（403，VP-17522 — session row 的 customer/clinic 是 NULL）。
+
+## 【遷移 2026-08-16 第二批】workspace-keyed store 的操作性事實
+
+> 來源 `~/.claude/projects/-Users-hung-l-src/memory/`。同批已覆蓋的（appserver04 SSH、
+> coresamples v2 sample id、trans-v2 calendar service、cloud migration endpoints、
+> VP-17065 daily report）不重寫；原件在 `archive/native-auto-memory-workspace-2026-08-16/`。
+
+### emr-v2 有兩個 git hook，但它們**不在版控裡**
+
+`lis-backend-emr-v2/.git/hooks/` 從 2026-06-26 起有 pre-commit 與 pre-push
+（2026-08-16 確認仍在）。因為住在 `.git/hooks/`，**瀏覽 repo 看不到、重新 clone 不會帶過去**；
+worktree 共用主 repo 的 hooks 所以涵蓋得到。全部可以 `--no-verify` 故意略過。
+
+- **pre-commit guard 1 `config-yaml-coupling`** — staged 新增的 `process.env.X`（字面形式；
+  刻意不涵蓋解構與 `ConfigService.get`）若沒有同時出現在 `lis-emr-v2-config.yaml` 和
+  `lis-emr-v2-config-prod.yaml` 的 `data:` 區 → 擋 commit。對應 INCIDENT-20260601（重犯 3 次）。
+- **pre-commit guard 2 `no-chinese-in-code`** — staged 新增的 `.ts/.js/.sql` 行含 CJK
+  （用 perl `-CSD`，因為 BSD grep 沒有 `-P`）→ 擋。markdown/docs 不查。
+- **pre-push `start:dev iron rule`** — push 前跑 `npx prisma generate` + `npm run build`
+  （= nest build），任一失敗就擋 push。log 在 `/tmp/emr-v2-prepush-*.log`。
+
+重新 clone emr-v2 之後這三道全部消失。要復原就從這裡重建。
+
+同期還有兩個 user-level hook（`~/.claude/hooks/`，2026-08-16 確認仍在）：
+`skillsmp-reminder.sh`（UserPromptSubmit，週二/週五 LA 時間中午前第一次 prompt 注入提醒，
+state 檔 `~/.claude/.skillsmp-reminder.last` 做每日去重）與 `skill-desc-opt-reminder.sh`。
+前者取代了原本的雲端 routine —— Leo 嫌雲端要自己去頁面看、沒有 man-in-the-loop。
+
+### daily-digest job 的運行環境（不只是排程時間）
+
+- **launchd** `~/Library/LaunchAgents/com.lis.vibrant-daily-digest.plist`，本地時間 00:00
+  （自動處理 DST，不會 UTC 漂移），`RunAtLoad=false`。雲端 routine 行不通：沙箱沒有 Leo 的
+  憑證、讀不到 private repo、push 需要 GitHub App。
+- **隔離**：跑在 git worktree `/Users/hung.l/.lis-daily-digest/main`，**絕不**在工作 repo 內跑。
+  該 worktree 是 **detached HEAD**（2026-07-02 起沒有具名 branch），每次 run
+  `git checkout --detach origin/main` 重新對齊，然後 `git push origin HEAD:main`（FF）。
+- **半夜睡眠坑（已修）**：2026-06-24 首夜就失敗——機器睡著，剛喚醒時網路還沒起
+  （claude `ConnectionRefused`）、keychain 還鎖著（`gh` token invalid）。修法：script 內建
+  網路等待（最多 5 分）、`caffeinate -i` 防睡、`GH_TOKEN` 從 `~/.lis-daily-digest/.gh_token`
+  （0600，`gh auth token` 匯出，繞開 keychain；`gh api` 與 `git push` 都吃這個 env）、
+  claude 失敗重試一次。**`gh` 若重新登入導致 token 輪替，要重跑
+  `gh auth token > ~/.lis-daily-digest/.gh_token`**，否則整條靜默失敗。
+- **喚醒排程**：`sudo pmset repeat wakeorpoweron MTWRFSU 23:58:00`（2026-06-25 已設）。
+  午夜需接電源；電池 + 闔蓋可能不醒 → 漏跑那一夜。
+- digest 只掃各 repo 的預設分支，feature/staging 的 commit 不涵蓋。
+
+### PNS / MyWellness 2FA email 的完整鏈路與 debug 入口
+
+`收不到驗證信` 類問題的追法（2026-05-26 追 hrwilliams50@gmail.com 時逐段驗證）。
+
+**鏈路**：patient-portal 前端 → coresamples-v2 gRPC `PatientService.PatientSendCreateAccountEmail`
+（`LIS-backend-v2-coreSamples/service/patient_service.go`，產 OTP 存 Redis `code:email`，
+TTL 10 分）→ HTTP `util.PnsSendCreateAccount2faAuthEmail` POST 到
+`https://api.vibrant-wellness.com/v1/portal/trans-service/valogin/PnsSendCreateAccount2faAuthEmail`
+（**部署路徑是 `trans-service`，不是 local repo 裡的 `trans-service-st`——部署的 code 有分歧**）
+→ trans-service `valogin.controller.ts` → `pnsSend2faCodeEmail`（valogin.service.ts）發 Kafka
+topic `Notification-Email-Template` 到 `vibrant-notification-events` Event Hub →
+`noti/notification-center-deployment` consumer → Postmark。
+
+**PNS 的信分散在兩台 Postmark server，查錯台就會得到「找不到」**：
+- PNS **2FA 開戶/重設**（template 4059xxxx，Tag "PNS Two-Factor Authentication"）→ **ZymeBalanz (5595198)**
+- PNS **kit 生命週期**通知（Tag `consume_pns*`，template 33xxxxxx）→ **LIS (8340335)**
+
+查詢：`GET api.postmarkapp.com/messages/outbound?recipient=X&count=N&offset=0`
+（**`offset` 是必填**，少了回 ErrorCode 700），再打 `/messages/outbound/{id}/details` 看投遞事件、
+`/dump` 看原始 MIME。**用 recipient + Tag + Metadata 比對，不要用 bus 的 MessageID**——
+Kafka/EventHub 訊息的 `MessageID`/`partitionKey` 是 producer 的 id，Postmark 送出時會給自己的。
+
+**template id 的 remap 不是 bug**：consumer 依 `job.data.TemplateId` 分派——`zymeb[id]` 有值就
+送 ZymeBalanz server 並換成 remap 後的 id（`/app/src/notification/ZymeBalanz-server.ts`，
+例 `40591105→41526507` staging、`40591139→41526542` prod）。所以 trans 那個
+`stprod ? 40591105 : 40591139` 的三元式**remap 完是對的**：真 prod 拿到 ZymeBalanz 41526542。
+名字裡帶 "Staging" 的 LIS id 只是跨 server 命名交叉，prod 客戶收到的是 prod template。
+（這條更正了早期「prod 用到 staging template / 2FA 是 raw HTML 寄的」的錯誤推論——Postmark 的
+message-detail 對 template send 會回 `TemplateId=null`，正是那個 null 誤導出 raw-HTML 的猜測；
+Metadata + 實際 render 出來的內容才證實是 template send。）
+
+**四個會讓信靜默消失的坑**：
+1. trans（`lis_front_logger`）與 coresamples（zap）的 log **只進 stdout**，沒有 DB、沒有 fluentd
+   → 只能 `kubectl logs` 或 Log Analytics。
+2. trans 的 `LoggingInterceptor` 在 RxJS `tap` 裡記 req+resp，也就是 **handler 跑完之後**
+   → 一個 hang 住/逾時的請求在 trans **完全不會留下 log**。
+3. coresamples 的 `PostJSON` 有 **30 秒 client timeout**，逾時就刪掉 Redis session 並回 500，
+   **不寄信也不重試** → 短暫抖動會靜默吞掉驗證信。錯誤訊息是
+   `context deadline exceeded (Client.Timeout exceeded while awaiting headers)`。
+4. trans 的 `pnsSend2faCodeEmail` **每個請求**都做
+   `Promise.all([localKafka.connect(), azureKafka.connect()])`，即使 `platform_type=cloud`
+   （走 azure）也一樣 → **本地 Kafka（`default/lis-core-kafka`）掛掉會拖垮雲端寄信**，變成 30 秒逾時。
+   2026-05-26 19:12–19:40 UTC 實際發生過（209 次 coresamples timeout；lis-core-kafka pod 19:30:19 被換掉）。
+
+**要直接讀 bus**：`Notification-Email-Template` 是 `vibrant-notification-events` 上的單 partition
+Event Hub，連線字串（SendListen）在 `LIS-transformer/.env` 的 `Azure_kafka_connection_string`。
+用 `@azure/event-hubs` 的 `EventHubConsumerClient`（`$Default`、不 checkpoint）讀——AMQP
+non-epoch 讀不會從線上 consumer 手上搶走 partition；**kafkajs 的 consumer-group 讀會觸發
+rebalance 把 partition 搶過來，不要用**。
+
+debug 存取（2026-05-26 本機驗證）：`kubectl` context `lisportalprod` 可用；pod 分別是
+trans `default/lis-trans-deployment-*`（`SERVER_ENVIRONMENT=prod`）與 `-st`（stprod）、
+coresamples `coresamplesv2/lis-coresamples-v2-deployment-*`、consumer
+`noti/notification-center-deployment-*`。`az` CLI 的管理平面需要重新 MFA 登入才查得到 Log Analytics。
