@@ -44,6 +44,7 @@
 - **EMR / Integration / Provider / Practice / HL7 / SFTP / Bundle** → `emr-integration.md`
 - **Code change / bug fix / feature** → `ticket-routing.md` → `repos.md`
 - **Build / deploy / config / gotchas** → `patterns.md`
+- **Leo 的工作方式 / 回報格式 / Jira 操作機制 / repo 衛生** → `leo-working-rules.md`
 - **不確定** → 先讀 `ticket-routing.md` 分類
 
 > Note: `knowledge/` 是 `long-term-memory/` 的 symlink，舊路徑仍可用。
@@ -60,3 +61,22 @@
 - **Routine**（Step 3 跳過 debate）= 照既有 pattern 的 config/integration ticket：加 provider、改 MSH 值、開關 integration 等；需註明依循的過去 ticket
 - **Explore**（Step 2）= 掃相關 LIS repos；subagent patterns 見 `AGENTS.md`（本 repo）
 - Retrospective 詳細框架：`~/src/project-agent-factory/skills/work-loop/RETROSPECTIVE.md`
+
+## Hot lessons（factory 核心紀律常駐層 — dream 每晚與 ENGINEERING-LESSONS 同步，勿手改）
+<!-- hot-lessons:begin -->
+- **Batch DB verify 100%** — 批次 INSERT/UPDATE 後驗證全部 rows（count 對帳 + 反向查漏網），絕不抽查。
+- **Cleanup filter scope** — DELETE 的 WHERE 必須綁定當次操作範圍（時間 + 明確 ID），絕不為「保險」放寬。
+- **Verified means live, not mock** — 行為結論要用真實 DB / 跑著的服務重現；mock 綠燈 ≠ 驗證過。
+- **Test before push** — 影響 prod 的 push 前必跑測試，覆蓋新 logic 每個分支；compile pass ≠ 行為正確。
+- **Preserve evidence before restart** — hang 的 process/pod 先 dump logs 再重啟，否則 root cause 永久消失。
+- **Channel liveness is third-party state** — 己方動作成功 ≠ 通道活著；deploy 收尾做真實 round-trip。
+- **JOIN scope reverse audit** — prod UPDATE-WHERE-JOIN 跑完後，用更廣的 criterion 反向 SELECT 找漏網 row；SQL 的 `NULL = NULL` 是 false，會靜默漏掉。
+- **Schema migration before deploy** — 對非 ORM-managed 的 prod DB，schema 加欄位必須先手動 ALTER 到 prod 才部署，否則整個 model 的讀取會全數失敗。
+<!-- hot-lessons:end -->
+
+> 前 6 條是 factory 正典（iic/jac 同款）。後 2 條是本 instance 的加碼：LIS 是 DB 最重、
+> 且 push-to-deploy 的環境，這兩類事故 blast radius 最大且目前沒有確定性機制擋著。
+> 任一條長出 `enforced-by:`（hook / grader / CI gate）後，照 `framework/ENFORCEMENT-LADDER.md`
+> 降級換位——常駐預算只留給還沒有機制能接住的規則。其餘 lis 系教訓（idempotency key、
+> void promise、owner-bound fields…）屬 code-review 時機的判斷，靠 WORK-LOOP Step 1.4 的
+> sparse injection 按 ticket 撈，不佔常駐預算。

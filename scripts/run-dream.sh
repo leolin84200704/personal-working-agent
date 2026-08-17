@@ -4,6 +4,13 @@ set -uo pipefail
 AGENT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$AGENT_ROOT"
 
+# The dream must never read/write Claude Code's native auto memory: this repo
+# (STM/LTM/journal) is the single system of record, and headless runs writing to
+# ~/.claude/projects/*/memory/ create a diverging shadow store. The interactive
+# side is turned off via autoMemoryEnabled in .claude/settings.json; this covers
+# the headless side, which that setting does not reach.
+export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+
 DATE=$(date +%Y-%m-%d)
 LOG_DIR="$AGENT_ROOT/logs"
 mkdir -p "$LOG_DIR"
