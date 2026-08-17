@@ -136,6 +136,32 @@ def registry_digest(image):
         return r.headers.get("Docker-Content-Digest", "")
 
 
+def registry_built_at(image):
+    """When the registry's current image for this reference was built."""
+    ref, _, tag = image.rpartition(":")
+    host, _, path = ref.partition("/")
+    _, manifest = _manifest_with_body(host, path, tag)
+    with urllib.request.urlopen(
+        f"http://{host}/v2/{path}/blobs/{manifest['config']['digest']}", timeout=20
+    ) as r:
+        import json as _json
+        return _json.loads(r.read()).get("created", "")
+
+
+def _manifest_with_body(host, path, tag):
+    req = urllib.request.Request(
+        f"http://{host}/v2/{path}/manifests/{tag}",
+        headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        import json as _json
+        return r.headers.get("Docker-Content-Digest", ""), _json.loads(r.read())
+
+
+def branch_commit_time(branch):
+    return run(["git", "-C", REPO, "log", "-1", "--format=%cI", branch]).stdout.strip()
+
+
 def branch_head(branch):
     return run(["git", "-C", REPO, "log", "-1", "--format=%H", branch]).stdout.strip()
 
@@ -186,6 +212,27 @@ def check(target):
                 f"{target['name']}: running {sorted(digests)[0]} but {image} in the registry is "
                 f"{want} — the pod is not running what was built."
             )
+        # A mutable tag hides a second failure: matching the registry proves the pod took the
+        # last build, not that the last build contains the last merge. Without this, a branch
+        # that merged but never built reports OK on both sides — the pod and the registry are
+        # consistently stale. (Observed the first time this ran after a merge.)
+        built = registry_built_at(image)
+        head_time = branch_commit_time(target["branch"])
+        if built and head_time:
+            lag = (datetime.fromisoformat(head_time) -
+                   datetime.fromisoformat(built.replace("Z", "+00:00"))).total_seconds() / 3600
+            if lag > MAX_SKEW_HOURS:
+                state = "STALE"
+                findings.append(
+                    f"{target['name']}: {image} was built {built}, older than "
+                    f"{target['branch']} head ({head_time}) by {lag:.1f}h — the BUILD never ran, "
+                    "so the pod matching the registry means nothing."
+                )
+            elif lag > 0:
+                findings.append(
+                    f"{target['name']}: {target['branch']} moved {lag * 60:.0f}min ago and the "
+                    f"image is older — build likely still in flight, re-check."
+                )
     elif len(tag) >= 12 and all(c in "0123456789abcdef" for c in tag.lower()):
         head = branch_head(target["branch"])
         if head and not (head.startswith(tag) or tag.startswith(head[:12])):
