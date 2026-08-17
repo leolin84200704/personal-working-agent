@@ -2123,3 +2123,25 @@ debug 存取（2026-05-26 本機驗證）：`kubectl` context `lisportalprod` �
 trans `default/lis-trans-deployment-*`（`SERVER_ENVIRONMENT=prod`）與 `-st`（stprod）、
 coresamples `coresamplesv2/lis-coresamples-v2-deployment-*`、consumer
 `noti/notification-center-deployment-*`。`az` CLI 的管理平面需要重新 MFA 登入才查得到 Log Analytics。
+
+## 【journal 蒸餾 2026-08-16】本 repo 已知的明文憑證位置（未修，待 Leo 決定）
+
+盤點自 auto-memory 遷移的 open finding，2026-08-16 dream 以 `git grep` 對 ground truth 覆核過。
+記在這裡是為了**下次要動這些檔案時知道踩到什麼**，不是待辦清單——修法（改讀 env / 輪換密碼 /
+清 git history）blast radius 各不相同，屬於 Leo 的決定。
+
+1. **`lis_core_emr` 的 prod DB 密碼明文躺在 8 個 tracked 檔案裡**（`lisportalprod2` Azure MySQL，
+   db `lis_emr`）。實測 `git grep -l '<pw>'` = 9 個檔案：`DailyJob/` 下 8 個
+   （`hl7_triage_runner.py`、`hl7_triage_2026_05_30.py`、`run_triage.py`、
+   `hl7_fail/run_triage.py`、`hl7_fail/triage_runner_2026-05-27.py`、
+   `hl7_fail/triage_prompt.md`、`result_fail/result_fail_runner.py`、
+   `vp17312_stageb/check_stageb.sh`）＋ `archive/native-auto-memory-workspace-2026-08-16/` 下 1 個。
+   只有 `result_fail_runner.py` 走 `os.environ.get("LIS_DB_PASS", <literal>)`，其餘是無 fallback 的
+   硬編碼常數——**所以「設個 env var 就好」對其中 7 個檔案無效**，要真的改 code。
+   已經在 git history 裡，換掉檔案不等於換掉曝光。
+2. **Cloud Report Service 的 OAuth client secret 明文進 repo**：
+   `LIS-Report/base-report-server/deployment/azure/k8s-secret.yaml`（見上面 FHIR token 段）。
+
+**通則**：這個 repo 是 private 但不是 secret store。要新增排程 job 時照 `result_fail_runner.py`
+的 env 形式寫，且**不要留 literal 當 fallback**——留了 fallback，env 沒設時它會安靜地用明文跑，
+於是「已經改成 env 了」這句話變成假的。

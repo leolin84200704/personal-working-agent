@@ -2,7 +2,7 @@
 date: 2026-08-16
 slug: remaining-memory-stores-migration
 related: [native-auto-memory-retirement, RETRIEVAL.md, ENGINEERING-LESSONS.md]
-distilled: false
+distilled: true
 ---
 
 # 2026-08-16 — The other six auto-memory stores: 68 entries, item-by-item

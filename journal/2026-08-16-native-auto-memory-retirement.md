@@ -2,7 +2,7 @@
 date: 2026-08-16
 slug: native-auto-memory-retirement
 related: [framework-sync, RETRIEVAL.md, ENFORCEMENT-LADDER.md]
-distilled: false
+distilled: true
 ---
 
 # 2026-08-16 — Retiring the native auto-memory store: 36 entries, item-by-item

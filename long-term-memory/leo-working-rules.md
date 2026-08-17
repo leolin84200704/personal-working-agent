@@ -3,12 +3,14 @@ id: leo-working-rules
 type: ltm
 category: process
 status: active
-score: 0.9
+score: 0.1615
 base_weight: 0.9
 urgency: 4
 created: 2026-08-16
 updated: 2026-08-16
-summary: "Leo's working rules for this instance — reporting, ticket handling, Jira mechanics, and repo hygiene. The job-specific residue of the native auto-memory store; universal engineering discipline lives in factory ENGINEERING-LESSONS."
+summary: Leo's working rules for this instance — reporting, ticket handling, Jira
+  mechanics, and repo hygiene. The job-specific residue of the native auto-memory
+  store; universal engineering discipline lives in factory ENGINEERING-LESSONS.
 links:
 - VP-15955
 - VP-17286
