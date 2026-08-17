@@ -8,25 +8,25 @@
           {
             "type": "command",
             "if": "Bash(git push*)",
-            "command": ".claude/hooks/validate-git-push.sh",
+            "command": "/Users/hung.l/src/project-agent-factory/framework/hooks/validate-git-push.sh",
             "timeout": 5
           },
           {
             "type": "command",
             "if": "Bash(git reset*)",
-            "command": ".claude/hooks/validate-git-destructive.sh",
+            "command": "/Users/hung.l/src/project-agent-factory/framework/hooks/validate-git-destructive.sh",
             "timeout": 5
           },
           {
             "type": "command",
             "if": "Bash(git clean*)",
-            "command": ".claude/hooks/validate-git-destructive.sh",
+            "command": "/Users/hung.l/src/project-agent-factory/framework/hooks/validate-git-destructive.sh",
             "timeout": 5
           },
           {
             "type": "command",
             "if": "Bash(git commit*)",
-            "command": ".claude/hooks/validate-repo-language.sh",
+            "command": "/Users/hung.l/src/project-agent-factory/framework/hooks/validate-repo-language.sh",
             "timeout": 5
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/protect-verification-assets.sh",
+            "command": "/Users/hung.l/src/project-agent-factory/framework/hooks/protect-verification-assets.sh",
             "timeout": 5
           }
         ]
