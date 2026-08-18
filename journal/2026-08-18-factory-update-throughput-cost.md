@@ -29,14 +29,25 @@ factory 大改動落在 08-15/16）。**這份是問題的登記，不是結案*
 
 ## 成本花在哪（Bash 指令分類，佔全部 Bash 比例）
 
-| 類別 | BEFORE | AFTER | 對應改動 |
-|---|---|---|---|
-| git fetch/pull/rev-list | 7.9% | 15.5% | 原則 0 Sync With the World First（factory 9c9d4e8） |
-| 讀 framework 文件 | 1.1% | 5.8% | WORK-LOOP / ENGINEERING-LESSONS / ENFORCEMENT-LADDER 按需載入 |
-| 讀 memory index | 8.5% | 11.8% | session-start protocol + staleness check |
-| 實際產品工作 | 66.2% | 48.7% | — |
+**先講一個容易誤判的地方**：把 LIS 工作 session 和 factory 自我維護 session 混在一起算，
+會得到「讀 framework 文件從 1.1% 漲到 5.8%」的結論。拆開之後那是假象——framework 文件的閱讀
+**全部集中在 factory session**（4.94 次/turn），LIS 工作是 0.16 → 0.15，完全沒變。
+下面是只看 LIS 工作 session 的每個實質 turn Bash 呼叫數：
 
-每 100 個 Bash，做真正的事的從 66 個掉到 49 個。
+| 類別 | BEFORE (183 turns) | AFTER (27 turns) | 對應改動 |
+|---|---|---|---|
+| `git fetch/pull` | 0.44 | 0.93 | 原則 0 Sync With the World First（factory 9c9d4e8） |
+| `git show/grep origin/main:` 讀檔 | 0.81 | 1.96 | 同上的副作用——不信任本機狀態，改從 remote ref 讀檔 |
+| `git status/rev-list` | 0.30 | 0.56 | 同上 |
+| memory 檔案 | 0.47 | 1.04 | session-start protocol + LTM 路由 |
+| framework 文件 | 0.16 | 0.15 | 沒有變化 |
+| 實際產品工作 | 8.87 | 12.96 | — |
+
+最大一塊是「用 `git show origin/main:檔案` 當讀檔預設方式」。fetch 完並確認 working tree 沒有
+diverge 之後，本機檔案就等於 origin/main，繼續走 git plumbing 是純儀式，而且更貴：不能用 Read
+工具、沒有行號、每個檔案要重跑一次。同期 Read 工具用量從 1.11 掉到 0.71/turn，就是搬過去的量。
+
+同期整體（含 factory session）的 Bash 中，做實際產品工作的比例從 70.8% 掉到 51.4%。
 
 Guard 摩擦：被 hook 擋下的 tool_result 從 9.9‰ 升到 55‰（5.5 倍）。新增的
 `protect-verification-assets`（19 次命中）、`validate-repo-language`（31）、repo-aware push guard（28），
@@ -76,8 +87,9 @@ vibrant 全部改用 Fable 5：互動 `fable[1m]`，四支 headless job 預設 `
 
 1. 換 fable 之後，工具/turn 與 min/turn 有沒有回到 8.6 / 2.56 附近 —— 若沒有，證實瓶頸是儀式不是模型
 2. `remind-engineering-lessons.sh` 誤報要不要修
-3. Sync-first 是否該縮到「本 ticket 會碰的 repo」而非全部
-4. framework 文件重複讀取（5.8% 的 Bash）能否 session 開頭一次讀完
+3. Sync-first 收斂成「每個 repo 每 session fetch 一次 + 確認沒 diverge，之後照常讀本地檔」
+   —— 這是目前最大的可回收項，約 2 次 Bash/turn
+4. `git fetch --all --prune` 改成只 fetch 需要的 branch
 5. 樣本累積到 15+ 個 LIS session 再跑 `scripts/agent-perf-metrics.py` 重測，屆時才有資格回答「值不值得」
 
 ## 監測基準（`scripts/agent-perf-metrics.py`，2026-08-18 跑的原始輸出）
