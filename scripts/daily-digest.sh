@@ -18,7 +18,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PAT
 # is the system of record), and must pin the model — an unpinned `claude -p`
 # inherits the user's interactive default and silently bills it nightly.
 export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
-DIGEST_MODEL="${DIGEST_MODEL:-sonnet}"
+DIGEST_MODEL="${DIGEST_MODEL:-fable}"
 
 REPO="/Users/hung.l/.lis-daily-digest/main"
 JOB_HOME="/Users/hung.l/.lis-daily-digest"

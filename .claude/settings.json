@@ -1,5 +1,6 @@
 {
   "autoMemoryEnabled": false,
+  "model": "fable[1m]",
   "hooks": {
     "PreToolUse": [
       {

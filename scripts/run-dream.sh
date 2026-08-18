@@ -15,7 +15,7 @@ export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 # user's interactive default from ~/.claude/settings.json — if that default is a
 # premium model, every nightly dream silently bills it (same failure class as
 # the jac/gpa incidents fixed 2026-08-15).
-DREAM_MODEL="${DREAM_MODEL:-opus}"
+DREAM_MODEL="${DREAM_MODEL:-fable}"
 
 DATE=$(date +%Y-%m-%d)
 LOG_DIR="$AGENT_ROOT/logs"

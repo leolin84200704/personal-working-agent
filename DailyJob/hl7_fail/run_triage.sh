@@ -12,6 +12,10 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 # (STM/LTM/journal) is the system of record; a shadow store diverges silently.
 export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 
+# Model policy for this instance: Fable 5 everywhere, overridable per run
+# (Leo directive 2026-08-18).
+TRIAGE_MODEL="${TRIAGE_MODEL:-fable}"
+
 # Wait up to 60s for network
 for i in $(seq 1 30); do
     if curl -sS --max-time 3 -o /dev/null https://api.anthropic.com/; then
@@ -89,7 +93,7 @@ while [[ $ATTEMPT -le $MAX_ATTEMPTS ]]; do
     TMP=$(mktemp)
 
     claude -p "$PROMPT" \
-        --model sonnet \
+        --model "$TRIAGE_MODEL" \
         --allowedTools "Bash,Read,Write,Edit,Grep,Glob" \
         --max-turns 30 \
         > "$TMP" 2>&1
