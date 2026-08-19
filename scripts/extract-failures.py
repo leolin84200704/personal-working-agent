@@ -4,11 +4,24 @@ Extract the `## Failures` section from every STM file and consolidate them
 into `long-term-memory/failures.md` — a single index keyed by root-cause theme.
 
 Designed to run as part of the dream pipeline (idempotent) and on-demand.
-Output file is regenerated each run; do not edit by hand.
+The prose is regenerated each run; do not edit the entries by hand.
+
+Regeneration is NOT a clean overwrite, because the file outlives its sources:
+
+  - `score` and part of `links` are maintained by memory_scoring.py's auto-linker,
+    not derivable from STM. Rewriting them from scratch discarded 49 of 90 links
+    on 2026-08-18 (and 129 lines of them on 2026-07-29).
+  - an entry whose STM has been archived has no source left to re-render, so a
+    from-scratch pass silently deletes it. VP-16720 existed in no STM and no
+    journal — only here — and vanished exactly that way.
+
+So: frontmatter that this script does not own is carried over, links are unioned,
+and a run that would drop an entry refuses to write unless told to.
 
 Usage:
-  python3 scripts/extract-failures.py          # write LTM file
-  python3 scripts/extract-failures.py --print  # print to stdout only
+  python3 scripts/extract-failures.py            # write LTM file
+  python3 scripts/extract-failures.py --print    # print to stdout only
+  python3 scripts/extract-failures.py --prune    # allow dropping entries whose STM is gone
 """
 from __future__ import annotations
 
@@ -146,7 +159,41 @@ def gather() -> dict[tuple[str, str], list[dict]]:
     return grouped
 
 
-def render(grouped: dict[tuple[str, str], list[dict]]) -> str:
+ENTRY_ID_RE = re.compile(r"^### \*\*\[\[([^\]]+)\]\]", re.M)
+
+
+def read_existing(path: Path) -> dict:
+    """What the file on disk already holds and this script cannot re-derive."""
+    if not path.exists():
+        return {"created": None, "score": None, "links": [], "entry_ids": set()}
+    text = path.read_text(encoding="utf-8")
+    created = score = None
+    links: list[str] = []
+    in_links = False
+    for line in text.splitlines():
+        if line.startswith("---") and links:
+            break
+        if line.startswith("created:"):
+            created = line.split(":", 1)[1].strip()
+        elif line.startswith("score:"):
+            score = line.split(":", 1)[1].strip()
+        elif line.startswith("links:"):
+            in_links = True
+        elif in_links:
+            if line.startswith("- "):
+                links.append(line[2:].strip())
+            elif re.match(r"^[a-z_]+:", line):
+                in_links = False
+    return {
+        "created": created,
+        "score": score,
+        "links": links,
+        "entry_ids": set(ENTRY_ID_RE.findall(text)),
+    }
+
+
+def render(grouped: dict[tuple[str, str], list[dict]], prior: dict | None = None) -> str:
+    prior = prior or {"created": None, "score": None, "links": []}
     today = date.today().isoformat()
     total = sum(len(v) for v in grouped.values())
 
@@ -162,6 +209,15 @@ def render(grouped: dict[tuple[str, str], list[dict]]) -> str:
                     seen.add(tid)
                     ordered_links.append(tid)
 
+    # Union with what is already there: the auto-linker in memory_scoring.py adds
+    # links this script has no way to rediscover (incident ids, routing files,
+    # cross-instance feedback keys). Rebuilding from STM alone throws them away.
+    for tid in prior.get("links") or []:
+        if tid and tid not in seen and tid != "failures":
+            seen.add(tid)
+            ordered_links.append(tid)
+    ordered_links.sort()
+
     links_yaml = "\n".join(f"- {tid}" for tid in ordered_links) if ordered_links else ""
 
     out = [
@@ -170,10 +226,12 @@ def render(grouped: dict[tuple[str, str], list[dict]]) -> str:
         "type: ltm",
         "category: technical",
         "status: active",
-        "score: 0.0",
+        # score is memory_scoring.py's to compute; created is the file's real
+        # birthday. Neither is ours to reset on every run.
+        f"score: {prior.get('score') or '0.0'}",
         "base_weight: 0.9",
         "urgency: 3",
-        f"created: {today}",
+        f"created: {prior.get('created') or today}",
         f"updated: {today}",
         "links:" if ordered_links else "links: []",
     ]
@@ -223,21 +281,53 @@ def render(grouped: dict[tuple[str, str], list[dict]]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--print", action="store_true", help="print to stdout, do not write file")
+    ap.add_argument("--prune", action="store_true",
+                    help="write even if entries would be dropped (their STM is gone)")
     args = ap.parse_args()
 
+    prior = read_existing(LTM_OUT)
     grouped = gather()
-    rendered = render(grouped)
+    rendered = render(grouped, prior)
+
+    dropped = sorted(prior["entry_ids"] - set(ENTRY_ID_RE.findall(rendered)))
+
     if args.print:
+        if dropped:
+            print(f"WARNING: {len(dropped)} entries have no STM source and would be "
+                  f"dropped by a write: {', '.join(dropped)}", file=sys.stderr)
         sys.stdout.write(rendered)
-        return
+        return 0
+
+    # An entry the new render cannot produce is knowledge with no source left.
+    # Refusing here is the point: on 2026-08-18 a silent write like this dropped
+    # the only surviving copy of VP-16720.
+    if dropped and not args.prune:
+        print(
+            f"REFUSED to write {LTM_OUT.relative_to(ROOT)}: {len(dropped)} entr"
+            f"{'y' if len(dropped) == 1 else 'ies'} would be lost and no STM can re-render "
+            f"{'it' if len(dropped) == 1 else 'them'}:",
+            file=sys.stderr,
+        )
+        for tid in dropped:
+            print(f"  - {tid}", file=sys.stderr)
+        print(
+            "Check each one exists elsewhere (STM, journal, another LTM file). "
+            "Re-run with --prune once that is confirmed.",
+            file=sys.stderr,
+        )
+        return 2
+
     LTM_OUT.parent.mkdir(exist_ok=True)
     LTM_OUT.write_text(rendered, encoding="utf-8")
     total = sum(len(v) for v in grouped.values())
     print(f"Wrote {LTM_OUT.relative_to(ROOT)} — {total} entries across {len(grouped)} themes")
+    if dropped:
+        print(f"  (--prune: dropped {len(dropped)} entries: {', '.join(dropped)})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

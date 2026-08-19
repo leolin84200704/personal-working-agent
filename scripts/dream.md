@@ -174,3 +174,5 @@ Write a dream log to `logs/dream-YYYY-MM-DD.md`:
 - All operations are idempotent — running twice produces the same result.
 - If no operations are needed, still write the dream log noting "no changes needed."
 - Stay incremental (Phase 1). If the working set exceeds ~40 files, process the 40 most recently updated and note the remainder in the log for tomorrow.
+- **Never `git pull --autostash` over memory files.** `run-dream.sh` refuses to start while tracked files under `long-term-memory/`, `storage/short_term_memory/` or `journal/` are dirty, so if you find them dirty mid-run something wrote them during your run: stop, and report it in the dream log instead of stashing past it. On 2026-08-19 an autostash pop restored a partial regeneration on top of the night's committed distillation, and it went unnoticed for a day (49 links and an entry with no other source).
+- **`extract-failures.py` may refuse to write** (exit 2) when a run would drop an entry whose STM is gone. That is not a failure to work around — verify the entry survives elsewhere, then re-run with `--prune`, and record the decision in the dream log.

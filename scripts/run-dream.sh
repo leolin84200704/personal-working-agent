@@ -21,6 +21,30 @@ DATE=$(date +%Y-%m-%d)
 LOG_DIR="$AGENT_ROOT/logs"
 mkdir -p "$LOG_DIR"
 
+# A dirty memory file is a signal, not an obstacle. On 2026-08-19 an uncommitted
+# regeneration of long-term-memory/failures.md — 49 links short and missing an
+# entry that existed nowhere else — sat in the working tree. The dream agent
+# pulled with `--rebase --autostash`, distilled from the committed file, committed
+# its own result, and the autostash pop then restored the broken version on top of
+# it. The loss was invisible for a day and would have landed on the next add -A.
+#
+# So: refuse to start while tracked memory files carry uncommitted edits. Whoever
+# wrote them either meant to commit them or did not; both need a human, and a
+# night without distillation costs less than a night of silent overwriting.
+# Untracked files are fine — a new STM is exactly what a dream run is for.
+DIRTY_MEMORY=$(git -C "$AGENT_ROOT" status --porcelain -- \
+    long-term-memory storage/short_term_memory journal 2>/dev/null | grep -v '^??' || true)
+if [[ -n "$DIRTY_MEMORY" && "${DREAM_ALLOW_DIRTY_MEMORY:-0}" != "1" ]]; then
+    {
+        echo "[$(date)] ABORT: uncommitted changes to tracked memory files"
+        echo "$DIRTY_MEMORY"
+        echo "Inspect them (git diff), then commit or discard, and re-run."
+        echo "To run anyway: DREAM_ALLOW_DIRTY_MEMORY=1 $0"
+    } | tee -a "${LOG_FILE:-/dev/null}"
+    osascript -e 'display notification "Dream aborted — uncommitted memory changes need a decision" with title "LIS Code Agent" sound name "Basso"' >/dev/null 2>&1 || true
+    exit 1
+fi
+
 if [[ "${1:-}" == "--dry" ]]; then
     echo "DRY RUN: would execute dream pipeline"
     echo "  Agent root: $AGENT_ROOT"
