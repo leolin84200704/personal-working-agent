@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.2375
+score: 1.287
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -17,6 +17,7 @@ links:
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
 - INCIDENT-20260808-critical-result-tnp
+- INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
@@ -93,6 +94,9 @@ links:
 - VP-17685
 - VP-17691
 - VP-17715
+- VP-17734
+- VP-17748
+- VP-17752
 - fhir-api
 tags:
 - emr
@@ -1515,3 +1519,40 @@ Host `lisportalprod2.mysql.database.azure.com:3306`，SSL required
 
 > 密碼不寫在這裡。這組憑證目前硬編在本 repo `DailyJob/` 底下 8 個已提交的檔案中
 > （2026-08-16 盤點所見），那本身是待處理的問題，不是取用管道。
+
+## 【家族延伸 2026-08-18】報告「內容缺一段」的決定性測試：classic vs advanced PDF + cache 是凍結的（VP-17734）
+
+這是 1295 節那條家族的**第 4 個實例**（前 3：VP-17631、INCIDENT-20260808、VP-17524）：
+`result_transmission_records` 對每一種**內容**缺陷都是全綠，四次全部只靠客訴才被發現。
+
+**新的診斷 pattern** —— 客戶說「報告少了某個區段」時，決定性的測試是：
+
+1. `pdf-cache/download/{accession}?style=classic` **對比** `?style=advanced`
+2. 加上 PDF 自己的 `CreationDate`
+
+這兩項把「我們的 pipeline 掉了資料」和「快取住的報告當初就建錯了」分開。VP-17734 的證據鏈：
+- **HL7 discrete data 完整**：OBR-3 (Gut Zoomer 5.0) 28 個神經傳導物質 OBX 全在，
+  結果時間比報告建立早 5 天 → 資料面沒掉。
+- **CLASSIC 的 PDF 該區段是空的，ADVANCED 正常** → 缺陷在 classic template 的 binding。
+- **時間窗**：last known good Jul 22 21:41 / first known bad Jul 28 11:56 /
+  last known bad Jul 31 10:40 / first known good after Aug 5 18:46。
+
+**cache 永不自癒，所以 repush 治不了內容缺陷**：`CacheAwareRetrieverController.downloadPdf`
+在所有報告 finished 之後就是送出已存的 artifact，重推只會把同一份 Jul 28 生成的壞 PDF 再送一次。
+→ **先讓 report team 失效並重生快取
+（`POST /report-version-cache/processReportChange {"barcodes":[...]}`，lazy invalidation），
+再驗該區段，最後才 repush。** 順序反了就是白做。
+
+**Blast radius 的算法**（HL7 內文 join integration 設定）：
+`result_transmission_records` 的 HL7 含 `SEROTONIN_GB`，join `ehr_integrations.report_option`
+→ CLASSIC 1,791 accession / 2,332 record 全期；落在嫌疑窗 2026-07-23..08-06 的是
+**194 accession / 72 customer / 311 record**；PERSONALIZED(advanced) 328 accession 不受影響。
+portal/病人下載走同一份快取，所以曝險不限於 EMR。
+
+**mysql2 +7h 時間位移陷阱**（早期害這次 triage 拉錯時間軸）：`mysql2` 會把 lis_emr 的
+DATETIME（session tz `+00:00`）用 Node process 的本地時區 render，JSON 輸出**整批 +7h**。
+一律用 `DATE_FORMAT(col,'%Y-%m-%d %H:%i:%s')` 讀時間，永遠不要吃 ISO string。
+
+**repush 前先確認 accession**：VP-17734 當天的 repush 打到 Yekai 已經指出是錯的那個 2023 accession
+（在 Zhenhe 貼出正確 accession 的 11 分鐘**之後**），所以 provider 什麼都沒收到。
+repush 是有副作用的動作 —— 送出前把 accession 對回 ticket 最新一則 comment。

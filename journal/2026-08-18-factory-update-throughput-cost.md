@@ -2,7 +2,7 @@
 date: 2026-08-18
 slug: factory-update-throughput-cost
 related: [framework-sync, ENFORCEMENT-LADDER.md, WORK-LOOP.md, native-auto-memory-retirement]
-distilled: false
+distilled: true
 ---
 
 # 2026-08-18 — 08-15/16 factory 大改動之後，每個 turn 慢了三成：量到的成本，還量不到的收益

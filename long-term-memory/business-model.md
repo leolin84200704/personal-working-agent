@@ -3,12 +3,13 @@ id: business-model
 type: ltm
 category: technical
 status: active
-score: 0.5235
+score: 0.5569
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
 links:
 - INCIDENT-20260518
+- INCIDENT-20260817-onprem-deploy-freeze
 - LBS-1487
 - QH-1130
 - QH-1591
@@ -41,6 +42,8 @@ links:
 - VP-17559
 - VP-17577
 - VP-17714
+- VP-17765
+- VP-9299
 - business-model-deep
 - emr-integration
 - failures

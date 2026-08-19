@@ -2145,3 +2145,103 @@ coresamples `coresamplesv2/lis-coresamples-v2-deployment-*`、consumer
 **通則**：這個 repo 是 private 但不是 secret store。要新增排程 job 時照 `result_fail_runner.py`
 的 env 形式寫，且**不要留 literal 當 fallback**——留了 fallback，env 沒設時它會安靜地用明文跑，
 於是「已經改成 env 了」這句話變成假的。
+
+## 【journal 蒸餾 2026-08-18】斷言一個「守門 / 分支 / 設定」之前，先找到 writer，不是 reader（VP-9299）
+
+VP-9299 當天寫進 STM 的四條「已查證事實」，被兩個獨立子 agent 一致推翻，四條的 root cause 是同一個：
+**把「本機讀得到的 code / 檔案」當成執行時的真實狀態**。
+
+| 我寫的 | 實際 | 為什麼讀 code 讀不出來 |
+|---|---|---|
+| `cheackRedisNolock` 守著「每 sample 一封信」 | 那函式**只讀不寫**，writer 兩處都被註解掉 → gate 是死碼、恆真 | 只找到 reader 就下結論 |
+| 這是 beta 分支、只影響子集流量 | `let is_beta = true` 硬寫死，條件恆真 = 100% 流量 | 沒追賦值點 |
+| helper 失敗回 `null` | 外層 catch 沒 `return` → 回 `undefined`；兩支 axios 都沒設 timeout | 只讀 happy path |
+| `.env` 說 `envm="stprod"` | 線上值來自 ConfigMap（`envFrom: configMapRef`），`dotenv.config()` **不覆寫**已存在的 `process.env` | repo 檔案 ≠ 部署值 |
+
+**可操作的規則**：
+1. **Gate 要找 writer。** 看到 `if (checkX(...))` 形態的守門，先 grep 誰寫那個 key/flag。
+   只有 reader 沒有 writer = 死碼，而且是最壞的一種——它讀起來像「dedup 存在」。
+2. **`.env` 不是線上權威。** 任何 `process.env.X` 的行為推論，要對 deployed ConfigMap/Secret 查證
+   （`kubectl -n <ns> get cm <name> -o yaml`）。這是核心原則 0「Sync With the World First」
+   目前沒明講的一面：**deployed config 也是 world**。
+   第 4 條實際帶出了 VP-17754：prod `envm=prod` 走 else 分支，`createConsumer` 硬寫
+   `sessionTimeout: 45000` 並丟棄 caller 傳的 950000 —— staging (`stprod`) 看起來安全、prod 會 rebalance。
+3. **子 agent 的結論也要當假設驗。** 兩個子 agent 都寫「Kafka 任何重投都會重寄信」，但
+   `acquireEventLock` 寫的是永久 `trigger_history`（key 含 event_id），同訊息重投擋得住；
+   真正的暴露是同 sample 的多個事件各發一封。轉述前沒複驗就會把錯誤放大成「兩方都這麼說」。
+
+**舊分析的結論比事實更容易腐爛**：2026-06-06 那份 STM 的結構判讀全對（檔案、分支、TemplateModel），
+只有行號位移；但兩個**結論**全錯，因為它把 V1 當成 V2 的同級 API。實際讀 `LIS-Report` 才發現
+V1 handler 內部呼叫的就是 `getReportStatusListsByBarcodeV2`，只多做一次 `.map(p => p.report_name)`
+——**V1 是 V2 的投影**，於是「Final-only filter 會讓清單變短、要問 PM」整個消失。
+→ 舊 STM 的 `file:line` 可以當索引，**它的因果結論必須重推**；當初沒讀的上游 repo，兩個月後還是沒讀。
+
+**dual-emit 的 key 要兩個都讀**：base-report 同時送 `report_status` 與長年 typo 的 `report_staus`
+（PH-850 註解：7 個 repo 有 reader，rename 會**靜默**壞掉，所以雙寫）。
+dual-emit 的意義就是讓 reader 遷移；**新 code 只讀 typo key 是在把債往前複製**。寫 `report_status ?? report_staus`。
+
+**辯論的價值不在選 A 或 B**：它把人推去查一個原本沒想到要查的地方（這次是 prod ConfigMap）。
+產出是三張 ticket（VP-17753/17754/17755）+ code 改動壓到只換 URL —— 因為辯論證明了 V2 helper 的
+cache 與 retry 都是風險，**最小改動反而同時是最安全的改動**。
+
+## 【蒸餾 2026-08-18】Clinical consult 的收件人 ground truth = `v2_calendar.calendar_owner_email`（copy-once cache）(VP-17759 / VP-17765)
+
+同一週兩張 ticket（「確認信寄錯地址」與「additional notification email 收不到」）根因同一條：
+
+**收件人解析鏈**：consult 的確認／提醒信寄給**病人角色 participant 的
+`v2_calendar.calendar_owner_email`**。該欄位由 `createPatientCalendarForCustomerIfAbsent`
+（LIS-transformer-v2 `provider-availability.service.ts`）在**首次 booking 時從 owner 的
+provider/clinicadmin calendar 抄一次**，之後**永不再同步**。
+
+- **booking form 打字輸入的 email 完全不會成為收件人**：它只以自由文字存進
+  `v2_event.notes` 的 `[Email: ...]`，`CreateEventByPatientInput` 根本沒有 email 欄位
+  → 沒有任何 payload 把它帶到後端。**是設計上被忽略，不是 bug**（VP-17759 的答案）。
+- **staleness 規模**：practice 150105 的 15,389 個 patient-role calendar 中，
+  **3,365 個（~22%）** 的 email 與同一 owner 現在的 provider calendar email 不同。
+  VP-17765 的 provider 因此有 ~6 個月的提醒信寄給業務夥伴。
+- **不要整批 resync**——那會把數千個收件人靜默翻成 practice 共用信箱。
+  個案照 VP-17765 的做法做有界資料修正，系統性解法在 VP-17766（多收件人 To+CC 模型）。
+- **comma fan-out 是未設計的 pass-through**：`calendar_owner_email` 塞逗號分隔多址，
+  目前會原樣進 Postmark `To` 並正確送達（prod 實測），但沒有任何設計保證。
+
+**又一個「找 writer 不找 reader」的實例**（同 VP-9299 那條）：writer 只在 calendar 建立時跑一次，
+所以讀 dispatch 端的 code 永遠看不出值是哪來的、為什麼過時。
+
+**診斷手法（<5 次查詢就收斂）**：Postmark 的 **per-recipient MessageEvents**
+（同一封多收件人信裡每個地址各自的 Delivered/Opened）可以乾淨切開三種情況——
+「根本沒被列入收件人」vs「列入但沒送達」vs「送達但當事人說沒收到」。
+`v2_reminder_audit_log` 可獨立佐證同一事件歷來提醒實際寄給誰。
+
+**流程教訓**：ticket 標題 ≠ 症狀。VP-17765 被 PM 寫成「Additional Notification Email」bug，
+真正的症狀在 Zendesk 附件截圖裡，是另一回事。**附件一定要拉下來看**。
+
+## 【PROMOTED 2026-08-18 · 跨 ticket 蒸餾】要證明「prod 上發生了什麼」，找只有那條路徑會寫的持久化證據（4 案）
+
+2026-08-14~18 六張完成的 ticket 裡，有四張的決定性證據都是同一個形狀：
+**不要用資料形狀去推論，去找那條路徑專屬的 persisted discriminator。**
+
+| ticket | 問題 | 只有那條路徑會寫的東西 |
+|---|---|---|
+| VP-17714 | 是不是「換 clinician」造成錯 Zoom 連結？ | `v2_event_accession_audit_log.reason = 'clinician switch reschedule, original event N'`（`releaseForEvent` 寫的字串）撈出歷來全部 4 次 switch |
+| VP-17715 | 這筆 result push 是機制自動送的，還是人工補送？ | **`bullmq_job_id`**：kafka 驅動的 record **必有**，人工 gRPC repush **必無**（`created_by=result_generation_service`）。08-17 那兩筆因此被正確判為人工補送、不算機制證明 |
+| VP-17759 | 確認信到底寄到哪個地址？ | `v2_reminder_audit_log.recipient_email` —— 每次寄送逐筆寫入，帶 idempotency key 與 status |
+| VP-17765 | 是「沒被列為收件人」還是「列了但沒送達」？ | Postmark **per-recipient** MessageEvents（同一封多收件人信裡每個地址各自的 Delivered/Opened） |
+
+**反例（同樣出自 VP-17714）**：`v2_event_participant.created_at` **不能**用來反查原地換人——
+`replaceEventParticipants` 是 deleteMany+createMany，任何帶 participants 的 update 都會重寫它。
+**寫入端有沒有留下只有這條路徑會產生的字串/欄位，決定了事後可不可稽核。**
+
+**推論**：設計新流程時，若某個分支未來會需要事後證明「它跑過」，就得在那個分支寫一個獨有的
+持久化痕跡。事後補不回來——VP-17714 能查是因為 `releaseForEvent` 剛好寫了那句 reason。
+
+### 同批的第二個系統性觀察：抓到事實錯誤的是外部挑戰，不是自我複查
+
+- VP-9299 自評信心 3/5：「四條事實誤述是被 Leo 要求的辯論擋下來的，**不是自己抓到的**」。
+- VP-17714：「Leo 的兩次回問各修正一個錯誤」——第一次逼出 FE 兩段式的方案（原本四案的漏洞），
+  第二次逼出殘留路徑與外部配合項。
+- 兩次都是**在呈報給 Leo 之後**才被推翻，代表自我複查那一關沒有攔截力。
+
+→ 對「守門 / 分支 / 設定 / 誰收到」這四類斷言，把「找 writer」與「找專屬痕跡」當成**交付前的檢查**，
+不要等辯論或 review 才觸發。VP-17714 另有一條值得保留的自律：
+**自己提的反對理由查不實，要主動撤回**（擔心錯連結外溢到 Google/Outlook → 查完發現 150105
+根本沒有該 integration、歷來 0 筆同步，回報時明講這條不成立）。

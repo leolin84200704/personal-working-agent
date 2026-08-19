@@ -3,7 +3,7 @@ id: repo-catalog
 type: ltm
 category: technical
 status: active
-score: 0.813
+score: 0.8465
 base_weight: 0.9
 created: 2026-06-07
 updated: 2026-06-07
@@ -12,6 +12,7 @@ links:
 - INCIDENT-20260528
 - INCIDENT-20260601-sftp-hang
 - INCIDENT-20260604
+- INCIDENT-20260817-onprem-deploy-freeze
 - LBS-1547
 - PO-222
 - QH-1104
@@ -67,6 +68,8 @@ links:
 - VP-17559
 - VP-17561
 - VP-17714
+- VP-17765
+- VP-9299
 - business-model
 - business-model-deep
 - emr-integration

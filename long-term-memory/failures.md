@@ -3,17 +3,18 @@ id: failures
 type: ltm
 category: technical
 status: active
-score: 1.2017
+score: 1.2452
 base_weight: 0.9
 urgency: 3
-created: 2026-08-15
-updated: 2026-08-15
+created: 2026-08-16
+updated: 2026-08-16
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
 - INCIDENT-20260601-sftp-hang
 - INCIDENT-20260604
 - INCIDENT-20260604-mdhq-stale-connections
+- INCIDENT-20260817-onprem-deploy-freeze
 - INCIDENT-2604156666
 - LBS-1541
 - PO-222
@@ -87,6 +88,8 @@ links:
 - VP-17685
 - VP-17714
 - VP-17715
+- VP-17765
+- VP-9299
 - business-model
 - business-model-deep
 - feedback_batch_db_verify
@@ -107,7 +110,7 @@ summary: Auto-aggregated failure index from 71 entries across STM
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-15 — total 71 entries
+> Last updated: 2026-08-16 — total 71 entries
 
 ## Themes
 

@@ -1,13 +1,15 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-16 (dream run). +2 entries, both distilled tonight —
-> the pair of auto-memory retirement records. Their factual content was already written
-> into LTM during the work session itself; what dream extracted was the two *lessons*
-> (both routed to the factory proposals inbox, neither promoted to a PR).
+> Last updated: 2026-08-18 (dream run). +2 entries, both distilled tonight —
+> the VP-9299 debate record (writer-not-reader + deployed-config-is-truth, -> patterns.md
+> and leo-working-rules.md) and the agent throughput measurement baseline
+> (-> leo-working-rules.md; re-measure with scripts/agent-perf-metrics.py after 15+ LIS sessions).
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-18 | vp9299-status-list-v2 | VP-9299, VP-17753, VP-17754, VP-17755, VP-16859, PH-850 | true |
+| 2026-08-18 | factory-update-throughput-cost | framework-sync, ENFORCEMENT-LADDER.md, WORK-LOOP.md | true |
 | 2026-08-16 | remaining-memory-stores-migration | native-auto-memory-retirement, RETRIEVAL.md, ENGINEERING-LESSONS.md | true |
 | 2026-08-16 | native-auto-memory-retirement | framework-sync, RETRIEVAL.md, ENFORCEMENT-LADDER.md | true |
 | 2026-08-14 | vp17715-report-group-push | VP-17715, VP-17723, VP-17344, VP-17493, VP-17441 | true |

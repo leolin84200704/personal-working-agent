@@ -1,11 +1,11 @@
 ---
 id: INCIDENT-20260817-onprem-deploy-freeze
-title: 'on-prem emr-v2 froze at 2026-08-04 for 13 days: a fatal Kafka guard on a pod with no
-  Azure identity, hidden by maxUnavailable 0'
+title: 'on-prem emr-v2 froze at 2026-08-04 for 13 days: a fatal Kafka guard on a pod
+  with no Azure identity, hidden by maxUnavailable 0'
 status: active
 category: technical
 created: 2026-08-17
-updated: '2026-08-17'
+updated: '2026-08-18'
 tags:
 - incident
 - deploy-skew
@@ -16,16 +16,56 @@ tags:
 - vp-17595
 - vp-17559
 - vp-17715
-summary: 'VP-17559 moved the Event Hub SAS to Key Vault (2026-07-30); the on-prem pod has no
-  Azure identity so its vault read always failed and it silently fell back to the on-prem
-  brokers. VP-17595 (2026-08-04) removed that fallback on the wrong premise that those brokers
-  were decommissioned — they were not; the ones decommissioned that day were VP-17593''s
-  notification brokers. Every on-prem pod built after 19:41Z then died in onModuleInit;
-  maxUnavailable 0 kept the 08-04 pod serving, so ~45 main merges never rolled out and nobody
-  noticed for 13 days. Surfaced 08-17 as two failed MDHQ orders when VP-17715''s
-  PER_REPORT_GROUP enum reached a Prisma client older than itself. Fixed by putting the SAS in
-  the AKS default-ns ConfigMap (the copy Jenkins syncs on-prem) — on-prem now genuinely
-  consumes the Event Hub. SP + Key Vault remains the destination, blocked on an Azure admin.'
+summary: VP-17559 moved the Event Hub SAS to Key Vault (2026-07-30); the on-prem pod
+  has no Azure identity so its vault read always failed and it silently fell back
+  to the on-prem brokers. VP-17595 (2026-08-04) removed that fallback on the wrong
+  premise that those brokers were decommissioned — they were not; the ones decommissioned
+  that day were VP-17593's notification brokers. Every on-prem pod built after 19:41Z
+  then died in onModuleInit; maxUnavailable 0 kept the 08-04 pod serving, so ~45 main
+  merges never rolled out and nobody noticed for 13 days. Surfaced 08-17 as two failed
+  MDHQ orders when VP-17715's PER_REPORT_GROUP enum reached a Prisma client older
+  than itself. Fixed by putting the SAS in the AKS default-ns ConfigMap (the copy
+  Jenkins syncs on-prem) — on-prem now genuinely consumes the Event Hub. SP + Key
+  Vault remains the destination, blocked on an Azure admin.
+links:
+- INCIDENT-20260518
+- INCIDENT-20260817-onprem-stale-deploy
+- QH-1130
+- QH-1159
+- QH-1591
+- QH-862
+- QH-918
+- QH-919
+- VP-15460
+- VP-16168
+- VP-16169
+- VP-16172
+- VP-16391
+- VP-16499
+- VP-16513
+- VP-16520
+- VP-16521
+- VP-16629
+- VP-16689
+- VP-16785
+- VP-16786
+- VP-16787
+- VP-16859
+- VP-16921
+- VP-16968
+- VP-17065
+- VP-17217
+- VP-17222
+- VP-17312
+- VP-17422
+- VP-17577
+- VP-17714
+- VP-9299
+- business-model
+- failures
+- repo-catalog
+- repos
+score: 0.5288
 ---
 
 # INCIDENT 2026-08-17 — on-prem emr-v2 deploy freeze
@@ -109,3 +149,5 @@ never reads threw out of `processFromFile` and killed the order. The authoritati
    diverges from both ConfigMaps, and the code prefers the ConfigMap — so AKS would go stale too.
 3. Whether a Kafka connect failure should be fatal on a pod that also runs order intake.
 4. hl7_file_input 6868/6869 re-parse confirmation (retry_num bumped 0→3 at 23:23:56Z).
+
+> **同一事故的另一面**：`INCIDENT-20260817-onprem-stale-deploy` — 症狀面與補救（MDHQ 兩份報告、cloud pod 重推、drift scope）。兩份刻意不合併：一份記症狀與補救，一份記機制。

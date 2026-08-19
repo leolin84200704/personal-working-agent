@@ -205,3 +205,33 @@ links:
   東西，每次檢查我是不是該跑。」定稿一個 skill、或事後發現某 skill 該觸發沒觸發時主動問；
   草稿階段和小編輯跳過（每次都跑本身就是 over-engineering）。機器 backstop：
   `~/.claude/hooks/skill-desc-opt-reminder.sh`（PostToolUse，動到 `*/SKILL.md` 時注入提醒）。
+
+- **辯論挖出的缺陷開成 ticket，不要順手修進當前 PR**（Leo 裁決 2026-08-18, VP-9299）：
+  「今天的目標是只有 ticket 的 scope，你的這些建議超過了 scope，目前不需要，只要 create
+  ticket + assign 給我自己就可以。今天只修這張 ticket 的，但要把辯證記錄下來，未來可以省下更多時間。」
+  → 三個缺陷變成 VP-17753/17754/17755，code 改動壓到只換 URL + 換 mapping。
+  推論鏈與否決理由寫進 STM/journal，**不是**丟掉——下次碰同一塊 code 就不用重推。
+
+## 【journal 蒸餾 2026-08-18】Agent 自身吞吐的量測基準（未結案，待重測）
+
+Leo 回報「update factory 之後 vibrant-agent 明顯變慢」。切 124 份 transcript 三段比對後的結論：
+**單次 API call 沒變慢（甚至略快），慢的是同一件事跑更多步**。實質 turn（工具數 ≥3）
+工具/turn 中位數 9 → 13（+44%），p75 turn 時間 392s → 490s（+25%）。
+
+最大一塊成本：**把 `git show origin/main:檔案` 當成讀檔預設方式**（0.81 → 1.96 次/turn）。
+fetch 完並確認沒 diverge 之後，本機檔案就等於 origin/main，繼續走 git plumbing 是純儀式，
+且更貴——不能用 Read 工具、沒有行號、每個檔案一次 round-trip。同期 Read 工具用量 1.11 → 0.71/turn。
+→ 已收斂進 CLAUDE.md 核心原則 0（每 repo 每 session fetch 一次 + 確認沒 behind，之後照常讀本地檔）。
+
+**誠實的部分：收益量不出來。** 找不到乾淨案例可以說「就是因為先 fetch 才避免了某個錯」。
+成本已實現、收益仍是假設。這正是 ENFORCEMENT-LADDER 要處理的問題的反面：
+**規則一次上六條、hook 一次上五個，沒有先量 baseline，就無法回答「哪一條真的在接住事故」。**
+
+已知誤報（未修，待 Leo 決定）：`remind-engineering-lessons.sh` 的 `RISKY_RE` 對整串指令做 grep，
+一支純唯讀的 Python 統計腳本因**內容**含 `mysql|psql|SELECT` 字面值被 exit 2 擋掉，
+heredoc 沒寫進去要整個重跑。修法是只在這些字出現在實際 SQL/CLI 參數位置才觸發。
+
+處置：vibrant 全部改用 Fable 5（延遲相同、單位成本低很多）。
+**下次重測**：`scripts/agent-perf-metrics.py`，同一支腳本、同樣視窗定義，累積 15+ 個 LIS session 再跑。
+判讀：`tools/turn` 回到 9 附近且 `product-work` 回到 70% 附近 = 儀式成本收斂；
+若只有 model 欄變成 fable 而其他不動，代表瓶頸確實在儀式與 guard，不在模型。
