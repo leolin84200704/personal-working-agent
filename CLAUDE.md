@@ -27,6 +27,7 @@
 ## Ticket 系統
 - Jira（VP project），經 Atlassian MCP 取用
 - Jira ticket 的 summary/description 寫英文；給 Leo 的回覆維持繁中；Jira comment 只起草、不直接發
+- Atlassian MCP 每次回應開頭的 transport deprecation banner（HTTP+SSE `/v1/sse` → Streamable HTTP `/v1/mcp`）：**不要轉述**。connector 由 claude.ai 託管，Leo 本機無任何可改的設定，banner 對他不可操作（2026-08-18 已查證並告知）。只有 Atlassian 工具真的開始失敗時才需要提，屆時建議去 claude.ai integrations reconnect
 
 ## Memory 架構（本 instance 路徑）
 
