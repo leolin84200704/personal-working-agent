@@ -16,12 +16,15 @@ Regeneration is NOT a clean overwrite, because the file outlives its sources:
     journal — only here — and vanished exactly that way.
 
 So: frontmatter that this script does not own is carried over, links are unioned,
-and a run that would drop an entry refuses to write unless told to.
+and an entry the current scan cannot produce is carried over from the file itself
+rather than dropped. Refusing to write would have been worse than useless here —
+an orphaned entry stays orphaned, so every later run would refuse too, and the
+only way out would be --prune, which deletes exactly what the check was protecting.
 
 Usage:
   python3 scripts/extract-failures.py            # write LTM file
   python3 scripts/extract-failures.py --print    # print to stdout only
-  python3 scripts/extract-failures.py --prune    # allow dropping entries whose STM is gone
+  python3 scripts/extract-failures.py --prune    # drop entries whose STM is gone, do not carry them
 """
 from __future__ import annotations
 
@@ -192,6 +195,60 @@ def read_existing(path: Path) -> dict:
     }
 
 
+SECTION_RE = re.compile(r"^## (?P<label>.+?) <a id='(?P<key>[^']+)'></a>\s*$", re.M)
+
+
+def orphan_entries(path: Path, produced_ids: set[str]) -> dict[tuple[str, str], list[dict]]:
+    """Entries in the file on disk that this run cannot re-render.
+
+    Their STM has been archived, so the scan no longer sees them, but the file may
+    be the only place the knowledge still exists. Parsed back out of the previous
+    render and returned in the same shape as gather(), so they flow through the
+    normal rendering path and the counts and ToC stay honest.
+    """
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    sections = [(m.start(), m.group("key"), m.group("label")) for m in SECTION_RE.finditer(text)]
+    if not sections:
+        return {}
+
+    out: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    heads = list(re.finditer(r"^### \*\*\[\[([^\]]+)\]\]\s*(.*)$", text, re.M))
+    for i, m in enumerate(heads):
+        ticket = m.group(1)
+        if ticket in produced_ids:
+            continue
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        nxt = SECTION_RE.search(text, m.end())
+        if nxt and nxt.start() < end:
+            end = nxt.start()
+        body = text[m.end():end].strip()
+        body = re.sub(r"\n-{3,}\s*$", "", body).strip()
+
+        rest = m.group(2)
+        entry_date = title = ""
+        bits = [b.strip() for b in rest.split("—")]
+        for b in bits:
+            if not b:
+                continue
+            if b.startswith("`") and b.endswith("`") and not entry_date:
+                entry_date = b.strip("`")
+            elif not title:
+                title = b
+
+        key, label = sections[0][1], sections[0][2]
+        for pos, k, lab in sections:
+            if pos < m.start():
+                key, label = k, lab
+            else:
+                break
+        out[(key, label)].append(
+            {"ticket": ticket, "date": entry_date, "title": title, "body": body}
+        )
+    return dict(out)
+
+
 def render(grouped: dict[tuple[str, str], list[dict]], prior: dict | None = None) -> str:
     prior = prior or {"created": None, "score": None, "links": []}
     today = date.today().isoformat()
@@ -290,32 +347,28 @@ def main() -> int:
 
     prior = read_existing(LTM_OUT)
     grouped = gather()
-    rendered = render(grouped, prior)
 
+    produced = {e["ticket"] for entries in grouped.values() for e in entries}
+    carried = orphan_entries(LTM_OUT, produced) if not args.prune else {}
+    carried_ids = sorted(e["ticket"] for entries in carried.values() for e in entries)
+    for key, entries in carried.items():
+        grouped.setdefault(key, []).extend(entries)
+
+    rendered = render(grouped, prior)
     dropped = sorted(prior["entry_ids"] - set(ENTRY_ID_RE.findall(rendered)))
 
     if args.print:
         if dropped:
-            print(f"WARNING: {len(dropped)} entries have no STM source and would be "
-                  f"dropped by a write: {', '.join(dropped)}", file=sys.stderr)
+            print(f"WARNING: dropping {len(dropped)} entries: {', '.join(dropped)}", file=sys.stderr)
         sys.stdout.write(rendered)
         return 0
 
-    # An entry the new render cannot produce is knowledge with no source left.
-    # Refusing here is the point: on 2026-08-18 a silent write like this dropped
-    # the only surviving copy of VP-16720.
+    # Belt and braces: carrying orphans should make this unreachable without
+    # --prune. If it ever fires, something else is eating entries — stop.
     if dropped and not args.prune:
         print(
-            f"REFUSED to write {LTM_OUT.relative_to(ROOT)}: {len(dropped)} entr"
-            f"{'y' if len(dropped) == 1 else 'ies'} would be lost and no STM can re-render "
-            f"{'it' if len(dropped) == 1 else 'them'}:",
-            file=sys.stderr,
-        )
-        for tid in dropped:
-            print(f"  - {tid}", file=sys.stderr)
-        print(
-            "Check each one exists elsewhere (STM, journal, another LTM file). "
-            "Re-run with --prune once that is confirmed.",
+            f"REFUSED to write {LTM_OUT.relative_to(ROOT)}: {len(dropped)} entries would be "
+            f"lost even after carrying orphans forward: {', '.join(dropped)}",
             file=sys.stderr,
         )
         return 2
@@ -324,6 +377,8 @@ def main() -> int:
     LTM_OUT.write_text(rendered, encoding="utf-8")
     total = sum(len(v) for v in grouped.values())
     print(f"Wrote {LTM_OUT.relative_to(ROOT)} — {total} entries across {len(grouped)} themes")
+    if carried_ids:
+        print(f"  (carried {len(carried_ids)} entries whose STM is gone: {', '.join(carried_ids)})")
     if dropped:
         print(f"  (--prune: dropped {len(dropped)} entries: {', '.join(dropped)})")
     return 0
