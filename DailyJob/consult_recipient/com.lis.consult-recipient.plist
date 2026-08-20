@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lis.consult-recipient</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>/bin/bash</string>
+        <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/consult_recipient/run_check.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>45</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/consult_recipient/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent/DailyJob/consult_recipient/launchd_stderr.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/hung.l/src/vibrant-america-working-agent</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/hung.l</string>
+    </dict>
+</dict>
+</plist>
