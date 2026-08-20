@@ -107,3 +107,67 @@
 3. 裁定 21 個 multi-customer key（先做活躍的 5 個），其餘 130 個同 customer 重複列沿用現行 tie-break。
 4. 決定 vendor 是否進 key；若要，先補 221 筆 NULL vendor。
 5. Migration 用 shadow-compare：新舊 key 並行跑一段，比對兩者解出的 customer_id 是否一致（VP-16968 cutover 前的 shadow 模式可複用），差異全部人工看過再切。
+
+---
+
+# 追加：歷史訂單實證（2026-08-20，Leo 追問「過去發生過嗎、當時下給誰」）
+
+## 證據來源
+- 原始 HL7：on-prem prod pod `lis-emr-v2-deployment-prod-84755f45cf-dbxtm` 的
+  `/EMR_storage/HL7Message_prod/MDHQ/Prod/Order{,Archive}/`，抽出 3 個撞 key clinic（17147 / 6212 / 19583）
+  全部 33 個歸檔訂單檔的 **MSH-4 + ORC-12**。
+- sample → customer：從 AKS prod pod 呼叫 coresamples v2 `SampleService.GetSampleRelevantInfo`。
+- lis_re / lis_core 的 order_table 從本機與 appserver04 都連得上 TCP 但 MySQL handshake 逾時，未能使用。
+
+## 事實 1：MDHQ 送的是 NPI，不是 customer_id
+33/33 個檔案的 ORC-12.1 都是 10 碼 NPI（例 `1962723643^HUMMEL^DEBRA^^^^^N`），
+所以這些單**今天就走 `fetchByNpi`** → gRPC NPI→customerIds → `resolveOrderingIntegration` 挑列。
+撞 key 的路徑不是假設，是現行生產路徑。MSH-4 則帶診所號（Parsley 全部 = 17147）。
+
+## 事實 2：撞 key 的單真的來過，而且都落在同一邊
+
+| sample | 收單時間 | ORC-12 NPI | 候選 customer | **實際下給** |
+|---|---|---|---|---|
+| 2537944 | 2026-04-15 | 1013094069 Lilli Link | 11733 / 14933 | **11733** |
+| 2538387 | 2026-04-16 | 1013094069 | 11733 / 14933 | **11733** |
+| 2560139 | 2026-05-18 | 1013094069 | 11733 / 14933 | **11733** |
+| 2564356 | 2026-05-22 | 1013094069 | 11733 / 14933 | **11733** |
+| 2592436 | 2026-07-08 | 1861455032 Jennifer Glassman | 11740 / 14944 | **11740** |
+| 2583691（對照，單一 customer） | 2026-06-23 | 1477517258 Liz Zapp | 10820 | 10820 ✔ |
+
+5/5 都落在 `Parsley Health (4)` 那組（11733 / 11740，較早建立的 VP-16968-backfill 列），
+沒有一筆落在 `Parsley Health Virtual/Complete Care Anywhere`（14933 / 14944）。
+
+**但這個穩定是巧合**：兩列 `integration_type` 同為 ORDER_ONLY、`updated_at` 完全相同，
+tie-break（type → updated_at desc）在此退化，勝者是 MySQL 先回傳的那列（插入順序 → 較舊的 id）。
+沒有任何規則保證這件事——只要有人 touch 到其中一列的 `updated_at`，之後所有單就會翻到另一個帳號。
+
+## 事實 3：更嚴重的是 practice_id 對不上（不是撞 key）
+
+clinic 6212 的兩筆單（sample 2615231 @2026-08-12、2617510 @2026-08-17）：
+
+| 來源 | 值 |
+|---|---|
+| HL7 MSH-4（送件診所） | **139134** = MedSomma Regenerative Wellness（customer 50554、NPI 1508438136） |
+| HL7 ORC-12 NPI | 1992777957 Carrie Carda → 實際下給 **customer 38750** |
+| 我們 `ehr_integrations` 記的 clinic | **6212**（Innovative Health and Wellness Group） |
+| coresamples 說 customer 38750 的 clinic | **142743** |
+
+四個號碼互不相符，而 `ehr_integrations` 裡 **沒有任何 (NPI 1992777957, clinic 139134) 的列**
+（139134 只屬於另一個 provider 50554）。也就是說：
+
+> 若改用 `(customer_npi, MSH-4)` 比對，這 2 筆 2026-08 月的單會直接被拒成 `customer_not_found`。
+> 它們今天是成功的。
+
+MSH-4 的語意是「送件的診所」，我們的 `clinic_id` 記的是「該 provider 帳號綁的診所」，
+同一張單上這兩者可以不同 —— 這是新規則最大的實際風險，比撞 key 嚴重。
+
+## 因此建議（更新）
+
+1. **不要用 (npi, practice) 取代現行比對，改成分層**：ORC-12 解得到就以它為準，
+   `(npi, practice)` 只當 fallback。這樣既補上 `customer_not_found` 的洞，又不會退化任何現行成功路徑。
+2. 上線前必做全量對帳：近 90 天 36 家活躍 clinic 的原始 HL7，逐筆比對 MSH-4 vs 我們的 `clinic_id`
+   vs coresamples 的 clinic list，量化「對不上」的比例。上面 2/2 筆 medsomma 已經是對不上的實例。
+3. 21 個 multi-customer key 中，實際來過單的只有 Parsley 的 2 個 NPI（5 筆單），
+   歷史答案是 11733 / 11740。若要收斂資料，就把這兩個 NPI 的 `Virtual` 列（14933/14944）
+   `ordering_enabled` 關掉，讓現況變成明文規則，而不是靠 row order。
