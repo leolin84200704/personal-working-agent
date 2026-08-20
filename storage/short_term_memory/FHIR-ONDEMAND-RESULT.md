@@ -3,7 +3,7 @@ id: FHIR-ONDEMAND-RESULT
 type: stm
 category: emr_integration
 status: done
-score: 0.2678
+score: 0.2617
 base_weight: 1.0
 created: 2026-07-02
 updated: 2026-07-05
@@ -11,6 +11,7 @@ links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH

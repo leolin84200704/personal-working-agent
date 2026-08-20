@@ -94,6 +94,7 @@ summary: Build/deploy patterns, investigation flows, DB connections, known issue
 - OAuth2 token: client_credentials grant，env vars `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` / `OAUTH2_TOKEN_ENDPOINT`
 - `.env` 裡 `CORE_SAMPLE_V2_RPC` 是 cluster DNS（`...svc.cluster.local:8084`），只在 cluster 內可達
 - **VPN 開時** `192.168.60.6:30276`（v1）跟 `10.224.0.199:32100`（v2 coreSamples）兩個內網 IP 從本機都可達，可直接跑 verify script — 用 IP 不要用 cluster DNS
+- **【2026-08-20 更新, VP-17810】on-prem v1 `192.168.60.6:30276` 已死** — ECONNREFUSED，連 prod pod 內都連不到；emr-v2 靠 `GRPC_CLOUD_FALLBACK_ENABLED=true` 活著。`lis.*` package 的 RPC 改打 **cloud mirror `10.224.0.199:30276`**（本機 VPN 也可達——先前「local 不可達」是誤診：只試過死掉的 v1，且 `nc` timeout 3s 給了 false negative，**探測用 ≥5s**）。transformer 本地 `.env` 的 `CORE_RPC_STAGE=192.168.60.6:30276` 同樣是死的（VP-17825 實測）。本檔與 emr-integration.md 其他寫 `192.168.60.6:30276` 的段落一律以本條為準。
 
 ### lis-backend-emr-v2 雙 proto 樹
 v1 跟 v2 的 RPC 各有獨立 proto 檔，**改 RPC 前先看 `src/config/grpc.config.ts` 對應的 path**，避免改錯邊：
@@ -646,7 +647,7 @@ LIS-transformer-v2 的 calendar email pipeline 結構（VP-16413 / VP-16391 釐�
 
 兩 broker 都 SASL plain + ssl + `$ConnectionString` 帳號。注意 broker 跟 appointment 不同 namespace。
 
-### Silent-failure bug class（跨 ticket 蒸餾 2026-07-06；更新 2026-07-22；9+ 案例）
+### Silent-failure bug class（跨 ticket 蒸餾 2026-07-06；更新 2026-08-20；11+ 案例）
 同一族 bug 在不同 repo/模組反覆出現 — 失敗被吞掉或被 coerce 成合法值，數週到數月無人發現。review / debug 時先掃這幾種 shape：
 1. **`.catch((error) => logger.error(...))` 吞 exception**（VP-16413, transformer-v2 `event.service.ts:1574`）：email 失敗 silent，前端成功、無 audit trail。
 2. **per-item catch 只印 `error.message`，而 message 是空的**（VP-16987, emr-v2 quarterly report）：Prisma error message 為空 → createMany 失敗隱形數月。排查時先把 catch 改印 stack / 觸發真實路徑。
@@ -657,7 +658,25 @@ LIS-transformer-v2 的 calendar email pipeline 結構（VP-16413 / VP-16391 釐�
 7. **雙 store fallback 讀取，缺 row 只留 debug-level warn → folder 靜默跳過**（VP-17385, FOLLOWTHATPATIENT order 卡 2 天）：兩份憑證表「靠習慣同步」必然 drift，且失敗模式是靜默 skip。Consolidation > sync 紀律；過渡期 drift 要 WARN（只印欄位名不印值）。
 8. **fail-open 分散式鎖：lock 取得失敗 `catch → return true`**（VP-17422, transv2 daily report）：redis 錯誤被 coerce 成「我拿到鎖」→ N replicas 全部執行 → 每個 weekday 3 份重複 email，結構性（非 intermittent），因為錯誤是 **NOPERM（permanent class）**——retry 也救不了，我第一版 retry+fail-closed fix（PR #536）因此無效且會變成「永遠不寄」silent outage。教訓兩層：(a) at-most-once 語意的鎖絕不能 fail-open；(b) 修 lock 前先分類錯誤是 transient 還是 permanent（permanent → 根治權限/改承載層，不是 retry）。**當 redis 不可信時，once-per-day claim 用 DB unique-INSERT**（`daily_report_run(report_date PK)`，第一個 INSERT 贏、P2002 = skip、DB error = fail-closed）——calendar DB 本來就是該 cron 的依賴，可靠性綁定正確。2026-07-17 prod 實證：1 row / 1 claimant / 1 send。
 9. **failure record 寫進沒人讀的表**（VP-17474, 2026-07-22, 20h prod email outage）：deploy 後 schema 缺欄位 → token issuance Prisma create 全數失敗，失敗被 catch 寫進 `failed_notification`（`retried` 欄位寫 false 但零 code 讀它）→ 265 封 result-ready email 靜默未寄、無 alert 無 retry，20 小時後靠人工 ground-truth check 才發現。寫 failure record 時要問「誰讀這張表？」— 沒有 reader（cron/alert/dashboard）的 failure log 等於沒記。同 ticket 附帶發現 **Postmark suppression list 靜默擋信**：7 個 clinic inbox（HardBounce/ManualSuppression）從收不到任何 result-ready email，該 server 共 16,828 個 suppressed addresses — 「已發送」≠「已送達」，email 類 triage 必查 suppression dump（見 emr-integration.md deep-link 節）。
+10. **recipient/eligibility filter 過濾到零 → silent return，無 log 無 audit row**（VP-17825, transv2 `reminder.service.ts dispatchEventReminder`）：`calendar_owner_email` NULL 的 participant 被 filter 掉，`recipients.length===0` 直接 return → 0 audit rows，provider 五場 consult 一封 reminder 都沒收過。**診斷 signature：「0 audit rows + audit 表本身活著」= 先查 filter，再查 transport**（同 signature 也出現在 #4 kafka listener）。Fix 附 logWarn on all-recipients-dropped。
+11. **retry 預算耗盡後無任何 surfacing**（VP-17752）：`hl7_file_input` 5 次 parse retry 用完就永遠沉默，55 張 order 自 2025-04 靜默消失，靠人工 sweep 才發現。「有 retry 機制」不等於「有人知道 retry 輸了」——terminal 態要有 reader（alert/report/Sentry）。
 Rule：失敗要 loud（warn+ level、留 DB 痕跡、reject invalid input）；預設值只留給合法缺省語意。已提案 agent-core universal lessons（PR #2 fail-loud、golive-backfill PR）。
+
+### Ownerless-field decay（跨 ticket 蒸餾 2026-08-20；VP-17825 + VP-17765）
+一個 nullable 欄位若**沒有 owning writer**——只靠 (i) 某條剛好帶值的 request path、(ii) 沒人排程的手動 backfill script 在寫——會**靜默且分 cohort 逐段壞掉**（transv2 `v2_calendar.calendar_owner_email`：provider/clinicadmin 自 2026-03 起 100% NULL、patient calendar 3 月 92% → 4 月 68% → 5 月起 100% NULL；`createNewCalendar` 從未 persist 該欄位，即使 caller 有給）。壞法源自各 incidental writer 在不同時間乾涸，所以：
+- **偵測**：monthly NULL-rate-by-cohort（`count(*) FILTER (...)` group by `to_char(created,'YYYY-MM')` × role）一發就定位 regression window，比 git 考古快，且跨 repo 成因（writer 在 caller 端）也照樣抓到。單一 aggregate NULL rate 會被不同 cohort 的錯位互相稀釋而看不見。
+- **Profiling 紀律**：查任何 suspect 欄位時 **NULL rate 必須跟其他指標一起算** —— VP-17765 兩天前查同一欄位只算了 mismatch rate（3,365/15,389），漏掉 41% NULL 那一半，同一結構問題兩天後變成 P2 回來。
+- **同一操作的兩份實作是溫床**：public-booking 有自己的 `getOrCreatePatientCalendar`（會寫 email、會 self-heal），consult flow 用舊的 copy-only 版——只有一邊知道 email 存在。發現 divergent duplicate implementation 時，欄位級行為差異就是 audit 清單。
+- ClickHouse 陷阱：`contact_details != ''` **不會排除 `' '`（whitespace-only）**，要 `trim(x) != ''`——VP-17825 一個 coverage 宣稱因此錯掉。
+
+### De-facto dead fields — 據以判讀前先驗 serving path 真的在讀它（跨 ticket 蒸餾 2026-08-20）
+一週內第四、五例「欄位看起來權威、實際上 serving path 根本不讀/不寫」，triage 被表面語意帶偏：
+- `lis_emr.package_price_mapping.isOrderable` 全寫 TRUE，但 emr-v2 讀的是 live pricing API（回 false）→ 照表推論會誤判成 code bug（VP-17752）。
+- `order_info.address_id` 2026-08 起 12,713 張 order **100% NULL**（全 source）→ downstream 地址一律從 patient profile 解析，修地址施力點是 profile，不是 order（VP-17810）。
+- `lis_core_v7.address.is_primary_address` 77–99% 為 0，實質廢棄（VP-17591/17810）。
+- `ehr_integrations.msh06_receiving_facility` 是**外送 result** 的 MSH-6，667/1154 存 customer_id——不能當 inbound practice 對照（HL7-NPI-PRACTICE-MATCH-20260820）。
+- `ehr_integrations.kit_delivery_option` informational-only，runtime 讀 `kits_options`（既有條目，emr-integration.md）。
+紀律：拿任何欄位當證據或 fix 目標前，先 grep serving path 的實際讀寫點 + 抽 prod 分布（100% NULL / 100% 同值 = 死欄位的指紋）；死欄位要記進 LTM，否則每次 triage 重新踩。
 衍生紀律（VP-17286/17411, journal 2026-07-14）：
 - **改 shared code path 後，逐一走每個 caller 的「失敗可見性」語意**（不只 happy path）：#255 改共用 charge block，API path 正確被擋，HL7 path 卻從「400+fail reason」變成「2xx 無痕出貨」。Leo 一句「修改的部分只有API嗎?」逼出 re-derivation 才發現 — 人類問「這改動只影響 X 嗎」時，答案要重推導不能憑印象。
 - **Mock-seam 盲區**：兩個 Defect 都活在 unit test mock 掉的元件接縫（spec 的 synthetic fixture 設了 live pipeline 從不設的欄位，如 `of.customerId` — repo-wide grep 零賦值）。新 API path 上線前必須至少一輪 live E2E；寫 spec 時 fixture 欄位要對照真實 assemble 路徑，不要自己補全。

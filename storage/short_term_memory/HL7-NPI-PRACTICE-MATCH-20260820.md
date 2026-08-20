@@ -5,14 +5,113 @@ category: emr_integration
 status: active
 created: 2026-08-20
 updated: '2026-08-20'
-links: []
+links:
+- BETA-E2E-20260729
+- BIOINSIGHTS-SFTP-KEY
+- BIOINSIGHTS-onboarding
+- FHIR-ONDEMAND-RESULT
+- HL7FAIL-20260722-MDHQ
+- HL7FAIL-20260729-PLESSEN
+- HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
+- INCIDENT-20260817-onprem-stale-deploy
+- INCIDENT-2604156666
+- LBS-1541
+- LBS-1656
+- QH-1660
+- QH-2257
+- QH-2577
+- QH-3752
+- QH-4350
+- QH-4352
+- QH-4608
+- QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
+- VEJO-DELETION-20260804
+- VP-14787
+- VP-15279
+- VP-15952
+- VP-16014
+- VP-16166
+- VP-16175
+- VP-16186
+- VP-16193
+- VP-16251
+- VP-16271
+- VP-16280
+- VP-16329
+- VP-16685
+- VP-16734
+- VP-16765
+- VP-16766
+- VP-16832
+- VP-16881
+- VP-16885
+- VP-16934
+- VP-16987
+- VP-17076
+- VP-17117
+- VP-17120
+- VP-17136
+- VP-17283
+- VP-17286
+- VP-17344
+- VP-17411
+- VP-17460
+- VP-17466
+- VP-17474
+- VP-17475
+- VP-17493
+- VP-17497
+- VP-17499
+- VP-17503
+- VP-17517
+- VP-17524
+- VP-17537
+- VP-17538
+- VP-17539
+- VP-17544
+- VP-17589
+- VP-17591
+- VP-17628
+- VP-17631
+- VP-17685
+- VP-17686
+- VP-17691
+- VP-17715
+- VP-17734
+- VP-17748
+- VP-17752
+- VP-17810
+- VP-17812
+- emr-integration
+- fhir-api
 relations:
   unblocked_by: []
   blocks: []
-  sibling: [HL7FAIL-20260730-TURNPAUGH, HL7FAIL-20260722-MDHQ, VP-17628]
-unblock_when: "抽樣原始 HL7 確認各 vendor 的 practice_id 實際欄位（MSH-4 或其他）後才能排實作；驗證方式：從 SFTP/pod 留存檔抽近 90 天 36 家活躍 clinic 的原始 order 檔，逐 vendor 統計 practice 欄位覆蓋率"
-tags: [hl7-order-intake, npi-matching, practice-id, ehr-integrations, inventory, leo-decision, prod-evidence]
-summary: "Leo 決定：所有 HL7 inbound order 改用 customer_npi + practice_id(clinic_id) 比對，取代現行 ORC-12.1 → customer_id。已產出 prod ehr_integrations 全量 NPI×clinic×vendor 盤點（reference/ehr-integrations-npi-clinic-vendor-20260820.*）：1,154 筆 LIVE+ordering / 889 NPI / 553 clinic，但實際近 90 天只有 36 家 clinic 在送單。新 key 有 126 筆硬 blocker（10 缺 NPI、96 缺 clinic_id、3 格式錯、17 假 NPI）與 151 個撞 key（21 個對到 2 個 customer_id，5 個落在活躍 clinic）。最大未知：inbound practice_id 到底在哪一欄——今天只有 MSH-4 被讀且僅供 logging，msh06 欄位是外送 result 用且 667/1154 存的是 customer_id，不可當對照。實證追加：MDHQ 的 ORC-12 送 NPI（33/33），撞 key 的 5 筆歷史單全部下給較早的 backfill 列（11733/11740），但那是 row order 的巧合；且 clinic 6212 的 2 筆 2026-08 單 MSH-4=139134 與我們的 clinic_id=6212 不符，改用 (npi, MSH-4) 會把它們變成 customer_not_found。"
+  sibling:
+  - HL7FAIL-20260730-TURNPAUGH
+  - HL7FAIL-20260722-MDHQ
+  - VP-17628
+unblock_when: 抽樣原始 HL7 確認各 vendor 的 practice_id 實際欄位（MSH-4 或其他）後才能排實作；驗證方式：從 SFTP/pod
+  留存檔抽近 90 天 36 家活躍 clinic 的原始 order 檔，逐 vendor 統計 practice 欄位覆蓋率
+tags:
+- hl7-order-intake
+- npi-matching
+- practice-id
+- ehr-integrations
+- inventory
+- leo-decision
+- prod-evidence
+summary: Leo 決定：所有 HL7 inbound order 改用 customer_npi + practice_id(clinic_id) 比對，取代現行
+  ORC-12.1 → customer_id。已產出 prod ehr_integrations 全量 NPI×clinic×vendor 盤點（reference/ehr-integrations-npi-clinic-vendor-20260820.*）：1,154
+  筆 LIVE+ordering / 889 NPI / 553 clinic，但實際近 90 天只有 36 家 clinic 在送單。新 key 有 126 筆硬
+  blocker（10 缺 NPI、96 缺 clinic_id、3 格式錯、17 假 NPI）與 151 個撞 key（21 個對到 2 個 customer_id，5
+  個落在活躍 clinic）。最大未知：inbound practice_id 到底在哪一欄——今天只有 MSH-4 被讀且僅供 logging，msh06 欄位是外送
+  result 用且 667/1154 存的是 customer_id，不可當對照。實證追加：MDHQ 的 ORC-12 送 NPI（33/33），撞 key 的
+  5 筆歷史單全部下給較早的 backfill 列（11733/11740），但那是 row order 的巧合；且 clinic 6212 的 2 筆 2026-08
+  單 MSH-4=139134 與我們的 clinic_id=6212 不符，改用 (npi, MSH-4) 會把它們變成 customer_not_found。
+score: 1.0125
 ---
 
 # HL7 order matching 改為 customer_npi + practice_id — 決策記錄與盤點

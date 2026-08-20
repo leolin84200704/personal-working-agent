@@ -15,6 +15,7 @@ links:
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
@@ -97,7 +98,7 @@ tags:
 summary: 'Deleted all 3 VEJO integrations (vendors 17/18/43) from prod lis_emr: 41
   rows across 7 tables, transaction with count guards, full backup at ~/src/credential/vejo-deletion-backup-20260804.json.
   Zero activity ever (0 hl7, 0 results, 0 samples). Reverse-audit clean.'
-score: 0.6209
+score: 0.6072
 ---
 
 # VEJO integration deletion — 2026-08-04

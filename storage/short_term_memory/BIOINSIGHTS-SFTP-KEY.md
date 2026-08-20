@@ -11,6 +11,7 @@ links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
@@ -89,7 +90,7 @@ links:
 - VP-17812
 - emr-integration
 - fhir-api
-score: 0.4162
+score: 0.407
 ---
 
 # BIOINSIGHTS-SFTP-KEY — key-based SFTP auth support

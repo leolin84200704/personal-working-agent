@@ -3,11 +3,11 @@ id: failures
 type: ltm
 category: technical
 status: active
-score: 1.2452
+score: 1.2597
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
-updated: 2026-08-19
+updated: 2026-08-20
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -92,6 +92,7 @@ links:
 - VP-17748
 - VP-17765
 - VP-17812
+- VP-17825
 - VP-9299
 - business-model
 - business-model-deep
@@ -113,12 +114,12 @@ summary: Auto-aggregated failure index from 77 entries across STM
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-19 — total 77 entries
+> Last updated: 2026-08-20 — total 77 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 21 entries
-- [Other / uncategorized](#other) — 13 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 22 entries
+- [Other / uncategorized](#other) — 12 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 10 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
@@ -431,6 +432,14 @@ for (PatientAddress a : patient.getPatient_address())
 - Worktree node_modules cloned from a stale branch checkout missed staging's newer deps (@azure/identity, @sentry/node) → 5 TS2307 build errors; `npm install` in the worktree fixed it. Lesson: after cloning node_modules into a worktree, run npm install before trusting the build.
 - `npx jest <full path>` matched 0 tests (testRegex vs path mismatch in this repo) — use a name pattern (`npx jest kafka-report-finished-listener`).
 
+### **[[VP-17812]]**
+
+- Probe script round 1-2: guessed columns not in prod schema (ehr_vendors.api_enabled,
+  hl7_file_input.file_path, sftp_folder_mapping.sftp_remote_path) and queried dropped
+  table emr_sftp_source. Root cause: wrote SQL from LTM memory instead of checking
+  prisma/schema.prisma first. Known lesson (patterns.md order_clients updated_at) —
+  check schema before writing raw SQL. Cost: 2 retry rounds, read-only, no harm.
+
 ### **[[VP-16720]]** — `2026-06-01` — **
 
 **症狀**：我 INSERT 24 order_clients（per pair），但 Anna 43262 跨 4 clinic 同 customer_id → 4 個重複 oc rows（ids 2303/2306/2309/2312）。
@@ -509,10 +518,6 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[VP-17765]]**
 
 (none this run)
-
-### **[[VP-17812]]**
-
-(none yet)
 
 ---
 

@@ -3,7 +3,7 @@ id: fhir-api
 type: ltm
 category: emr_integration
 status: active
-score: 1.287
+score: 1.2994
 base_weight: 1.0
 created: 2026-06-06
 updated: 2026-06-06
@@ -12,6 +12,7 @@ links:
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7-TRIAGE-20260427
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN

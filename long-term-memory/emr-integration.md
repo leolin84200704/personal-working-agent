@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.3365
+score: 1.3489
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -12,6 +12,7 @@ links:
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7-TRIAGE-20260427
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
@@ -1567,3 +1568,54 @@ DATETIME（session tz `+00:00`）用 Node process 的本地時區 render，JSON 
 **repush 前先確認 accession**：VP-17734 當天的 repush 打到 Yekai 已經指出是錯的那個 2023 accession
 （在 Zhenhe 貼出正確 accession 的 11 分鐘**之後**），所以 provider 什麼都沒收到。
 repush 是有副作用的動作 —— 送出前把 accession 對回 ticket 最新一則 comment。
+
+## 【蒸餾 2026-08-20】EMR 病人地址與下單快照的機制事實（VP-17810）
+
+- **existing patient 的 inbound 地址永遠不落地**：emr-v2 `findOrCreatePatient` 的
+  existing-patient 分支只把 PID-11 用於 in-service 判斷（kit state、NY routing）；
+  `updateContactIfChanged` 只 persist phone/email。place-order 也不帶地址（VP-17591 設計）。
+  所以「requisition 顯示 practice 地址」的 root cause 幾乎都是 **profile 的
+  address row 是空的**，不是 mapping bug。
+- **empty-but-confirmed shipping row 是已知曝險**：pre-VP-17591 的 EMR patient 建檔
+  default-fill（`stringOrEmpty`）留下 address_type=shipping、全欄位空字串、
+  address_confirmed=1 的 row。任何這種 patient + EMR order = 本症狀重現。
+- **地址修復的施力點是 patient profile，唯一一列 shipping row**（`order_info.address_id`
+  100% NULL，見 patterns.md De-facto dead fields）。修完必須做 consumer-layer readback
+  （`lis.AddressService/GetAddress`，cloud mirror 10.224.0.199:30276）。
+- **requisition 是下單當下的快照**：EMR-Backend `AsyncServicesImpl.java:376` →
+  old LIS `/orderinfo/SubmitRequisitionFormHandler/NewOrdering`，patient info 由
+  `buildCompletePatientInfoMap` 在下單時組好送出 → **事後補 profile 地址不會回頭改
+  requisition**；要新 requisition 得請 order team 重產。
+- **Missing Information flag 不會自動清**：coresamples `sample_processor.go:1320` 由
+  issue type（94/100/101/60/64）驅動，`issue_display` id 14 = Missing Address Issue。
+  地址補了 flag 仍在，要 issue 端 resolve event（ops 動作）。
+- **patientPayLater 的 payment-link email 是 order-management 發的**（`tasks/message.go:68`
+  emit `orderPlaced_patientPayLater`，不看 send_email flag）→ lis-setting-consumer
+  `consume_pnsPatientPayLaterWithOrderPlaced` → Postmark；預設 7 天後補一封 reminder。
+  查「客戶有沒有收到付款連結」直接搜 Postmark 這條 tag，不用猜 emr-v2。
+
+## 【蒸餾 2026-08-20】Vendor-facing 能力 ground truth — 給新 vendor 寫 spec 前先看這張表（VP-17812 Prospera）
+
+Ticket 寫「our team confirmed supported」的五項，逐項驗 code 後一半是錯的。之後任何
+new-vendor spec / PM 能力詢問，以下列為準（2026-08-19 對 origin/main 驗證）：
+
+| 能力 | 真實狀態 |
+|------|---------|
+| Vibrant 扣 card-on-file | 有，但觸發條件是 **IN1-2.1 恰為大寫 `'C'`** → customerPay；其他任何值（含缺 IN1）→ patientPayLater = 病人收付款連結 email。HL7 path 扣款失敗**不擋單**，只記 `emr_payment_fail_reason` |
+| Requisition form 給 vendor | **不存在**。emr-v2 只推 ORU；transformer 的 getRequisitionForm 是 internal-JWT + private-IP 的 scanned-req proxy；order-management 沒有 REQUISITION_PDF type。要做就是新開發 |
+| Vendor-facing test menu API | **不存在**（pricing endpoints 全 internal JWT）；test images 全系統皆無。實務解 = 定期靜態 code list（VP-16987 scheduled-reports SFTP CSV 是先例）。emr-v2 不當 catalog publisher（2026-06-17 huddle） |
+| Practice contact 取代 patient contact | 機制上可行（email=PID-20.1 非標準欄位、phone=PID-13.1），**但每張單都會經 updateContactIfChanged 覆寫 patient 的 contact record** —— 全 practice 病人 contact 會收斂成 practice contact。要乾淨支援需 per-integration skip-writeback flag（product decision） |
+| Kit / collection 每單選 | **只有 per-integration** `kits_options` 0/1/2，無 per-order HL7 欄位；per-order = 新開發 |
+| Result ACK | 無 ACK/MSA 機制，fire-and-forget SFTP put |
+
+- 新 vendor onboarding 必收清單：vendor code（→MSH-5）、HL7 版本、SFTP host/port/user +
+  password 或 **ed25519 PEM key（key 優先，BIOINSIGHTS 先例）**、order/result 路徑；
+  per-practice：msh06、NPI 清單、report_option、kits_options、result_push_level。
+  Inbound 15-min cron 只抓 `*.hl7/*.HL7`，同 path+filename 永不重讀（resend 要新檔名），
+  抓完移到 `{server_folder}/archive`（hardcode，`sftp_archive_path` 不被 fetch 讀）。
+- **已知 bug**：兩個 SFTP connection-test endpoint（`ehr-vendor.controller.ts:266-293`、
+  `configuration-management.controller.ts:191+`）只傳 password 不傳 `sftp_private_key`
+  → key-only vendor 測試必失敗但實際 fetch/push 正常。未開 ticket（Leo 知情）。
+- Vendor 主張「已有整合」時先跑五表查證（ehr_vendors / ehr_integrations / order_clients /
+  sftp_folder_mapping / hl7_file_input）＋ Jira 全文搜——Prospera 五表全零，
+  「currently implemented」是 vendor 側的說法，不是我們 DB 的事實。

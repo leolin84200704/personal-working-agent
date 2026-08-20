@@ -1,13 +1,13 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-18 (dream run). +2 entries, both distilled tonight —
-> the VP-9299 debate record (writer-not-reader + deployed-config-is-truth, -> patterns.md
-> and leo-working-rules.md) and the agent throughput measurement baseline
-> (-> leo-working-rules.md; re-measure with scripts/agent-perf-metrics.py after 15+ LIS sessions).
+> Last updated: 2026-08-20 (dream run). +1 entry, distilled tonight — the VP-17812
+> Prospera spec record (docx-delivery rule -> leo-working-rules.md; vendor-facing
+> capability ground-truth table -> emr-integration.md).
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-20 | vp17812-prospera-spec | VP-17812, QH-6764, VP-16245, VP-16987, VP-17475, BIOINSIGHTS-onboarding | true |
 | 2026-08-18 | vp9299-status-list-v2 | VP-9299, VP-17753, VP-17754, VP-17755, VP-16859, PH-850 | true |
 | 2026-08-18 | factory-update-throughput-cost | framework-sync, ENFORCEMENT-LADDER.md, WORK-LOOP.md | true |
 | 2026-08-16 | remaining-memory-stores-migration | native-auto-memory-retirement, RETRIEVAL.md, ENGINEERING-LESSONS.md | true |

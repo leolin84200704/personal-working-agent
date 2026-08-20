@@ -3,7 +3,7 @@ id: INCIDENT-20260808-critical-result-tnp
 type: stm
 category: emr_integration
 status: active
-score: 0.9629
+score: 0.9415
 base_weight: 1.0
 created: 2026-08-08
 updated: '2026-08-14'
@@ -12,6 +12,7 @@ links:
 - BIOINSIGHTS-SFTP-KEY
 - BIOINSIGHTS-onboarding
 - FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
