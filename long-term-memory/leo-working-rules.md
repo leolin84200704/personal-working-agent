@@ -161,6 +161,17 @@ links:
   跟 cause→effect 才判斷得出方向對不對。**這條有重犯紀錄**（2026-06-04 VP-16832 用了
   別的結構被當場點出，而且當時 memory 裡已經有這條），所以每次交分析前自檢一次。
 
+- **給 customer / requester 的回覆只講結論，不舉例子** — 一個問題一段，直接說「會怎麼樣」
+  和「他要做什麼」，不要鋪陳證據鏈、不要舉旁證（先前幾張 order 也這樣、哪個欄位空的、
+  查了哪張表）、不要解釋內部機制細節。Leo 2026-08-20 VP-17810 追問回覆連退兩次：
+  第一版把「四張舊 order 也沒地址所以 requisition 一直落回 practice 地址」「requisition
+  在下單當下產生」「missing-info flag」全寫進客戶回覆，Leo：「不要舉一堆例子，直接說會
+  怎麼樣就可以了」。**這條跟上面的 IRON 開場方向相反且不衝突**：IRON 是給 Leo 的內部分析
+  （他是 reviewer，要看得到因果鏈），客戶要的是可行動的答案。查證與旁證留在草稿檔的
+  evidence 段和 STM，不進要發出去的文字。
+  另一半（同一次退回）：**不要對客戶承諾沒查證、也沒人在等的內部處理**——那次是
+  「we are clearing that internally」，而那個 flag 到底是什麼 issue 根本沒查到。
+
 - **API 文件用團隊的結構化 markdown，不要丟原生 OpenAPI/Swagger YAML** — 順序：
   Overview → Ticket → URL → Architecture → Key Behaviors 表 → Database → Endpoints
   （含 curl 範例 + JSON response）→ Status Flow → Frontend Notes。

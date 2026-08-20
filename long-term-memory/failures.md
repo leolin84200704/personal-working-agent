@@ -91,6 +91,7 @@ links:
 - VP-17715
 - VP-17748
 - VP-17765
+- VP-17812
 - VP-9299
 - business-model
 - business-model-deep
@@ -105,19 +106,19 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 76 entries across STM
+summary: Auto-aggregated failure index from 77 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-19 — total 76 entries
+> Last updated: 2026-08-19 — total 77 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 21 entries
-- [Other / uncategorized](#other) — 12 entries
+- [Other / uncategorized](#other) — 13 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 10 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
@@ -508,6 +509,10 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[VP-17765]]**
 
 (none this run)
+
+### **[[VP-17812]]**
+
+(none yet)
 
 ---
 
