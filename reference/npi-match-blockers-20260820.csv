@@ -1,0 +1,127 @@
+reason,customer_npi,customer_id,clinic_id,vendor,integration_type,result_enabled,msh06_receiving_facility,clinic_name,updated_at,id
+npi_bad_check_digit,1000000019,5142,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5142,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijtr000h0xf1sown4pch
+npi_bad_check_digit,1000000019,5142,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5142,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap7ud002z0xfqf4bnw29l
+npi_bad_check_digit,1000000074,5534,136186,OptimalDX,FULL_INTEGRATION,1,5534,"Viva La Vida Wellness, LLC",2026-05-14 21:40:37,cmjklx29b00b10xfe4hsbgw1y
+npi_bad_check_digit,1000000123,5482,79210,,ORDER_ONLY,0,,UltraWellness Center,2026-06-11 23:53:05,cmqa5kvkn00110x96dlzgf4xt
+no_clinic_id,1003336108,5058,,,ORDER_ONLY,0,,FEM Centre (Fort Worth),2026-06-11 23:53:05,cmqa5kvkn000y0x96walbtnkd
+npi_bad_check_digit,1013946707,5629,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmj98e6xv00110xmu3n2ywx2e
+npi_bad_check_digit,1013946707,5629,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmjxapshy008d0xfqulcjuf7n
+no_clinic_id,1023045663,1373,,ATHENA,FULL_INTEGRATION,1,1373,Vine Medical Associates,2025-12-17 00:22:29,cmj99owpd000v0xj1se1m8tpy
+no_clinic_id,1023045663,1373,,ATHENA,FULL_INTEGRATION,1,1373,Vine Medical Associates,2026-01-02 19:57:59,cmjxaq8l400ch0xfq00cbfanl
+no_clinic_id,1023218161,10819,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-01-02 19:57:49,cmjxaq1hg00ap0xfq8u44hdln
+no_clinic_id,1023218161,10819,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2025-12-16 23:54:48,cmj98pb43000p0xt5uhdahq24
+no_clinic_id,1023345436,1973,,ATHENA,FULL_INTEGRATION,1,1973,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxsk001h0xj1ctv95o0q
+no_clinic_id,1023345436,1973,,ATHENA,FULL_INTEGRATION,1,1973,FEM Centre (Fort Worth),2026-01-02 19:58:02,cmjxaqaxt00d30xfqtzw00gsf
+no_clinic_id,1023345436,1979,,,ORDER_ONLY,0,,FEM Centre (Colleyville),2026-06-11 23:53:05,cmqa5kvkm000g0x96qx39ulwi
+no_clinic_id,1083900310,8310,,MDHQ(Cerbo),FULL_INTEGRATION,1,8310,Vital Healing Functional Medicine,2026-01-02 19:57:18,cmjxapd6n004d0xfq7oqir1pk
+no_clinic_id,1114187788,11727,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00200x96cf418b9x
+no_clinic_id,1114187788,14938,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003c0x96ohp7s6zg
+npi_bad_check_digit,1121201164,9589,54038,,ORDER_ONLY,0,,Bear Creek Naturopathic Clinic,2026-06-11 23:53:05,cmqa5kvko001r0x969c3udn5b
+no_clinic_id,1124183017,2152,,,ORDER_ONLY,0,,Integrative Health and Wellness (Livingston) (CLOSED),2026-06-11 23:53:05,cmqa5kvkm000h0x96tx3w70dj
+no_clinic_id,1124280359,10828,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-01-02 19:57:52,cmjxaq35x00b30xfqbepbc6as
+no_clinic_id,1124280359,10828,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2025-12-16 23:54:49,cmj98pbrz00130xt5p8j0rp3b
+no_clinic_id,1134519580,11736,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkq00280x96382kiuw8
+no_clinic_id,1134519580,14941,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003f0x96pqkgh5fi
+no_clinic_id,1144288861,13088,,,ORDER_ONLY,0,,Rupa Health,2026-06-11 23:53:05,cmqa5kvkq002i0x96zzrcmml3
+no_clinic_id,1174818280,13450,,,ORDER_ONLY,0,,Parsley Health LA,2026-06-11 23:53:05,cmqa5kvkq002m0x9683ynerue
+npi_bad_check_digit,1219201925,9730,126655,MDHQ(Cerbo),FULL_INTEGRATION,1,9730,RTHM,2026-05-14 21:40:37,cmjxap5on002f0xfqw68jfja8
+no_clinic_id,1225288640,1976,,,ORDER_ONLY,0,,FEM Centre (Colleyville),2026-06-11 23:53:05,cmqa5kvkm000d0x96nykt1wk9
+npi_bad_check_digit,1234567890,999997,10136,ZymeBalanz,FULL_INTEGRATION,1,10136,Vibrant America Test Clinic,2025-09-12 23:08:31,c00002QY1FKVV00T2I0A8000N
+no_clinic_id,1245490853,15540,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvks003q0x96rh3dkjbb
+no_clinic_id,1255390217,1339,,,ORDER_ONLY,0,,Atlanta Functional Medicine,2026-06-11 23:53:05,cmqa5kvkm00070x96wqhhy3ej
+no_clinic_id,1255974051,14929,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00330x96we9vrvn0
+no_clinic_id,1255974051,9897,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-01-02 19:57:48,cmjxaq00c00ab0xfqf06czlgw
+no_clinic_id,1255974051,9897,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2025-12-16 23:54:47,cmj98pag6000b0xt5dyyxu06z
+no_clinic_id,1285676080,2825,,,ORDER_ONLY,0,,Hypertension Institute INT5,2026-06-11 23:53:05,cmqa5kvkn000o0x96g4upv7kf
+no_clinic_id,1285925735,11731,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00230x96djfqkwro
+no_clinic_id,1295025658,10837,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2025-12-16 23:54:47,cmj98pajh000d0xt5dccgmtmp
+no_clinic_id,1295025658,10837,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-01-02 19:57:48,cmjxaq07u00ad0xfqevka9oqs
+no_clinic_id,1316450927,11739,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkq002a0x969vchqit8
+no_clinic_id,1316450927,14939,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003d0x96gk2fo7mi
+no_clinic_id,1366543621,1975,,ATHENA,FULL_INTEGRATION,1,1975,FEM Centre (Colleyville),2025-12-17 00:22:30,cmj99oxz7001l0xj1pa6sbpkw
+no_clinic_id,1366543621,1975,,ATHENA,FULL_INTEGRATION,1,1975,FEM Centre (Colleyville),2026-01-02 19:58:02,cmjxaqbcz00d70xfqfxlj3eso
+no_clinic_id,1427076488,1969,,ATHENA,FULL_INTEGRATION,1,1969,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxdz00190xj14rd3b5o7
+no_clinic_id,1427076488,1969,,ATHENA,FULL_INTEGRATION,1,1969,FEM Centre (Fort Worth),2026-01-02 19:58:01,cmjxaqa3h00cv0xfqvxun0vvw
+no_clinic_id,1427327741,2900,,,ORDER_ONLY,0,,Montana Whole Health,2026-06-11 23:53:05,cmqa5kvkn000p0x96tqu6m4m9
+no_clinic_id,1427574177,14442,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr002w0x967wkibo81
+no_clinic_id,1447267745,14443,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr002x0x96wfvhudj1
+no_clinic_id,1457724072,2870,,ATHENA,FULL_INTEGRATION,1,2870,Stetson Hills Family Medicine INT5,2026-01-02 19:58:04,cmjxaqcmc00dj0xfq5ky6mhud
+no_clinic_id,1457724072,2870,,ATHENA,FULL_INTEGRATION,1,2870,Stetson Hills Family Medicine INT5,2025-12-17 00:22:31,cmj99oyjy001x0xj15vbr4vgq
+npi_bad_check_digit,1472872190,5489,6488,,ORDER_ONLY,0,,The Woodland Institute for Health and Wellness,2026-06-11 23:53:05,cmqa5kvkn00130x96easwwiwb
+no_clinic_id,1508964727,14415,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr002u0x96xsvaqf73
+npi_bad_check_digit,1528623744,7520,10406,MDHQ(Cerbo),FULL_INTEGRATION,1,7520,The M Center for Integrative Wellness,2026-05-14 21:40:37,cmjklx61500df0xfehx5gd6aq
+no_clinic_id,1548357205,2364,,,ORDER_ONLY,0,,Hypertension Institute INT5,2026-06-11 23:53:05,cmqa5kvkm000k0x967pe9ts1r
+no_clinic_id,1548367923,2365,,,ORDER_ONLY,0,,Hypertension Institute INT5,2026-06-11 23:53:05,cmqa5kvkm000l0x96wfvh1hsc
+no_clinic_id,1548399942,24619,,,ORDER_ONLY,0,24619,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkt004q0x96rcd4z7u2
+no_clinic_id,1548421704,11728,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00210x96q1393oxn
+no_clinic_id,1548421704,14934,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00380x96bpxnwvc7
+no_clinic_id,1558324053,7145,,Practice Fusion,FULL_INTEGRATION,1,7145,Priority Health LLC - Mount Pleasant,2025-12-16 23:48:33,cmj98e81b001n0xmujrwm8spv
+no_clinic_id,1558324053,7145,,Practice Fusion,FULL_INTEGRATION,1,7145,Priority Health LLC - Mount Pleasant,2026-01-02 19:57:41,cmjxapuvp008z0xfq8t0by5m3
+no_clinic_id,1558520965,12250,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkq002f0x96t5gp7o5p
+no_clinic_id,1568400596,2631,,Practice Fusion,FULL_INTEGRATION,1,1568400596,Maricopa MD INT5,2026-01-02 19:57:23,cmjxapgs3005b0xfqcho752rs
+no_clinic_id,1568400596,2632,,,ORDER_ONLY,0,,Pinal MD INT5,2026-06-11 23:53:05,cmqa5kvkn000n0x9636v7j23v
+no_clinic_id,1568669430,2868,,ATHENA,FULL_INTEGRATION,1,2868,Stetson Hills Family Medicine INT5,2025-12-17 00:22:31,cmj99oycz001t0xj16q049hr2
+no_clinic_id,1568669430,2868,,ATHENA,FULL_INTEGRATION,1,2868,Stetson Hills Family Medicine INT5,2026-01-02 19:58:03,cmjxaqc7800df0xfqmk91iulh
+no_clinic_id,1598833899,24620,,,ORDER_ONLY,0,24620,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkt004r0x964fec3h24
+no_clinic_id,1609201417,14931,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00350x96j3ppvo34
+no_clinic_id,1609201417,7352,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2025-12-16 23:54:47,cmj98pack00090xt56bvl4gxa
+no_clinic_id,1609201417,7352,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-01-02 19:57:47,cmjxapzsl00a90xfqr8r4qwjj
+no_clinic_id,1609281583,11562,,,ORDER_ONLY,0,,Parsley Health LA,2026-06-11 23:53:05,cmqa5kvkp001z0x9636yo0fri
+no_clinic_id,1609281583,14927,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00310x96u4zpxqms
+no_clinic_id,1629059274,23307,,,ORDER_ONLY,0,23307,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvks004n0x96k2hdz2ti
+no_clinic_id,1629501259,23305,,,ORDER_ONLY,0,23305,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvks004m0x96rlubokz5
+no_clinic_id,1629512744,4841,,,ORDER_ONLY,0,,FEM Centre (Fort Worth),2026-06-11 23:53:05,cmqa5kvkn000u0x96fgaqi1o3
+no_clinic_id,1639180516,1968,,ATHENA,FULL_INTEGRATION,1,1968,FEM Centre (Fort Worth),2026-01-02 19:58:00,cmjxaq9vp00ct0xfqze8ksuzi
+no_clinic_id,1639180516,1968,,ATHENA,FULL_INTEGRATION,1,1968,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxas00170xj17hcfwspt
+no_clinic_id,1639180516,1974,,ATHENA,FULL_INTEGRATION,1,1974,FEM Centre (Colleyville),2025-12-17 00:22:30,cmj99oxw0001j0xj1smejzre7
+no_clinic_id,1639180516,1974,,ATHENA,FULL_INTEGRATION,1,1974,FEM Centre (Colleyville),2026-01-02 19:58:02,cmjxaqb5b00d50xfqtu5oo0b1
+no_clinic_id,1649603325,20550,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvks00480x961fq40e8x
+no_clinic_id,1659746493,2871,,ATHENA,FULL_INTEGRATION,1,2871,Stetson Hills Family Medicine INT5,2025-12-17 00:22:31,cmj99oyny001z0xj16brqvrss
+no_clinic_id,1659746493,2871,,ATHENA,FULL_INTEGRATION,1,2871,Stetson Hills Family Medicine INT5,2026-01-02 19:58:04,cmjxaqctt00dl0xfqmaknc0db
+no_clinic_id,1669482139,30326,,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health4184945,2026-01-02 19:56:58,cmjxaoxq0000d0xfq0vn55ozx
+no_clinic_id,1679108344,13136,,,ORDER_ONLY,0,,Rupa Health,2026-06-11 23:53:05,cmqa5kvkq002j0x96z9roi5mj
+no_clinic_id,1679508675,9894,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-01-02 19:57:47,cmjxapzkd00a70xfqp2hbwis4
+no_clinic_id,1679508675,9894,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2025-12-16 23:54:47,cmj98pa9700070xt56ln5ns1v
+no_clinic_id,1699904912,25060,,,ORDER_ONLY,0,25060,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkt004s0x96h4gazg9s
+no_clinic_id,1700032026,1972,,ATHENA,FULL_INTEGRATION,1,1972,FEM Centre (Fort Worth),2026-01-02 19:58:01,cmjxaqaq800d10xfqej7ihazu
+no_clinic_id,1700032026,1972,,ATHENA,FULL_INTEGRATION,1,1972,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxon001f0xj13qn7tc2i
+no_clinic_id,1700032026,1978,,,ORDER_ONLY,0,,FEM Centre (Colleyville),2026-06-11 23:53:05,cmqa5kvkm000f0x96y5c0u6to
+no_clinic_id,1700105301,1970,,ATHENA,FULL_INTEGRATION,1,1970,FEM Centre (Fort Worth),2026-01-02 19:58:01,cmjxaqab700cx0xfq201spyy2
+no_clinic_id,1700105301,1970,,ATHENA,FULL_INTEGRATION,1,1970,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxhg001b0xj1hutfm3iz
+no_clinic_id,1710971775,10827,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2025-12-16 23:54:49,cmj98pbor00110xt5oe48hei2
+no_clinic_id,1710971775,10827,,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-01-02 19:57:51,cmjxaq2xu00b10xfq8txscwi9
+no_clinic_id,1750647764,14935,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00390x96booinqf6
+no_clinic_id,1750892741,14948,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvks003l0x96y8havn6m
+no_clinic_id,1790723013,2366,,,ORDER_ONLY,0,,Hypertension Institute INT5,2026-06-11 23:53:05,cmqa5kvkm000m0x96t5o2debn
+no_clinic_id,1831293018,13911,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr002r0x967giktffe
+no_clinic_id,1891088563,2869,,ATHENA,FULL_INTEGRATION,1,2869,Stetson Hills Family Medicine INT5,2026-01-02 19:58:04,cmjxaqceq00dh0xfqvtnkv6bf
+no_clinic_id,1891088563,2869,,ATHENA,FULL_INTEGRATION,1,2869,Stetson Hills Family Medicine INT5,2025-12-17 00:22:31,cmj99oygc001v0xj1biorn232
+no_clinic_id,1891775185,5812,,POWER2PRACTICE,FULL_INTEGRATION,1,5812,TREAT WELLNESS,2025-12-17 00:22:33,cmj99p023002r0xj19m8kup7m
+no_clinic_id,1891775185,5812,,POWER2PRACTICE,FULL_INTEGRATION,1,5812,TREAT WELLNESS,2026-01-02 19:58:09,cmjxaqgmt00el0xfqimoi23q2
+no_clinic_id,1891958708,1971,,ATHENA,FULL_INTEGRATION,1,1971,FEM Centre (Fort Worth),2026-01-02 19:58:01,cmjxaqair00cz0xfqe141drep
+no_clinic_id,1891958708,1971,,ATHENA,FULL_INTEGRATION,1,1971,FEM Centre (Fort Worth),2025-12-17 00:22:30,cmj99oxkv001d0xj1qtolbpg3
+no_clinic_id,1891958708,1977,,,ORDER_ONLY,0,,FEM Centre (Colleyville),2026-06-11 23:53:05,cmqa5kvkm000e0x963ohqh2tv
+npi_bad_check_digit,1909112015,9087,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq6tq00c10xfqtvh8ty37
+npi_bad_check_digit,1909112015,9087,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ow2l000j0xj1vqddj5pt
+no_clinic_id,1912286568,11730,,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00220x96g09tpo5i
+no_clinic_id,1912286568,14937,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003b0x96r2c7f9p0
+no_clinic_id,1992180533,14928,,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00320x96anf3mfxn
+no_clinic_id,1992180533,9896,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2025-12-16 23:54:46,cmj98pa2d00030xt5hciclhtf
+no_clinic_id,1992180533,9896,,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-01-02 19:57:46,cmjxapz5400a30xfq173eiaah
+npi_bad_check_digit,2019011314,7732,87547,OptimalDX,FULL_INTEGRATION,1,7732,Imperfectly Whole Life,2026-05-14 21:40:37,cmjklx6ie00dp0xfec1ps9k32
+npi_bad_check_digit,2019050611,8447,12212,MDHQ(Cerbo),FULL_INTEGRATION,1,12212,Sanctuary Functional Medicine,2025-12-24 23:52:44,cmjklx85800ep0xfe87awch0j
+npi_bad_check_digit,2587563039,4477,4676,POWER2PRACTICE,FULL_INTEGRATION,1,4477,ChiRho Chiropractic,2026-05-14 21:40:37,cmjklx0us00a50xfew21h8625
+npi_bad_check_digit,9252019003,9178,13634,MDHQ(Cerbo),FULL_INTEGRATION,1,9150,Dallas Vitality 360,2026-05-14 21:40:37,cmjklx9ch00fh0xfe9ud879jo
+npi_not_10_digits,IHP ,14829,136227,OptimalDX,FULL_INTEGRATION,1,14829,jfbiowellness,2026-05-14 21:40:37,cmjklwr2f003x0xfec02bbeob
+npi_not_10_digits,Internal N,503888,8093,Practice Fusion,FULL_INTEGRATION,1,8093,Kare Health and Wellness,2026-05-14 21:40:37,c0000CMYCWWC50FT3I0A44BHX
+npi_not_10_digits,Internal N,506855,14774,ATHENA,FULL_INTEGRATION,1,14774,Los Angeles Integrative Gastroenterology & Nutrition,2026-05-14 21:40:37,cmjxar0f000jl0xfqj05zdgmo
+no_customer_npi,,509325,3398,,ORDER_ONLY,0,509325,Apollo Cardiology,2026-06-11 23:53:05,cmqa5kvku00630x96pcpigne5
+no_customer_npi,,506615,12881,,ORDER_ONLY,0,506615,Case Integrative Health,2026-06-11 23:53:05,cmqa5kvku00610x9663ueqfbx
+no_customer_npi,,506017,12944,MDHQ(Cerbo),FULL_INTEGRATION,1,506017,Valhalla Wellness,2026-02-12 00:57:25,cmkzxxmsxc118a98ede0d4282
+no_customer_npi,,508387,19232,MDHQ(Cerbo),FULL_INTEGRATION,1,508387,Sano Health Club,2026-01-02 19:57:44,cmjxapx0g009j0xfqupsgtywe
+no_customer_npi,,502816,22106,FOLLOWTHATPATIENT,FULL_INTEGRATION,1,502816,Next Health,2026-06-22 22:51:31,cmqpt82js000d0xre0jmkx19g
+no_customer_npi,,523148,22106,FOLLOWTHATPATIENT,FULL_INTEGRATION,1,523148,Next Health,2026-06-22 22:51:31,cmqpt82js000f0xrewe8huiff
+no_customer_npi,,1238,43244,eClinicalWorks,FULL_INTEGRATION,1,1238,Atlanta Functional Medicine,2026-05-14 21:55:40,cmjklwolx00290xfev3lyflwu
+no_customer_npi,,21860,107857,OptimalDX,FULL_INTEGRATION,1,21860,8 West Clinic,2026-05-14 21:40:37,cmjklwwrk007l0xfee8t2dl30
+no_customer_npi,,16121,133580,OptimalDX,FULL_INTEGRATION,1,16121,Paul Burgess Functional Medicine Ltd,2026-05-14 21:40:37,cmjklwsyn00530xfegkcvox1b
+no_customer_npi,,999990,137268,,ORDER_ONLY,0,999990,Vibrant IT6 Practice 222,2026-06-11 23:53:05,cmqa5kvkt00510x96gvfbkk1l

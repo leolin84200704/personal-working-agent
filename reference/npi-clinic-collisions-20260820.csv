@@ -1,0 +1,314 @@
+reason,customer_npi,customer_id,clinic_id,vendor,integration_type,result_enabled,msh06_receiving_facility,clinic_name,updated_at,id,collision_key,rows_in_key,distinct_customers,distinct_vendors
+same_customer_duplicate_rows,1000000019,5142,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5142,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijtr000h0xf1sown4pch,1000000019|45311,2,1,1
+same_customer_duplicate_rows,1000000019,5142,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5142,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap7ud002z0xfqf4bnw29l,1000000019|45311,2,1,1
+same_customer_duplicate_rows,1003071804,6880,86386,MDHQ(Cerbo),FULL_INTEGRATION,1,6880,New Beginnings Functional Medicine Clinic,2026-05-14 21:40:37,cmj99ilcd001b0xf1pvg790jn,1003071804|86386,2,1,1
+same_customer_duplicate_rows,1003071804,6880,86386,MDHQ(Cerbo),FULL_INTEGRATION,1,6880,New Beginnings Functional Medicine Clinic,2026-05-14 21:40:37,cmjxapb17003t0xfqpsgh1h74,1003071804|86386,2,1,1
+same_customer_duplicate_rows,1003975616,2065,1652,POWER2PRACTICE,FULL_INTEGRATION,1,2065,Chi Medicine,2026-05-14 21:40:37,cmj99ozri002l0xj1x6303xba,1003975616|1652,2,1,1
+same_customer_duplicate_rows,1003975616,2065,1652,POWER2PRACTICE,FULL_INTEGRATION,1,2065,Chi Medicine,2026-05-14 21:40:37,cmjxaqfzp00ef0xfqkbnimkw5,1003975616|1652,2,1,1
+multi_customer,1013094069,11733,17147,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00250x96faqk1yd2,1013094069|17147,2,2,1
+multi_customer,1013094069,14933,17147,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr00370x96mia1nymj,1013094069|17147,2,2,1
+same_customer_duplicate_rows,1013946707,5629,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmj98e6xv00110xmu3n2ywx2e,1013946707|6767,2,1,1
+same_customer_duplicate_rows,1013946707,5629,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmjxapshy008d0xfqulcjuf7n,1013946707|6767,2,1,1
+same_customer_duplicate_rows,1013965045,6200,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,6200,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap8h900350xfqq00rdqh8,1013965045|45311,2,1,1
+same_customer_duplicate_rows,1013965045,6200,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,6200,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ik4f000n0xf1ae3lfh2f,1013965045|45311,2,1,1
+same_customer_duplicate_rows,1023218161,10833,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmj98pan7000f0xt5dqqfw3w6,1023218161|5759,2,1,1
+same_customer_duplicate_rows,1023218161,10833,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmjxaq0fa00af0xfqg0r597wn,1023218161|5759,2,1,1
+same_customer_duplicate_rows,1053388504,21809,101905,Practice Fusion,FULL_INTEGRATION,1,21809,Vitruvia,2026-05-14 21:40:37,cmj98e87p001r0xmuo3gz4kw2,1053388504|101905,2,1,1
+same_customer_duplicate_rows,1053388504,21809,101905,Practice Fusion,FULL_INTEGRATION,1,21809,Vitruvia,2026-05-14 21:40:37,cmjxapvax00930xfqb7mt7b8a,1053388504|101905,2,1,1
+same_customer_duplicate_rows,1063719011,2180,1850,MDHQ(Cerbo),FULL_INTEGRATION,1,2180,Living Well Dallas,2026-05-14 21:40:37,cmjxaq4nt00bh0xfqz57g0r0n,1063719011|1850,2,1,1
+same_customer_duplicate_rows,1063719011,2180,1850,MDHQ(Cerbo),FULL_INTEGRATION,1,2180,Living Well Dallas,2026-05-14 21:40:37,cmj99imz700270xf15eqoan2i,1063719011|1850,2,1,1
+same_customer_duplicate_rows,1073568739,10822,80461,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pbaw000t0xt5v90fo52a,1073568739|80461,2,1,1
+same_customer_duplicate_rows,1073568739,10822,80461,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq1yd00at0xfqpuhczwgb,1073568739|80461,2,1,1
+same_customer_duplicate_rows,1073801619,9088,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq71g00c30xfqv0nh1kvk,1073801619|13505,2,1,1
+same_customer_duplicate_rows,1073801619,9088,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ow7i000l0xj1dbp6y3p9,1073801619|13505,2,1,1
+same_customer_duplicate_rows,1073868139,1490,683,ATHENA,FULL_INTEGRATION,1,1490,"Bradley Axline, MD",2026-05-14 21:40:37,cmj99oy2m001n0xj1pprz9fl0,1073868139|683,2,1,1
+same_customer_duplicate_rows,1073868139,1490,683,ATHENA,FULL_INTEGRATION,1,1490,"Bradley Axline, MD",2026-05-14 21:40:37,cmjxaqbkp00d90xfqzf1y2n7b,1073868139|683,2,1,1
+same_customer_duplicate_rows,1083010516,9022,124202,Practice Fusion,FULL_INTEGRATION,1,9022,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmj98e6gs000r0xmutjvzgc97,1083010516|124202,2,1,1
+same_customer_duplicate_rows,1083010516,9022,124202,Practice Fusion,FULL_INTEGRATION,1,9022,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmjxaprf000830xfqk6ko8lrh,1083010516|124202,2,1,1
+same_customer_duplicate_rows,1083683106,4755,5183,MDHQ(Cerbo),FULL_INTEGRATION,1,4755,Institute For Hormonal Balance,2026-05-14 21:40:37,cmjxaq3t900b90xfq6pm7hlrr,1083683106|5183,2,1,1
+same_customer_duplicate_rows,1083683106,4755,5183,MDHQ(Cerbo),FULL_INTEGRATION,1,4755,Institute For Hormonal Balance,2026-05-14 21:40:37,cmj98pc1w00190xt5zmk3ujqn,1083683106|5183,2,1,1
+same_customer_duplicate_rows,1083692719,5880,79705,MDHQ(Cerbo),FULL_INTEGRATION,1,5880,Clear Path Wellness,2026-05-14 21:40:37,cmjxapbgb003x0xfqgoiz0dxl,1083692719|79705,2,1,1
+same_customer_duplicate_rows,1083692719,5880,79705,MDHQ(Cerbo),FULL_INTEGRATION,1,5880,Clear Path Wellness,2026-05-14 21:40:37,cmj99iljk001f0xf15ogk4w4u,1083692719|79705,2,1,1
+same_customer_duplicate_rows,1083738330,6119,49109,Practice Fusion,FULL_INTEGRATION,1,6119,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmjxapove007f0xfqfrvn0h04,1083738330|49109,2,1,1
+same_customer_duplicate_rows,1083738330,6119,49109,Practice Fusion,FULL_INTEGRATION,1,6119,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmj98e5by00030xmu0hbj5off,1083738330|49109,2,1,1
+multi_customer+multi_vendor,1083747265,2780,121565,eClinicalWorks,FULL_INTEGRATION,1,2780,Atlanta Functional Medicine,2026-05-14 21:40:37,cmjklwywj008v0xfei8ycsg6p,1083747265|121565,3,2,2
+multi_customer+multi_vendor,1083747265,4400,121565,MDHQ(Cerbo),FULL_INTEGRATION,1,4400,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmjxap9qx003h0xfqfqtogsgn,1083747265|121565,3,2,2
+multi_customer+multi_vendor,1083747265,4400,121565,MDHQ(Cerbo),FULL_INTEGRATION,1,4400,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmj99ikpw000z0xf1cmolp4z4,1083747265|121565,3,2,2
+same_customer_duplicate_rows,1083921928,7271,9899,Practice Fusion,FULL_INTEGRATION,1,7271,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmj98e5w1000f0xmu281ppaf4,1083921928|9899,2,1,1
+same_customer_duplicate_rows,1083921928,7271,9899,Practice Fusion,FULL_INTEGRATION,1,7271,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmjxapq54007r0xfq82ou5y7i,1083921928|9899,2,1,1
+same_customer_duplicate_rows,1093706293,2480,44210,ATHENA,FULL_INTEGRATION,1,2480,Castle Hills Family Medicine INT5,2026-05-14 21:40:37,cmjxaqbs900db0xfqlj228wns,1093706293|44210,2,1,1
+same_customer_duplicate_rows,1093706293,2480,44210,ATHENA,FULL_INTEGRATION,1,2480,Castle Hills Family Medicine INT5,2026-05-14 21:40:37,cmj99oy62001p0xj1w1r0jtj7,1093706293|44210,2,1,1
+same_customer_duplicate_rows,1093979114,7272,9899,Practice Fusion,FULL_INTEGRATION,1,7272,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmj98e5zh000h0xmuxh27wxyt,1093979114|9899,2,1,1
+same_customer_duplicate_rows,1093979114,7272,9899,Practice Fusion,FULL_INTEGRATION,1,7272,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmjxapqcn007t0xfqvinrt6b6,1093979114|9899,2,1,1
+same_customer_duplicate_rows,1104007202,1139,71695,ATHENA,FULL_INTEGRATION,1,1139,East West Family Health dba RMP Family Health,2026-05-14 21:40:37,cmjxaq7q700c90xfq80l6pw4s,1104007202|71695,2,1,1
+same_customer_duplicate_rows,1104007202,1139,71695,ATHENA,FULL_INTEGRATION,1,1139,East West Family Health dba RMP Family Health,2026-05-14 21:40:37,cmj99owbl000n0xj1ihadolhu,1104007202|71695,2,1,1
+same_customer_duplicate_rows,1114189784,5106,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmjxapyxm00a10xfqw8fajpbh,1114189784|5759,2,1,1
+same_customer_duplicate_rows,1114189784,5106,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmj98p9y600010xt5o7pufup6,1114189784|5759,2,1,1
+same_customer_duplicate_rows,1124003249,5732,134440,POWER2PRACTICE,FULL_INTEGRATION,1,5732,Shakthi Health & Wellness Center,2026-05-14 21:40:37,cmj99p08v002v0xj1yj7yuks0,1124003249|134440,2,1,1
+same_customer_duplicate_rows,1124003249,5732,134440,POWER2PRACTICE,FULL_INTEGRATION,1,5732,Shakthi Health & Wellness Center,2026-05-14 21:40:37,cmjxaqh1y00ep0xfqma4lms3l,1124003249|134440,2,1,1
+same_customer_duplicate_rows,1124133681,5269,47954,MDHQ(Cerbo),FULL_INTEGRATION,1,5269,Colorado Concierge Functional Medicine,2026-05-14 21:40:37,cmj99il1300150xf1y34ty6vh,1124133681|47954,2,1,1
+same_customer_duplicate_rows,1124133681,5269,47954,MDHQ(Cerbo),FULL_INTEGRATION,1,5269,Colorado Concierge Functional Medicine,2026-05-14 21:40:37,cmjxapae6003n0xfq2ytnu58d,1124133681|47954,2,1,1
+multi_customer,1134304983,10655,11738,MDHQ(Cerbo),FULL_INTEGRATION,1,11738,Rezilir Health,2026-05-14 21:40:37,cmjxaqr8a00hb0xfqb3a9319h,1134304983|11738,2,2,1
+multi_customer,1134304983,8221,11738,MDHQ(Cerbo),FULL_INTEGRATION,1,11738,Rezilir Health,2026-03-27 06:23:32,cmkzxxmsx81309062360f8f4d,1134304983|11738,2,2,1
+multi_vendor,1144232299,8805,12944,OptiMantra,FULL_INTEGRATION,1,8805,Valhalla Wellness,2026-05-14 21:40:37,cmjklx8ej00ev0xfei1f9oz9z,1144232299|12944,2,1,2
+multi_vendor,1144232299,8805,12944,MDHQ(Cerbo),FULL_INTEGRATION,1,8805,Valhalla Wellness,2026-02-16 08:41:31,cmkzxxmsx2641dbf59afc8eba,1144232299|12944,2,1,2
+same_customer_duplicate_rows,1154433316,7227,9797,Practice Fusion,FULL_INTEGRATION,1,7227,Garabedian Medical Clinic,2026-05-14 21:40:37,cmj98e6no000v0xmuz7liza3w,1154433316|9797,2,1,1
+same_customer_duplicate_rows,1154433316,7227,9797,Practice Fusion,FULL_INTEGRATION,1,7227,Garabedian Medical Clinic,2026-05-14 21:40:37,cmjxapru900870xfqupeekh2g,1154433316|9797,2,1,1
+same_customer_duplicate_rows,1154554434,5891,48812,POWER2PRACTICE,FULL_INTEGRATION,1,5891,Amanda Carlile NP PLLC,2026-05-14 21:40:37,cmjxaqfs200ed0xfqf2i9opyq,1154554434|48812,2,1,1
+same_customer_duplicate_rows,1154554434,5891,48812,POWER2PRACTICE,FULL_INTEGRATION,1,5891,Amanda Carlile NP PLLC,2026-05-14 21:40:37,cmj99oznw002j0xj1sf5t14oq,1154554434|48812,2,1,1
+same_customer_duplicate_rows,1154594133,5086,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,5086,Be Well Family Care,2026-05-14 21:40:37,cmj99imgx001x0xf10ehjyrfj,1154594133|5744,2,1,1
+same_customer_duplicate_rows,1154594133,5086,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,5086,Be Well Family Care,2026-05-14 21:40:37,cmjxapdeg004f0xfq0pt6p1ns,1154594133|5744,2,1,1
+multi_customer,1194003582,11734,17147,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkq00260x969hrxlmft,1194003582|17147,2,2,1
+multi_customer,1194003582,14942,17147,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003g0x960m5e14cq,1194003582|17147,2,2,1
+same_customer_duplicate_rows,1194240903,5152,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5152,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijx5000j0xf1dts1rgov,1194240903|45311,2,1,1
+same_customer_duplicate_rows,1194240903,5152,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5152,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap82200310xfqbq29ctny,1194240903|45311,2,1,1
+same_customer_duplicate_rows,1194819227,9077,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq53000bl0xfq0oarlceh,1194819227|13505,2,1,1
+same_customer_duplicate_rows,1194819227,9077,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ova800030xj1u5k2vdtd,1194819227|13505,2,1,1
+same_customer_duplicate_rows,1215067392,4769,134410,MDHQ(Cerbo),FULL_INTEGRATION,1,4769,"Kathleen Thomsen MD, MPH Inc",2026-05-14 21:40:37,cmjxapc3f00430xfq5vsayebj,1215067392|134410,2,1,1
+same_customer_duplicate_rows,1215067392,4769,134410,MDHQ(Cerbo),FULL_INTEGRATION,1,4769,"Kathleen Thomsen MD, MPH Inc",2026-05-14 21:40:37,cmj99ilub001l0xf15r0dagdp,1215067392|134410,2,1,1
+multi_vendor,1225281462,5784,7076,CharmEHR,FULL_INTEGRATION,1,P00047NFH071720,Natural Family Health Clinic,2026-05-14 21:40:37,cmjklx38i00bn0xfe7mvmeji9,1225281462|7076,2,1,2
+multi_vendor,1225281462,5784,7076,OptiMantra,FULL_INTEGRATION,1,5784,Natural Family Health Clinic,2026-05-14 21:40:37,cmjklx3bl00bp0xfe4brjfzc8,1225281462|7076,2,1,2
+same_customer_duplicate_rows,1245216365,10824,125143,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pbi2000x0xt5nl80emrf,1245216365|125143,2,1,1
+same_customer_duplicate_rows,1245216365,10824,125143,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq2h700ax0xfq2jcxmlf7,1245216365|125143,2,1,1
+same_customer_duplicate_rows,1245354174,2434,2300,POWER2PRACTICE,FULL_INTEGRATION,1,2434,The Natural Path to Wellness,2026-05-14 21:40:37,cmj99oz9k002b0xj1gbaqc9wa,1245354174|2300,2,1,1
+same_customer_duplicate_rows,1245354174,2434,2300,POWER2PRACTICE,FULL_INTEGRATION,1,2434,The Natural Path to Wellness,2026-05-14 21:40:37,cmjxaqexm00e50xfqs09crp4q,1245354174|2300,2,1,1
+multi_customer,1245828383,46332,149877,FOLLOWTHATPATIENT,FULL_INTEGRATION,1,149877,Next Health,2026-06-01 16:44:46,cmnq8jrem000i7l0x7pql07fw,1245828383|149877,2,2,1
+multi_customer,1245828383,47629,149877,FOLLOWTHATPATIENT,FULL_INTEGRATION,1,149877,Next Health,2026-06-01 16:44:46,cmnq8jrhg000j7l0xgsnngekr,1245828383|149877,2,2,1
+same_customer_duplicate_rows,1255394334,8102,132841,MDHQ(Cerbo),FULL_INTEGRATION,1,8102,Full Spectrum Integrative Medicine,2026-05-14 21:40:37,cmj99im9m001t0xf1lvjlluda,1255394334|132841,2,1,1
+same_customer_duplicate_rows,1255394334,8102,132841,MDHQ(Cerbo),FULL_INTEGRATION,1,8102,Full Spectrum Integrative Medicine,2026-05-14 21:40:37,cmjxapcyt004b0xfq8osgwhrr,1255394334|132841,2,1,1
+same_customer_duplicate_rows,1275626376,5295,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5295,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ik0u000l0xf18xh4exgf,1275626376|45311,2,1,1
+same_customer_duplicate_rows,1275626376,5295,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,5295,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap89q00330xfqv6kj4zq2,1275626376|45311,2,1,1
+same_customer_duplicate_rows,1275754053,5432,6377,POWER2PRACTICE,FULL_INTEGRATION,1,5432,OC Whole Family Wellness,2026-05-14 21:40:37,cmjxaqf5a00e70xfqxaovaj44,1275754053|6377,2,1,1
+same_customer_duplicate_rows,1275754053,5432,6377,POWER2PRACTICE,FULL_INTEGRATION,1,5432,OC Whole Family Wellness,2026-05-14 21:40:37,cmj99ozd7002d0xj1q2l2302s,1275754053|6377,2,1,1
+same_customer_duplicate_rows,1285851535,4274,134404,MDHQ(Cerbo),FULL_INTEGRATION,1,4274,Today's Integrative Health,2026-05-14 21:40:37,cmjxapbo6003z0xfq61xq71q2,1285851535|134404,2,1,1
+same_customer_duplicate_rows,1285851535,4274,134404,MDHQ(Cerbo),FULL_INTEGRATION,1,4274,Today's Integrative Health,2026-05-14 21:40:37,cmj99iln3001h0xf14odsqgky,1285851535|134404,2,1,1
+multi_customer,1295315695,25417,118238,ATHENA,FULL_INTEGRATION,1,25417,"Lindgren Functional Medicine, LLC",2026-05-14 21:40:37,cmjxaowve00050xfqxjwcs456,1295315695|118238,2,2,1
+multi_customer,1295315695,27170,118238,ATHENA,FULL_INTEGRATION,1,27170,"Lindgren Functional Medicine, LLC",2026-05-14 21:40:37,cmjxaoxaq00090xfqo3qds2sb,1295315695|118238,2,2,1
+same_customer_duplicate_rows,1306066915,7369,10100,MDHQ(Cerbo),FULL_INTEGRATION,1,7369,Erica Armstrong MD,2026-05-14 21:40:37,cmjxapbvx00410xfqisypvdfi,1306066915|10100,2,1,1
+same_customer_duplicate_rows,1306066915,7369,10100,MDHQ(Cerbo),FULL_INTEGRATION,1,7369,Erica Armstrong MD,2026-05-14 21:40:37,cmj99ilql001j0xf14ytg6xz1,1306066915|10100,2,1,1
+same_customer_duplicate_rows,1306264643,10831,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmj98pau2000j0xt5sefakitf,1306264643|5759,2,1,1
+same_customer_duplicate_rows,1306264643,10831,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmjxaq0ue00aj0xfq5kdxgsbo,1306264643|5759,2,1,1
+same_customer_duplicate_rows,1306396122,5972,48896,MDHQ(Cerbo),FULL_INTEGRATION,1,5972,Nancy O'Hara MD and Lindsay Wells ND,2026-05-14 21:40:37,cmjxap9jb003f0xfq2ja8idix,1306396122|48896,2,1,1
+same_customer_duplicate_rows,1306396122,5972,48896,MDHQ(Cerbo),FULL_INTEGRATION,1,5972,Nancy O'Hara MD and Lindsay Wells ND,2026-05-14 21:40:37,cmj99ikm7000x0xf1ftn1iiib,1306396122|48896,2,1,1
+same_customer_duplicate_rows,1306439922,15457,126159,POWER2PRACTICE,FULL_INTEGRATION,1,15457,Revive Health Services,2026-05-14 21:40:37,cmkzxxmsxa2cbde6f35cb43a2,1306439922|126159,2,1,1
+same_customer_duplicate_rows,1306439922,15457,126159,POWER2PRACTICE,FULL_INTEGRATION,1,,Revive Health Services,2026-06-12 00:02:18,cmmcb6x79002kyn07hbf6ehb2,1306439922|126159,2,1,1
+same_customer_duplicate_rows,1316923543,9084,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq67700bv0xfq7rfq2l37,1316923543|13505,2,1,1
+same_customer_duplicate_rows,1316923543,9084,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovs6000d0xj1hhay95tv,1316923543|13505,2,1,1
+same_customer_duplicate_rows,1326423815,9023,124202,Practice Fusion,FULL_INTEGRATION,1,9023,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmjxaprmh00850xfqup5x0eue,1326423815|124202,2,1,1
+same_customer_duplicate_rows,1326423815,9023,124202,Practice Fusion,FULL_INTEGRATION,1,9023,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmj98e6kd000t0xmugr1s6ydk,1326423815|124202,2,1,1
+same_customer_duplicate_rows,1326487596,7197,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7197,Be Well Family Care,2026-05-14 21:40:37,cmjxape8u004n0xfqdkfwwpme,1326487596|5744,2,1,1
+same_customer_duplicate_rows,1326487596,7197,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7197,Be Well Family Care,2026-05-14 21:40:37,cmj99imvt00250xf1l1f5hrj7,1326487596|5744,2,1,1
+multi_vendor,1336317726,8105,124500,PraxisEMR,FULL_INTEGRATION,1,8105,Causenta Wellness,2026-05-14 21:40:37,cmjklx7ad00e50xfeocgxr02q,1336317726|124500,2,1,2
+multi_vendor,1336317726,8105,124500,MDHQ(Cerbo),FULL_INTEGRATION,1,8105,Causenta Wellness,2026-05-14 21:40:37,cmjklx7dl00e70xfeg04tmnw3,1336317726|124500,2,1,2
+multi_customer,1356634760,18155,19583,MDHQ(Cerbo),FULL_INTEGRATION,1,19583,Alive + Well Austin,2026-05-04 18:43:27,cmoriz3n70000y40xhilr4lkn,1356634760|19583,2,2,1
+multi_customer,1356634760,25467,19583,MDHQ(Cerbo),FULL_INTEGRATION,1,19583,Alive + Well Austin,2026-05-04 18:43:27,cmorj3zzi0000ka0xbslbgfbj,1356634760|19583,2,2,1
+same_customer_duplicate_rows,1366869927,4316,4376,MDHQ(Cerbo),FULL_INTEGRATION,1,4316,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmjxap8oy00370xfqk5bvghbg,1366869927|4376,2,1,1
+same_customer_duplicate_rows,1366869927,4316,4376,MDHQ(Cerbo),FULL_INTEGRATION,1,4316,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmj99ik83000p0xf1m4w1g1qq,1366869927|4376,2,1,1
+same_customer_duplicate_rows,1376972539,1374,43316,ATHENA,FULL_INTEGRATION,1,1374,Vine Medical Associates,2026-05-14 21:40:37,cmj99owt2000x0xj14ntcy52e,1376972539|43316,2,1,1
+same_customer_duplicate_rows,1376972539,1374,43316,ATHENA,FULL_INTEGRATION,1,1374,Vine Medical Associates,2026-05-14 21:40:37,cmjxaq8t600cj0xfqvg9clfxa,1376972539|43316,2,1,1
+same_customer_duplicate_rows,1396010823,24049,133128,Practice Fusion,FULL_INTEGRATION,1,24049,Innovation Medical,2026-05-14 21:40:37,cmjxapvq100970xfqloq069qh,1396010823|133128,2,1,1
+same_customer_duplicate_rows,1396010823,24049,133128,Practice Fusion,FULL_INTEGRATION,1,24049,Innovation Medical,2026-05-14 21:40:37,cmj98e8eo001v0xmu562zzhrc,1396010823|133128,2,1,1
+same_customer_duplicate_rows,1396742128,2481,44210,ATHENA,FULL_INTEGRATION,1,2481,Castle Hills Family Medicine INT5,2026-05-14 21:40:37,cmjxaqbzr00dd0xfqiot8v0rk,1396742128|44210,2,1,1
+same_customer_duplicate_rows,1396742128,2481,44210,ATHENA,FULL_INTEGRATION,1,2481,Castle Hills Family Medicine INT5,2026-05-14 21:40:37,cmj99oy9s001r0xj1o684ykan,1396742128|44210,2,1,1
+same_customer_duplicate_rows,1396873196,4426,78052,MDHQ(Cerbo),FULL_INTEGRATION,1,4426,Bay Area Wellness,2026-05-14 21:40:37,cmj98pc58001b0xt5izteuctk,1396873196|78052,2,1,1
+same_customer_duplicate_rows,1396873196,4426,78052,MDHQ(Cerbo),FULL_INTEGRATION,1,4426,Bay Area Wellness,2026-05-14 21:40:37,cmjxaq40u00bb0xfqsvwyv30f,1396873196|78052,2,1,1
+same_customer_duplicate_rows,1407836224,13173,83668,Practice Fusion,FULL_INTEGRATION,1,13173,Lifespan Center for Integrative Medicine,2026-05-14 21:40:37,cmj98e8hp001x0xmuqckvxh5f,1407836224|83668,2,1,1
+same_customer_duplicate_rows,1407836224,13173,83668,Practice Fusion,FULL_INTEGRATION,1,13173,Lifespan Center for Integrative Medicine,2026-05-14 21:40:37,cmjxapvxk00990xfqsr9iezx8,1407836224|83668,2,1,1
+same_customer_duplicate_rows,1407943244,10030,83215,OptiMantra,FULL_INTEGRATION,1,10030,Cornerstone Progressive Health,2026-01-02 19:58:15,cmjxaql9e00fr0xfq4qfkgm35,1407943244|83215,2,1,1
+same_customer_duplicate_rows,1407943244,10030,83215,OptiMantra,FULL_INTEGRATION,1,10030,Upstream Root Cause Medicine ,2026-03-12 16:37:41,"cmkzxxmsx0bf7d9966158fb7e
+",1407943244|83215,2,1,1
+same_customer_duplicate_rows,1427477306,2897,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,2897,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap6zw002r0xfqvvoq9ck0,1427477306|45311,2,1,1
+same_customer_duplicate_rows,1427477306,2897,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,2897,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijep00090xf1qd4uwa58,1427477306|45311,2,1,1
+same_customer_duplicate_rows,1437118866,5087,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,5087,Be Well Family Care,2026-05-14 21:40:37,cmj99imkg001z0xf1i0hzhxn6,1437118866|5744,2,1,1
+same_customer_duplicate_rows,1437118866,5087,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,5087,Be Well Family Care,2026-05-14 21:40:37,cmjxapdm0004h0xfqc24quczm,1437118866|5744,2,1,1
+same_customer_duplicate_rows,1437479029,10818,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq19y00an0xfq6eyk2oxc,1437479029|17147,2,1,1
+same_customer_duplicate_rows,1437479029,10818,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pb0n000n0xt5rap476oo,1437479029|17147,2,1,1
+same_customer_duplicate_rows,1437543261,1375,43316,ATHENA,FULL_INTEGRATION,1,1375,Vine Medical Associates,2026-05-14 21:40:37,cmj99owwt000z0xj1zwjq2icq,1437543261|43316,2,1,1
+same_customer_duplicate_rows,1437543261,1375,43316,ATHENA,FULL_INTEGRATION,1,1375,Vine Medical Associates,2026-05-14 21:40:37,cmjxaq90t00cl0xfqa4e1e865,1437543261|43316,2,1,1
+same_customer_duplicate_rows,1447347323,7153,136913,Practice Fusion,FULL_INTEGRATION,1,7153,"Sun Valley Wellness, LLC",2026-05-14 21:40:37,cmjxapppx007n0xfq7qxeaqmy,1447347323|136913,2,1,1
+same_customer_duplicate_rows,1447347323,7153,136913,Practice Fusion,FULL_INTEGRATION,1,7153,"Sun Valley Wellness, LLC",2026-05-14 21:40:37,cmj98e5pg000b0xmus7v60ofv,1447347323|136913,2,1,1
+same_customer_duplicate_rows,1457367385,4756,5183,MDHQ(Cerbo),FULL_INTEGRATION,1,4756,Institute For Hormonal Balance,2026-05-14 21:40:37,cmj99il4s00170xf1s62l5lwz,1457367385|5183,2,1,1
+same_customer_duplicate_rows,1457367385,4756,5183,MDHQ(Cerbo),FULL_INTEGRATION,1,4756,Institute For Hormonal Balance,2026-05-14 21:40:37,cmjxapaln003p0xfqh3fy20ez,1457367385|5183,2,1,1
+same_customer_duplicate_rows,1457381964,1439,611,Practice Fusion,FULL_INTEGRATION,1,1439,Boone Heart and Wellness,2026-05-14 21:40:37,cmjxapp2y007h0xfqu4yj3vnk,1457381964|611,2,1,1
+same_customer_duplicate_rows,1457381964,1439,611,Practice Fusion,FULL_INTEGRATION,1,1439,Boone Heart and Wellness,2026-05-14 21:40:37,cmj98e5fd00050xmucsxipe41,1457381964|611,2,1,1
+multi_customer,1457616708,4317,71872,MDHQ(Cerbo),FULL_INTEGRATION,1,4317,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmj99ikez000t0xf1m82njzmw,1457616708|71872,4,2,1
+multi_customer,1457616708,4317,71872,MDHQ(Cerbo),FULL_INTEGRATION,1,4317,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmjxap94d003b0xfqnxnfv381,1457616708|71872,4,2,1
+multi_customer,1457616708,7121,71872,MDHQ(Cerbo),FULL_INTEGRATION,1,7121,Integrative Wellness Rx,2026-05-14 21:40:37,cmjxap1du001b0xfqrc9927i5,1457616708|71872,4,2,1
+multi_customer,1457616708,7121,71872,MDHQ(Cerbo),FULL_INTEGRATION,1,7121,Integrative Wellness Rx,2026-05-14 21:40:37,cmj99ij3q00030xf1ibhcyj1a,1457616708|71872,4,2,1
+same_customer_duplicate_rows,1467452565,3046,134386,ATHENA,FULL_INTEGRATION,1,3046,Hazlet Medical Services,2026-05-14 21:40:37,cmjxaq98c00cn0xfqokkabrhx,1467452565|134386,2,1,1
+same_customer_duplicate_rows,1467452565,3046,134386,ATHENA,FULL_INTEGRATION,1,3046,Hazlet Medical Services,2026-05-14 21:40:37,cmj99ox0500110xj19thx1pqo,1467452565|134386,2,1,1
+same_customer_duplicate_rows,1467478602,5630,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmj98e71z00130xmu53ooxyjm,1467478602|6767,2,1,1
+same_customer_duplicate_rows,1467478602,5630,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmjxapspf008f0xfqrpfg2h6l,1467478602|6767,2,1,1
+same_customer_duplicate_rows,1467740795,7160,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,7160,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap6jg002n0xfq16u1gsiy,1467740795|45311,2,1,1
+same_customer_duplicate_rows,1467740795,7160,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,7160,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ij7h00050xf1x8357j9v,1467740795|45311,2,1,1
+multi_customer,1467744847,12437,124546,ATHENA,FULL_INTEGRATION,1,12437,Palm Health,2026-05-14 21:40:37,cmjxap3j8001v0xfq83fsylu8,1467744847|124546,2,2,1
+multi_customer,1467744847,14738,124546,ATHENA,FULL_INTEGRATION,1,14738,Palm Health,2026-05-14 21:40:37,cmjxap46p00210xfqk5pu777d,1467744847|124546,2,2,1
+same_customer_duplicate_rows,1477517258,10820,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pb7f000r0xt5zxz80k23,1477517258|17147,2,1,1
+same_customer_duplicate_rows,1477517258,10820,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq1p800ar0xfqwqitu0y1,1477517258|17147,2,1,1
+multi_customer,1487603155,3448,72244,Practice Fusion,FULL_INTEGRATION,1,3448,All Functional Health (Turlock),2026-05-14 21:40:37,cmj98e631000j0xmu1yrch1rg,1487603155|72244,4,2,1
+multi_customer,1487603155,3448,72244,Practice Fusion,FULL_INTEGRATION,1,3448,All Functional Health (Turlock),2026-05-14 21:40:37,cmjxapqke007v0xfqsa59shcd,1487603155|72244,4,2,1
+multi_customer,1487603155,3450,72244,Practice Fusion,FULL_INTEGRATION,1,3450,All Functional Health (San Ramon),2026-05-14 21:40:37,cmjxapqry007x0xfqd8jgvo7e,1487603155|72244,4,2,1
+multi_customer,1487603155,3450,72244,Practice Fusion,FULL_INTEGRATION,1,3450,All Functional Health (San Ramon),2026-05-14 21:40:37,cmj98e66l000l0xmul5mienw6,1487603155|72244,4,2,1
+same_customer_duplicate_rows,1487883203,21714,611,Practice Fusion,FULL_INTEGRATION,1,1439,Balanced Well-Being Healthcare,2026-05-14 21:40:37,cmjxappie007l0xfqzzi8f1zx,1487883203|611,2,1,1
+same_customer_duplicate_rows,1487883203,21714,611,Practice Fusion,FULL_INTEGRATION,1,1439,Balanced Well-Being Healthcare,2026-05-14 21:40:37,cmj98e5m400090xmu8qpdsvmz,1487883203|611,2,1,1
+multi_customer,1487999850,10335,15956,MDHQ(Cerbo),FULL_INTEGRATION,1,10335,FUNCTIONAL MEDICINE OF NORTH IDAHO,2026-05-14 21:40:37,c0000CMYCWWC500T3I1A85BHS,1487999850|15956,2,2,1
+multi_customer,1487999850,7163,15956,MDHQ(Cerbo),FULL_INTEGRATION,1,7163,FUNCTIONAL MEDICINE OF NORTH IDAHO,2026-05-14 21:40:37,cmjxaqte400hv0xfqookyyb38,1487999850|15956,2,2,1
+multi_vendor,1497706162,8103,51875,PraxisEMR,FULL_INTEGRATION,1,8103,Causenta Wellness,2026-05-14 21:40:37,cmjklx72y00e10xfeopibwiw8,1497706162|51875,2,1,2
+multi_vendor,1497706162,8103,51875,MDHQ(Cerbo),FULL_INTEGRATION,1,8105,Causenta Wellness,2026-05-14 21:40:37,cmjklx76b00e30xfe8m9aiwq5,1497706162|51875,2,1,2
+same_customer_duplicate_rows,1518001098,1623,887,POWER2PRACTICE,FULL_INTEGRATION,1,1623,In2Great,2026-05-14 21:40:37,cmj99ozgv002f0xj1c18qrwjv,1518001098|887,2,1,1
+same_customer_duplicate_rows,1518001098,1623,887,POWER2PRACTICE,FULL_INTEGRATION,1,1623,In2Great,2026-05-14 21:40:37,cmjxaqfd000e90xfqi19mtvd2,1518001098|887,2,1,1
+multi_customer,1518987338,11732,17147,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkp00240x96a0dotgz5,1518987338|17147,2,2,1
+multi_customer,1518987338,14940,17147,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003e0x96d63wz8rw,1518987338|17147,2,2,1
+same_customer_duplicate_rows,1528034592,5259,6008,POWER2PRACTICE,FULL_INTEGRATION,1,5259,The Missing Peace,2026-05-14 21:40:37,cmjxaqgf900ej0xfq5n376kh3,1528034592|6008,2,1,1
+same_customer_duplicate_rows,1528034592,5259,6008,POWER2PRACTICE,FULL_INTEGRATION,1,5259,The Missing Peace,2026-05-14 21:40:37,cmj99ozyk002p0xj11zsar6h5,1528034592|6008,2,1,1
+same_customer_duplicate_rows,1548481203,2306,76723,POWER2PRACTICE,FULL_INTEGRATION,1,2306,Nurture Functional Medicine,2026-05-14 21:40:37,cmjxaqgud00en0xfqcys0wjb5,1548481203|76723,2,1,1
+same_customer_duplicate_rows,1548481203,2306,76723,POWER2PRACTICE,FULL_INTEGRATION,1,2306,Nurture Functional Medicine,2026-05-14 21:40:37,cmj99p05e002t0xj1kg9xd7ac,1548481203|76723,2,1,1
+same_customer_duplicate_rows,1568420909,1455,75064,ATHENA,FULL_INTEGRATION,1,1455,Littleton OBGYN,2026-05-14 21:40:37,cmjxaqd1d00dn0xfqqp29s2gd,1568420909|75064,2,1,1
+same_customer_duplicate_rows,1568420909,1455,75064,ATHENA,FULL_INTEGRATION,1,1455,Littleton OBGYN,2026-05-14 21:40:37,cmj99oyrg00210xj1p804ta76,1568420909|75064,2,1,1
+same_customer_duplicate_rows,1568449668,6201,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmj98e6ue000z0xmu8li20a1u,1568449668|6767,2,1,1
+same_customer_duplicate_rows,1568449668,6201,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmjxaps9s008b0xfqdcoprj64,1568449668|6767,2,1,1
+multi_customer,1568599710,5110,6212,MDHQ(Cerbo),FULL_INTEGRATION,1,5110,Innovative Health and Wellness Group,2026-05-14 21:40:37,cmjxap0qd00150xfqr6oy618i,1568599710|6212,2,2,1
+multi_customer,1568599710,5356,6212,MDHQ(Cerbo),ORDER_ONLY,0,5356,Innovative Health and Wellness Group,2026-06-11 23:53:05,cmqa5kvkt005l0x96poiyz8sf,1568599710|6212,2,2,1
+same_customer_duplicate_rows,1587420351,4402,4499,MDHQ(Cerbo),FULL_INTEGRATION,1,4402,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmj99ikxb00130xf122w4yjg4,1587420351|4499,2,1,1
+same_customer_duplicate_rows,1587420351,4402,4499,MDHQ(Cerbo),FULL_INTEGRATION,1,4402,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmjxapa6g003l0xfqct4no2y3,1587420351|4499,2,1,1
+same_customer_duplicate_rows,1588811095,10836,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmjxaq11z00al0xfqn3ii9naq,1588811095|5759,2,1,1
+same_customer_duplicate_rows,1588811095,10836,5759,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmj98paxd000l0xt5o0hgae2u,1588811095|5759,2,1,1
+same_customer_duplicate_rows,1588830756,6226,80080,MDHQ(Cerbo),FULL_INTEGRATION,1,6226,"Foundations, LLC",2026-05-14 21:40:37,cmj98pc8j001d0xt5hj07s855,1588830756|80080,2,1,1
+same_customer_duplicate_rows,1588830756,6226,80080,MDHQ(Cerbo),FULL_INTEGRATION,1,6226,"Foundations, LLC",2026-05-14 21:40:37,cmjxaq48w00bd0xfqubyr2cju,1588830756|80080,2,1,1
+multi_customer+multi_vendor,1588942775,32379,137932,ATHENA,FULL_INTEGRATION,1,137932,Clay Health & Care,2026-05-14 21:40:37,cmjxapyi6009x0xfqrjdnzhjm,1588942775|137932,2,2,2
+multi_customer+multi_vendor,1588942775,35022,137932,,ORDER_ONLY,0,35022,Clay Health & Care,2026-06-11 23:53:05,cmqa5kvkt005p0x96o2jv1q01,1588942775|137932,2,2,2
+same_customer_duplicate_rows,1598277220,11888,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmj98e75v00150xmucsczcuub,1598277220|6767,2,1,1
+same_customer_duplicate_rows,1598277220,11888,6767,Practice Fusion,FULL_INTEGRATION,1,6201,Apollo Medical Associates,2026-05-14 21:40:37,cmjxapsx3008h0xfq0hy3vj6u,1598277220|6767,2,1,1
+same_customer_duplicate_rows,1598850919,1873,1316,MDHQ(Cerbo),FULL_INTEGRATION,1,1873,Integrative Medical Group of Irvine,2026-05-14 21:40:37,cmjxaq4ge00bf0xfqmdtqordf,1598850919|1316,2,1,1
+same_customer_duplicate_rows,1598850919,1873,1316,MDHQ(Cerbo),FULL_INTEGRATION,1,1873,Integrative Medical Group of Irvine,2026-05-14 21:40:37,cmj98pcc6001f0xt50ka7bsd1,1598850919|1316,2,1,1
+same_customer_duplicate_rows,1609042472,10829,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pbv900150xt5jthk6rui,1609042472|17147,2,1,1
+same_customer_duplicate_rows,1609042472,10829,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq3dp00b50xfq3kz8jkhv,1609042472|17147,2,1,1
+same_customer_duplicate_rows,1609095207,1459,75013,ATHENA,FULL_INTEGRATION,1,1459,Littleton OBGYN,2026-05-14 21:40:37,cmjxaq8dm00cf0xfq42yv47d4,1609095207|75013,2,1,1
+same_customer_duplicate_rows,1609095207,1459,75013,ATHENA,FULL_INTEGRATION,1,1459,Littleton OBGYN,2026-05-14 21:40:37,cmj99owly000t0xj14rx92thg,1609095207|75013,2,1,1
+same_customer_duplicate_rows,1609168608,6132,79990,POWER2PRACTICE,FULL_INTEGRATION,1,6132,Glendale Whole Health,2026-05-14 21:40:37,cmjxaqfkm00eb0xfq20zanama,1609168608|79990,2,1,1
+same_customer_duplicate_rows,1609168608,6132,79990,POWER2PRACTICE,FULL_INTEGRATION,1,6132,Glendale Whole Health,2026-05-14 21:40:37,cmj99ozkb002h0xj1jv9qqlf5,1609168608|79990,2,1,1
+same_customer_duplicate_rows,1619348935,3093,71698,POWER2PRACTICE,FULL_INTEGRATION,1,3093,Peak Health Group,2026-05-14 21:40:37,cmjxaqeap00dz0xfqnwkcnv25,1619348935|71698,2,1,1
+same_customer_duplicate_rows,1619348935,3093,71698,POWER2PRACTICE,FULL_INTEGRATION,1,3093,Peak Health Group,2026-05-14 21:40:37,cmj99oyyf00250xj1vprroacx,1619348935|71698,2,1,1
+same_customer_duplicate_rows,1619947710,7195,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7195,Be Well Family Care,2026-05-14 21:40:37,cmj99imo300210xf1a6kfsj8k,1619947710|5744,2,1,1
+same_customer_duplicate_rows,1619947710,7195,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7195,Be Well Family Care,2026-05-14 21:40:37,cmjxapdth004j0xfq2auxouhl,1619947710|5744,2,1,1
+same_customer_duplicate_rows,1629059274,4804,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,4804,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijq5000f0xf1dfoatsf1,1629059274|45311,2,1,1
+same_customer_duplicate_rows,1629059274,4804,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,4804,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap7my002x0xfqnep7s3sv,1629059274|45311,2,1,1
+same_customer_duplicate_rows,1629190004,1999,43976,MDHQ(Cerbo),FULL_INTEGRATION,1,1999,Stengler Center for Integrative Medicine,2026-05-14 21:40:37,cmjxapatm003r0xfqlfjzolfy,1629190004|43976,2,1,1
+same_customer_duplicate_rows,1629190004,1999,43976,MDHQ(Cerbo),FULL_INTEGRATION,1,1999,Stengler Center for Integrative Medicine,2026-05-14 21:40:37,cmj99il8m00190xf11b4p17sq,1629190004|43976,2,1,1
+same_customer_duplicate_rows,1639227473,2744,2846,MDHQ(Cerbo),FULL_INTEGRATION,1,2744,Moday Center,2026-05-14 21:40:37,cmj98pbyn00170xt5gdjwbwta,1639227473|2846,2,1,1
+same_customer_duplicate_rows,1639227473,2744,2846,MDHQ(Cerbo),FULL_INTEGRATION,1,2744,Moday Center,2026-05-14 21:40:37,cmjxaq3lo00b70xfqk3ay1d7w,1639227473|2846,2,1,1
+multi_vendor,1639384183,15185,27275,POWER2PRACTICE,FULL_INTEGRATION,1,15185,The Logan Institute,2026-05-14 21:40:37,cmjklwre900450xfevjhxvm7f,1639384183|27275,2,1,2
+multi_vendor,1639384183,15185,27275,MDHQ(Cerbo),FULL_INTEGRATION,1,15185,The Logan Institute,2026-05-14 21:40:37,cmjklwrha00470xfe3snl602w,1639384183|27275,2,1,2
+same_customer_duplicate_rows,1639397524,1458,75124,ATHENA,FULL_INTEGRATION,1,1458,Littleton OBGYN,2026-05-14 21:40:37,cmj99owig000r0xj1tovauer7,1639397524|75124,2,1,1
+same_customer_duplicate_rows,1639397524,1458,75124,ATHENA,FULL_INTEGRATION,1,1458,Littleton OBGYN,2026-05-14 21:40:37,cmjxaq85v00cd0xfqua97kvvl,1639397524|75124,2,1,1
+same_customer_duplicate_rows,1649353095,3094,77494,POWER2PRACTICE,FULL_INTEGRATION,1,3094,Peak Health Group,2026-05-14 21:40:37,cmjxaqeid00e10xfqadp6lb0t,1649353095|77494,2,1,1
+same_customer_duplicate_rows,1649353095,3094,77494,POWER2PRACTICE,FULL_INTEGRATION,1,3094,Peak Health Group,2026-05-14 21:40:37,cmj99oz1x00270xj1vfa1dwu0,1649353095|77494,2,1,1
+same_customer_duplicate_rows,1659367662,9075,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq4vg00bj0xfqzjqy9lkp,1659367662|13505,2,1,1
+same_customer_duplicate_rows,1659367662,9075,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ov5m00010xj1cice3qro,1659367662|13505,2,1,1
+multi_customer,1659484046,14380,6488,,ORDER_ONLY,0,,The Woodland Institute for Health and Wellness,2026-06-11 23:53:05,cmqa5kvkr002t0x96t13du77n,1659484046|6488,2,2,1
+multi_customer,1659484046,5488,6488,,ORDER_ONLY,0,,The Woodland Institute for Health and Wellness,2026-06-11 23:53:05,cmqa5kvkn00120x96ksjyrf5r,1659484046|6488,2,2,1
+same_customer_duplicate_rows,1659604197,33169,138608,Practice Fusion,FULL_INTEGRATION,1,33169,PrevMed Health,2026-05-14 21:40:37,cmj98e8la001z0xmudk6d1u6v,1659604197|138608,2,1,1
+same_customer_duplicate_rows,1659604197,33169,138608,Practice Fusion,FULL_INTEGRATION,1,33169,PrevMed Health,2026-05-14 21:40:37,cmjxapw5e009b0xfqmcnlsw6t,1659604197|138608,2,1,1
+same_customer_duplicate_rows,1659604197,33203,138638,Practice Fusion,FULL_INTEGRATION,1,33169,PrevMed Health,2026-05-14 21:40:37,cmjxapwd5009d0xfqpf06cx04,1659604197|138638,2,1,1
+same_customer_duplicate_rows,1659604197,33203,138638,Practice Fusion,FULL_INTEGRATION,1,33169,PrevMed Health,2026-05-14 21:40:37,cmj98e8ok00210xmu1lv1rkkh,1659604197|138638,2,1,1
+same_customer_duplicate_rows,1669410171,4275,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,4275,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijmg000d0xf11e52rypx,1669410171|45311,2,1,1
+same_customer_duplicate_rows,1669410171,4275,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,4275,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap7fe002v0xfqo7lsflrc,1669410171|45311,2,1,1
+multi_customer,1669430716,1456,75142,ATHENA,FULL_INTEGRATION,1,1456,Littleton OBGYN,2026-05-14 21:40:37,cmjxaq9nl00cr0xfqf8qjv0ms,1669430716|75142,4,2,1
+multi_customer,1669430716,1456,75142,ATHENA,FULL_INTEGRATION,1,1456,Littleton OBGYN,2026-05-14 21:40:37,cmj99ox7700150xj1u34lepgh,1669430716|75142,4,2,1
+multi_customer,1669430716,1457,75142,ATHENA,FULL_INTEGRATION,1,1457,Littleton OBGYN,2026-05-14 21:40:37,cmj99owew000p0xj1lz83t3p7,1669430716|75142,4,2,1
+multi_customer,1669430716,1457,75142,ATHENA,FULL_INTEGRATION,1,1457,Littleton OBGYN,2026-05-14 21:40:37,cmjxaq7y500cb0xfqnuonodsm,1669430716|75142,4,2,1
+multi_customer,1669482139,30111,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-05-14 21:40:37,c0000CMYCWWC502T1I0A84BHX,1669482139|132145,5,5,1
+multi_customer,1669482139,30177,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-05-14 21:40:37,cmjxaoxib000b0xfqcyj7mkci,1669482139|132145,5,5,1
+multi_customer,1669482139,31914,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-05-14 21:40:37,cmjxaoy5c000h0xfqvr6snb8m,1669482139|132145,5,5,1
+multi_customer,1669482139,34992,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-01-02 19:56:59,cmjxaoydm000j0xfqdfp216ag,1669482139|132145,5,5,1
+multi_customer,1669482139,34995,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-01-02 19:56:59,cmjxaoyla000l0xfqe85yz7jq,1669482139|132145,5,5,1
+same_customer_duplicate_rows,1669515649,9881,80455,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-05-14 21:40:37,cmj98pa5x00050xt5vuwzy6g4,1669515649|80455,2,1,1
+same_customer_duplicate_rows,1669515649,9881,80455,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health LA,2026-05-14 21:40:37,cmjxapzcm00a50xfqajr5imv1,1669515649|80455,2,1,1
+same_customer_duplicate_rows,1669592630,5139,5819,MDHQ(Cerbo),FULL_INTEGRATION,1,5139,Natural Health & Healing,2026-05-14 21:40:37,cmjxaozul000x0xfq0eufzlrn,1669592630|5819,2,1,1
+same_customer_duplicate_rows,1669592630,5139,5819,MDHQ(Cerbo),FULL_INTEGRATION,1,5139,Natural Health & Healing,2026-05-14 21:40:37,cmj99iiyz00010xf1nqgemzm7,1669592630|5819,2,1,1
+same_customer_duplicate_rows,1679793376,2431,76837,Practice Fusion,FULL_INTEGRATION,1,2431,Los Alamitos Holistic Medical Center,2026-05-14 21:40:37,cmj98e8ay001t0xmux85cf92d,1679793376|76837,2,1,1
+same_customer_duplicate_rows,1679793376,2431,76837,Practice Fusion,FULL_INTEGRATION,1,2431,Los Alamitos Holistic Medical Center,2026-05-14 21:40:37,cmjxapvid00950xfq33fqjspd,1679793376|76837,2,1,1
+same_customer_duplicate_rows,1689704074,45416,149050,OptiMantra,FULL_INTEGRATION,1,45416,We The People Health & Wellness Center,2026-05-14 21:40:37,cmkzxxmsx95f4a2a5edd57a9c,1689704074|149050,2,1,1
+same_customer_duplicate_rows,1689704074,45416,149050,OptiMantra,FULL_INTEGRATION,1,45416,We The People Health & Wellness Center,2026-03-19 10:41:01,cmkzxxmsxe3aa6fc0b1183c2c,1689704074|149050,2,1,1
+same_customer_duplicate_rows,1689833568,9282,125235,Practice Fusion,FULL_INTEGRATION,1,9282,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmj98e7di00190xmuqa9wq3kb,1689833568|125235,2,1,1
+same_customer_duplicate_rows,1689833568,9282,125235,Practice Fusion,FULL_INTEGRATION,1,9282,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmjxaptco008l0xfq69k3tc9l,1689833568|125235,2,1,1
+multi_customer,1699300087,31882,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-05-14 21:40:37,cmjxaoxxq000f0xfqxre49h35,1699300087|132145,2,2,1
+multi_customer,1699300087,35707,132145,MDHQ(Cerbo),FULL_INTEGRATION,1,30111,Vitalis-Health,2026-01-02 19:56:59,cmjxaoysu000n0xfqnewsu27q,1699300087|132145,2,2,1
+same_customer_duplicate_rows,1710973896,14350,103021,Practice Fusion,FULL_INTEGRATION,1,14350,ReNUMD,2026-05-14 21:40:37,cmj98e7xy001l0xmugbubqs4m,1710973896|103021,2,1,1
+same_customer_duplicate_rows,1710973896,14350,103021,Practice Fusion,FULL_INTEGRATION,1,14350,ReNUMD,2026-05-14 21:40:37,cmjxapuo7008x0xfqf15ypccn,1710973896|103021,2,1,1
+multi_vendor,1710993514,10344,136694,OptiMantra,FULL_INTEGRATION,1,10344,Koniver Wellness,2026-05-14 21:40:37,cmjklwlhk00070xfeux19srtf,1710993514|136694,2,1,2
+multi_vendor,1710993514,10344,136694,MDHQ(Cerbo),FULL_INTEGRATION,1,10344,Koniver Wellness,2026-05-14 21:40:37,cmjklwlkp00090xfei36cuyf8,1710993514|136694,2,1,2
+multi_customer+multi_vendor,1720030083,5640,72403,Practice Fusion,FULL_INTEGRATION,1,1124236245,Natural Medicine of Stillwater,2026-05-14 21:40:37,cmjxapgkh00590xfq5fmwpkgs,1720030083|72403,2,2,2
+multi_customer+multi_vendor,1720030083,6325,72403,OptimalDX,FULL_INTEGRATION,1,6325,Teresa Pena,2025-12-25 00:02:54,cmjklx47z00c90xfeom9g9be0,1720030083|72403,2,2,2
+same_customer_duplicate_rows,1720551427,9086,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq6m800bz0xfqq5db0z0l,1720551427|13505,2,1,1
+same_customer_duplicate_rows,1720551427,9086,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovys000h0xj14lcxwgw4,1720551427|13505,2,1,1
+same_customer_duplicate_rows,1740308527,11365,128490,Practice Fusion,FULL_INTEGRATION,1,11365,"Mankato Integrative Medicine, LLC",2026-05-14 21:40:37,cmjxaptzg008r0xfq3i8nx7q8,1740308527|128490,2,1,1
+same_customer_duplicate_rows,1740308527,11365,128490,Practice Fusion,FULL_INTEGRATION,1,11365,"Mankato Integrative Medicine, LLC",2026-05-14 21:40:37,cmj98e7nu001f0xmu0obfwtrp,1740308527|128490,2,1,1
+same_customer_duplicate_rows,1750360418,9082,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq5xy00bt0xfq549a30hv,1750360418|13505,2,1,1
+same_customer_duplicate_rows,1750360418,9082,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovos000b0xj1snzf2i6n,1750360418|13505,2,1,1
+same_customer_duplicate_rows,1770135147,9085,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq6eq00bx0xfq2vr7glxf,1770135147|13505,2,1,1
+same_customer_duplicate_rows,1770135147,9085,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovvj000f0xj1zofxtt32,1770135147|13505,2,1,1
+same_customer_duplicate_rows,1770568131,4401,4499,MDHQ(Cerbo),FULL_INTEGRATION,1,4401,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmjxap9yl003j0xfq48gko81j,1770568131|4499,2,1,1
+same_customer_duplicate_rows,1770568131,4401,4499,MDHQ(Cerbo),FULL_INTEGRATION,1,4401,Atlanta Integrative and Internal Medicine,2026-05-14 21:40:37,cmj99iktl00110xf1bkghwa1j,1770568131|4499,2,1,1
+same_customer_duplicate_rows,1780146779,12625,83485,Practice Fusion,FULL_INTEGRATION,1,12625,BluVida,2026-05-14 21:40:37,cmj98e7r5001h0xmutgmle7q3,1780146779|83485,2,1,1
+same_customer_duplicate_rows,1780146779,12625,83485,Practice Fusion,FULL_INTEGRATION,1,12625,BluVida,2026-05-14 21:40:37,cmjxapu7a008t0xfqa057twt8,1780146779|83485,2,1,1
+same_customer_duplicate_rows,1780713347,4724,5129,Practice Fusion,FULL_INTEGRATION,1,4724,Sacred Heart Center,2026-05-14 21:40:37,cmjxaptrt008p0xfqko8igxyl,1780713347|5129,2,1,1
+same_customer_duplicate_rows,1780713347,4724,5129,Practice Fusion,FULL_INTEGRATION,1,4724,Sacred Heart Center,2026-05-14 21:40:37,cmj98e7ki001d0xmugbnww8up,1780713347|5129,2,1,1
+same_customer_duplicate_rows,1780913442,10834,80458,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmj98paqj000h0xt5b6usjc4m,1780913442|80458,2,1,1
+same_customer_duplicate_rows,1780913442,10834,80458,MDHQ(Cerbo),FULL_INTEGRATION,1,4630,Parsley Health SF,2026-05-14 21:40:37,cmjxaq0mt00ah0xfq8evdaznb,1780913442|80458,2,1,1
+multi_customer,1790233351,17077,60956,MDHQ(Cerbo),FULL_INTEGRATION,1,17077,FRANCIENNE GRANTSARIS_NPI,2026-05-14 21:40:37,cmjxaqnzy00gh0xfqz9pv7atz,1790233351|60956,2,2,1
+multi_customer,1790233351,18326,60956,MDHQ(Cerbo),FULL_INTEGRATION,1,18326,FG Aesthetics and Medicine,2026-05-14 21:40:37,cmjxap0y600170xfq51bzx828,1790233351|60956,2,2,1
+same_customer_duplicate_rows,1790296127,6118,128773,Practice Fusion,FULL_INTEGRATION,1,6118,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmj98e57o00010xmuqw4ufo8r,1790296127|128773,2,1,1
+same_customer_duplicate_rows,1790296127,6118,128773,Practice Fusion,FULL_INTEGRATION,1,6118,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmjxaponf007d0xfql55oukmb,1790296127|128773,2,1,1
+same_customer_duplicate_rows,1790789659,6711,8885,Practice Fusion,FULL_INTEGRATION,1,1790789659,Vitruvian Health,2026-05-14 21:40:37,cmj98e7um001j0xmu3hhgyoaq,1790789659|8885,2,1,1
+same_customer_duplicate_rows,1790789659,6711,8885,Practice Fusion,FULL_INTEGRATION,1,1790789659,Vitruvian Health,2026-05-14 21:40:37,cmjxapugh008v0xfqz4jib1sd,1790789659|8885,2,1,1
+same_customer_duplicate_rows,1790909737,5973,48899,MDHQ(Cerbo),FULL_INTEGRATION,1,5973,Nancy O'Hara MD and Lindsay Wells ND,2026-05-14 21:40:37,cmjxap9bv003d0xfqzhi8w74g,1790909737|48899,2,1,1
+same_customer_duplicate_rows,1790909737,5973,48899,MDHQ(Cerbo),FULL_INTEGRATION,1,5973,Nancy O'Hara MD and Lindsay Wells ND,2026-05-14 21:40:37,cmj99ikii000v0xf1nx2qq9x5,1790909737|48899,2,1,1
+same_customer_duplicate_rows,1821312489,6902,56054,Practice Fusion,FULL_INTEGRATION,1,1439,Balanced Well-Being Healthcare,2026-05-14 21:40:37,cmj98e5iq00070xmuos898knw,1821312489|56054,2,1,1
+same_customer_duplicate_rows,1821312489,6902,56054,Practice Fusion,FULL_INTEGRATION,1,1439,Balanced Well-Being Healthcare,2026-05-14 21:40:37,cmjxappah007j0xfqkhvahode,1821312489|56054,2,1,1
+same_customer_duplicate_rows,1821537689,5645,48446,POWER2PRACTICE,FULL_INTEGRATION,1,5645,Vitality Family Health,2026-05-14 21:40:37,cmj99oyv000230xj13mot5d9r,1821537689|48446,2,1,1
+same_customer_duplicate_rows,1821537689,5645,48446,POWER2PRACTICE,FULL_INTEGRATION,1,5645,Vitality Family Health,2026-05-14 21:40:37,cmjxaqe3500dx0xfqwn56npcu,1821537689|48446,2,1,1
+same_customer_duplicate_rows,1831318559,2895,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,2895,Carpathia Collaborative,2026-05-14 21:40:37,cmjxap6qz002p0xfq1hhisyt6,1831318559|45311,2,1,1
+same_customer_duplicate_rows,1831318559,2895,45311,MDHQ(Cerbo),FULL_INTEGRATION,1,2895,Carpathia Collaborative,2026-05-14 21:40:37,cmj99ijb300070xf1ju6oo6qa,1831318559|45311,2,1,1
+same_customer_duplicate_rows,1841329067,4276,124202,Practice Fusion,FULL_INTEGRATION,1,4276,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmj98e6df000p0xmuzadq1dye,1841329067|124202,2,1,1
+same_customer_duplicate_rows,1841329067,4276,124202,Practice Fusion,FULL_INTEGRATION,1,4276,Northern Sun Family Healthcare,2026-05-14 21:40:37,cmjxapr7j00810xfq4dphd8q3,1841329067|124202,2,1,1
+same_customer_duplicate_rows,1841407368,10823,80443,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq27p00av0xfqzbmnbihw,1841407368|80443,2,1,1
+same_customer_duplicate_rows,1841407368,10823,80443,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pbej000v0xt5gm3aeve9,1841407368|80443,2,1,1
+same_customer_duplicate_rows,1851374961,7270,9899,Practice Fusion,FULL_INTEGRATION,1,7270,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmj98e5su000d0xmu6furtuuo,1851374961|9899,2,1,1
+same_customer_duplicate_rows,1851374961,7270,9899,Practice Fusion,FULL_INTEGRATION,1,7270,New Horizons Integrative Medicine,2026-05-14 21:40:37,cmjxappxm007p0xfquxlmlwz8,1851374961|9899,2,1,1
+same_customer_duplicate_rows,1851730147,7196,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7196,Be Well Family Care,2026-05-14 21:40:37,cmjxape16004l0xfq4xejuglv,1851730147|5744,2,1,1
+same_customer_duplicate_rows,1851730147,7196,5744,MDHQ(Cerbo),FULL_INTEGRATION,1,7196,Be Well Family Care,2026-05-14 21:40:37,cmj99ims100230xf1e8xghnii,1851730147|5744,2,1,1
+multi_customer,1861455032,11740,17147,,ORDER_ONLY,0,,Parsley Health (4),2026-06-11 23:53:05,cmqa5kvkq002b0x96t6iutbxx,1861455032|17147,2,2,1
+multi_customer,1861455032,14944,17147,,ORDER_ONLY,0,,Parsley Health Virtual/Complete Care Anywhere,2026-06-11 23:53:05,cmqa5kvkr003h0x963kzl1zrq,1861455032|17147,2,2,1
+same_customer_duplicate_rows,1861471534,6981,84691,Practice Fusion,FULL_INTEGRATION,1,6981,Innovative Health & Longevity,2026-05-14 21:40:37,cmjxapt4r008j0xfqmvwkjm5r,1861471534|84691,2,1,1
+same_customer_duplicate_rows,1861471534,6981,84691,Practice Fusion,FULL_INTEGRATION,1,6981,Innovative Health & Longevity,2026-05-14 21:40:37,cmj98e79900170xmu4n0siwsh,1861471534|84691,2,1,1
+same_customer_duplicate_rows,1871500744,3085,77482,Practice Fusion,FULL_INTEGRATION,1,3085,Holistic Harmony Med Spa,2026-05-14 21:40:37,cmj98e84i001p0xmua24apcmf,1871500744|77482,2,1,1
+same_customer_duplicate_rows,1871500744,3085,77482,Practice Fusion,FULL_INTEGRATION,1,3085,Holistic Harmony Med Spa,2026-05-14 21:40:37,cmjxapv3e00910xfqfna7wq3r,1871500744|77482,2,1,1
+same_customer_duplicate_rows,1902898984,1132,71695,ATHENA,FULL_INTEGRATION,1,1132,East West Family Health dba RMP Family Health,2026-05-14 21:40:37,cmj99ox3s00130xj18i3n4x1l,1902898984|71695,2,1,1
+same_customer_duplicate_rows,1902898984,1132,71695,ATHENA,FULL_INTEGRATION,1,1132,East West Family Health dba RMP Family Health,2026-05-14 21:40:37,cmjxaq9ft00cp0xfqxfg8j46e,1902898984|71695,2,1,1
+same_customer_duplicate_rows,1902959489,5023,78700,MDHQ(Cerbo),FULL_INTEGRATION,1,5023,Creative Healing Solutions,2026-05-14 21:40:37,cmj99ilfz001d0xf100nrlp7w,1902959489|78700,2,1,1
+same_customer_duplicate_rows,1902959489,5023,78700,MDHQ(Cerbo),FULL_INTEGRATION,1,5023,Creative Healing Solutions,2026-05-14 21:40:37,cmjxapb8t003v0xfqvhoq13ou,1902959489|78700,2,1,1
+same_customer_duplicate_rows,1909112015,9087,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq6tq00c10xfqtvh8ty37,1909112015|13505,2,1,1
+same_customer_duplicate_rows,1909112015,9087,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ow2l000j0xj1vqddj5pt,1909112015|13505,2,1,1
+same_customer_duplicate_rows,1912035221,9080,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq5ik00bp0xfqbtmfq2f9,1912035221|13505,2,1,1
+same_customer_duplicate_rows,1912035221,9080,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovhj00070xj1be523zpk,1912035221|13505,2,1,1
+same_customer_duplicate_rows,1912192493,5644,48446,POWER2PRACTICE,FULL_INTEGRATION,1,5644,Vitality Family Health,2026-05-14 21:40:37,cmj99p0cb002x0xj1bxc5iqna,1912192493|48446,2,1,1
+same_customer_duplicate_rows,1912192493,5644,48446,POWER2PRACTICE,FULL_INTEGRATION,1,5644,Vitality Family Health,2026-05-14 21:40:37,cmjxaqh9n00er0xfq5skmgrvs,1912192493|48446,2,1,1
+same_customer_duplicate_rows,1912407388,10063,49109,Practice Fusion,FULL_INTEGRATION,1,10063,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmjxaptkd008n0xfq52jxdhay,1912407388|49109,2,1,1
+same_customer_duplicate_rows,1912407388,10063,49109,Practice Fusion,FULL_INTEGRATION,1,10063,Greenhouse Natural Medicine,2026-05-14 21:40:37,cmj98e7h5001b0xmu1llimotn,1912407388|49109,2,1,1
+same_customer_duplicate_rows,1952358947,9081,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ovl100090xj17o95kf4a,1952358947|13505,2,1,1
+same_customer_duplicate_rows,1952358947,9081,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq5q200br0xfqwz1fbucu,1952358947|13505,2,1,1
+same_customer_duplicate_rows,1952728545,4315,4376,MDHQ(Cerbo),FULL_INTEGRATION,1,4315,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmj99ikbh000r0xf1tedmf4i4,1952728545|4376,2,1,1
+same_customer_duplicate_rows,1952728545,4315,4376,MDHQ(Cerbo),FULL_INTEGRATION,1,4315,The Wellness Institute of Dallas,2026-05-14 21:40:37,cmjxap8wk00390xfqvqb7z12v,1952728545|4376,2,1,1
+same_customer_duplicate_rows,1972687895,9079,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmjxaq5as00bn0xfq11no7s1h,1972687895|13505,2,1,1
+same_customer_duplicate_rows,1972687895,9079,13505,MDHQ(Cerbo),FULL_INTEGRATION,1,9075,Turnpaugh Health and Wellness Center,2026-05-14 21:40:37,cmj99ove300050xj1e1kx4s3h,1972687895|13505,2,1,1
+same_customer_duplicate_rows,1972758464,7229,9797,Practice Fusion,FULL_INTEGRATION,1,7229,Garabedian Medical Clinic,2026-05-14 21:40:37,cmjxaps2300890xfquki7dx86,1972758464|9797,2,1,1
+same_customer_duplicate_rows,1972758464,7229,9797,Practice Fusion,FULL_INTEGRATION,1,7229,Garabedian Medical Clinic,2026-05-14 21:40:37,cmj98e6r0000x0xmucxqi076w,1972758464|9797,2,1,1
+same_customer_duplicate_rows,1982691671,2433,76840,POWER2PRACTICE,FULL_INTEGRATION,1,2433,The Natural Path to Wellness,2026-05-14 21:40:37,cmj99oz5v00290xj1549e0yhb,1982691671|76840,2,1,1
+same_customer_duplicate_rows,1982691671,2433,76840,POWER2PRACTICE,FULL_INTEGRATION,1,2433,The Natural Path to Wellness,2026-05-14 21:40:37,cmjxaqeq000e30xfq59dl31zh,1982691671|76840,2,1,1
+same_customer_duplicate_rows,1982849287,8143,11597,MDHQ(Cerbo),FULL_INTEGRATION,1,8143,New England Center for Health LLC,2026-05-14 21:40:37,cmjxapcqh00490xfqj0iemvl7,1982849287|11597,2,1,1
+same_customer_duplicate_rows,1982849287,8143,11597,MDHQ(Cerbo),FULL_INTEGRATION,1,8143,New England Center for Health LLC,2026-05-14 21:40:37,cmj99im5t001r0xf1kdjc1y4r,1982849287|11597,2,1,1
+same_customer_duplicate_rows,1982988218,7731,10805,Practice Fusion,FULL_INTEGRATION,1,7731,Nova Wellness Center,2026-05-14 21:40:37,cmj98e6a1000n0xmu9u0ede6i,1982988218|10805,2,1,1
+same_customer_duplicate_rows,1982988218,7731,10805,Practice Fusion,FULL_INTEGRATION,1,7731,Nova Wellness Center,2026-05-14 21:40:37,cmjxapr00007z0xfqz8h5pnok,1982988218|10805,2,1,1
+same_customer_duplicate_rows,1992016737,10825,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmj98pbld000z0xt5nefetxyg,1992016737|17147,2,1,1
+same_customer_duplicate_rows,1992016737,10825,17147,MDHQ(Cerbo),FULL_INTEGRATION,1,10818,Parsley Health Virtual/Complete Care Anywhere,2026-05-14 21:40:37,cmjxaq2qe00az0xfq627ql2gm,1992016737|17147,2,1,1
