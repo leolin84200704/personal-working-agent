@@ -40,11 +40,14 @@ Two distinct checks, both required for prod-impacting changes:
 - **Verify on live, not mock**: a passing mock unit test is not "verified in prod". Reproduce the actual prod behavior against the real DB / running service before claiming a result. (VP-16850: an "empty result bug" was actually `max_advance_days=28` config, not a code bug.) Also verify the **peer-observed** state, not just your own side's log (INCIDENT-20260601: a lifecycle patch was verified only on the hanging pod, not the peer's session count → leaked for 3 days).
 - `pre-push` hook runs `prisma generate` + `nest build`; a build failure is real, not a "stale/pre-existing" illusion (VP-16521 was a missing `prisma generate` after a branch switch).
 
-## Gate 7 — Prod data fixes: bound the scope, then reverse-audit
+## Gate 7 — Prod data fixes: bound the scope, then verify at every layer
 For any prod `UPDATE`/`DELETE`:
 - Bound the `WHERE` to the current session — time window **and** explicit IDs. Never widen "just to be safe" (cleanup filter scope rule).
 - Remember SQL `NULL = NULL` is false — a JOIN/`WHERE` can silently miss rows (INCIDENT-20260529, customer 508387). After the write, **reverse-audit**: `SELECT` with a *broader* criterion to catch rows your filter missed.
 - After a batch `INSERT`/`UPDATE`, verify **100%** of affected rows, never spot-check (VP-16175 sat PENDING for 33 days).
+- **Consumer-layer readback, in the same work unit as the write.** A DB `SELECT` over the same connection that wrote only proves the row changed — it does not prove the serving path sees it (wrong DB/replica, cache, service reading a different source). Before reporting the fix done, read the changed data back through the layer downstream actually consumes — the core RPC / service API, not the DB. The fix is not "done" until this passes; it is part of the change, not an optional follow-up (VP-17810: the RPC readback happened only because Leo asked for it afterward).
+  - For `lis_core_v7` data: `lis.AddressService` / `PatientService` etc. via the **cloud mirror `10.224.0.199:30276`** (protos in `lis-backend-emr-v2/src/proto/`; reachable from local with VPN, or `kubectl exec` into the emr-v2 prod pod using its `dist/proto` + grpc-js). On-prem v1 `192.168.60.6:30276` is dead (ECONNREFUSED even pod-side, observed 2026-08-20) — do not burn time on it.
+  - No RPC covers the table? Then the readback is a **second, independent** DB connection (the account/path the consuming service itself uses), and say so explicitly in the report.
 
 ## Gate 8 — Push / deploy semantics
 - A feature/bugfix branch push does **not** auto-deploy. To deploy, open a **PR targeting `stage_test`** for approval — never `git push staging` directly, even if the branch is unprotected.
