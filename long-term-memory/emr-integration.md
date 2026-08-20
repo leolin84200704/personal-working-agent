@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.287
+score: 1.3365
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -29,6 +29,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
 - VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
@@ -92,11 +93,14 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17686
 - VP-17691
 - VP-17715
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17810
+- VP-17812
 - fhir-api
 tags:
 - emr
@@ -712,6 +716,13 @@ ORDER BY received_time DESC;
 | `emr_code_not_found` 有值 | Test code / bundle mapping 找不到 | 報 PM（Kristine），由 Order team 建立 bundle |
 | `order_input` 有值, `sample_id=NULL`, `emr_code_not_found=NULL` | 下單流程失敗（payment 或 Order API） | 手動 payment + order recovery |
 | `order_input=NULL`, `emr_code_not_found=NULL` | HL7 parsing exception | 查 EMR-Backend pod logs |
+
+**`emr_code_not_found` 是垃圾桶欄位，不能讀成「code missing」（VP-17752，2026-08-18）**——歷史上真正不認識的 code、**已知但 isOrderable=false 的 code**、未 provision 的 bundle、甚至 raw exception text（NumberFormatException、HTTP 408…）全部寫進同一欄。4,733 筆被標過，其中 **55 筆從未變成 sample**（2025-04 → 2026-08，`/parsley-la/orders/` 佔 15）。Triage 時：
+- **查 orderability 一律打 live pricing API（`getLegacyPackagePriceMapping`），絕不查 `lis_emr.package_price_mapping` mirror table**——mirror 全寫 `TRUE`、live API 回 `false`，照表查會把診斷帶去反方向（VP-17752 六個 code 全數如此）。
+- **一個 OBR error 否決整張 order**——同單其他 orderable tests 一起死。把失敗/成功 code 沿 isOrderable 邊界切開，本身就是診斷。
+- **PR #375（2026-08-18 live）後的行為**：classifier 分 `unknown_code` vs `not_orderable`；`not_orderable` 是 **terminal**（`parse_finished=1`、不 retry、第一次嘗試就發 Sentry alert）→ **terminal rows 會離開 `parse_finished=0` 的 stuck view，Sentry 是這類唯一的 surfacing path**。unknown_code 仍 retryable、耗盡才 alert。Sentry event 帶 `failure_class` tag（`test_code_not_orderable` / `test_code_not_found` / `customer_not_found` / `retry_exhausted`）。
+- **Leo 裁決（2026-08-18）：catalog 是對的**——isOrderable=false 是規則不是缺漏；vendor 端菜單過期要通知改，卡住的單**永遠無法復原、只能請 provider 重下**（PM 後續）。
+- 注意：**prod 的 `SENTRY_DSN` 在 2026-08-18 之前從未設過**（AKS + on-prem 都是），所以那之前「沒收到 alert」不代表沒有事故。
 
 ### 取得 provider NPI / 原始 HL7 / DB 存取（2026-06-29 補）
 - **`hl7_file_input.order_input` 不是原始 HL7**，是 emr-v2 轉換後的**送單 payload(JSON)**（含 `orderItems`/`item_id`/`chargeMethod`/`emr_payment_fail_reason`/`clinic_id`）；customer 解析失敗時為 NULL。→ 要拿 **provider NPI（ORC.12 / OBR.16，NPI 是第一個 `^` 子值）必須讀原始 `.hl7` 檔**，DB 沒存。

@@ -31,6 +31,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
 - VP-14787
 - VP-15279
 - VP-15952
@@ -81,11 +82,14 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17686
 - VP-17691
 - VP-17715
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17810
+- VP-17812
 - emr-integration
 - fhir-api
 tags:
@@ -93,7 +97,7 @@ tags:
 summary: 'Deleted all 3 VEJO integrations (vendors 17/18/43) from prod lis_emr: 41
   rows across 7 tables, transaction with count guards, full backup at ~/src/credential/vejo-deletion-backup-20260804.json.
   Zero activity ever (0 hl7, 0 results, 0 samples). Reverse-audit clean.'
-score: 0.6138
+score: 0.6209
 ---
 
 # VEJO integration deletion — 2026-08-04

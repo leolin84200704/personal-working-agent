@@ -2,10 +2,10 @@
 id: INCIDENT-20260817-onprem-stale-deploy
 title: emr-v2 on-prem prod pod has run Aug-4 code for 13 days — manual result repush
   for cust 4953 dies on Prisma enum PER_REPORT_GROUP
-status: active
+status: resolved
 category: emr_integration
 created: 2026-08-17
-updated: '2026-08-18'
+updated: '2026-08-19'
 links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
@@ -27,6 +27,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
 - VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
@@ -77,11 +78,14 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17686
 - VP-17691
 - VP-17715
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17810
+- VP-17812
 - emr-integration
 - fhir-api
 tags:
@@ -98,7 +102,7 @@ summary: 'Leo''s manual result publish for samples 2602947/2602948 (cust 4953 MD
   13.15 days = started 2026-08-04 18:28Z, so its baked Prisma client predates the
   2026-08-14 enum. Every main merge since 2026-08-04 11:14 PDT is absent from on-prem,
   which still OWNS 536 of 1036 LIVE result-enabled integrations.'
-score: 0.9675
+score: 1.0125
 ---
 
 # INCIDENT-20260817 — emr-v2 on-prem prod deploy drift (13 days)
@@ -224,3 +228,10 @@ HTTP 201），當時 uptime 13,251s → **process start 2026-08-18 18:33Z**，�
 3. **GitHub Actions 的綠燈只證明 AKS cloud 那條路。** emr-v2 的 on-prem 由 Jenkins 部署，
    `Push on main` success 對 on-prem 一無所知。要第二個訊號：`curl :31318/api/v1/health` 讀 `uptime`
    （不需要 cluster 權限；本機不在 VPN 上時會 curl exit 7，那是「測不到」不是「掛了」）。
+
+### [2026-08-19] RESOLVED（dream 判定）
+
+Drift 已於 2026-08-18 18:33Z 結束並經雙重 live 驗證（本檔 22:15Z repush round-trip +
+LIS-7690 的 uptime parity probe：on-prem 19,028s ≈ AKS 19,047s，同一 Jenkins run 重啟）。
+殘留事項各有去處：取證損失是永久的（教訓已記）；`:latest` 未 pin 記在 repos.md 與 LIS-7690；
+Key Vault 遷移 = VP-17756。本檔標 resolved。

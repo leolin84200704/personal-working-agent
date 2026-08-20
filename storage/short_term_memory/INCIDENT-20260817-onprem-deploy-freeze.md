@@ -2,10 +2,10 @@
 id: INCIDENT-20260817-onprem-deploy-freeze
 title: 'on-prem emr-v2 froze at 2026-08-04 for 13 days: a fatal Kafka guard on a pod
   with no Azure identity, hidden by maxUnavailable 0'
-status: active
+status: resolved
 category: technical
 created: 2026-08-17
-updated: '2026-08-18'
+updated: '2026-08-19'
 tags:
 - incident
 - deploy-skew
@@ -151,3 +151,13 @@ never reads threw out of `processFromFile` and killed the order. The authoritati
 4. hl7_file_input 6868/6869 re-parse confirmation (retry_num bumped 0→3 at 23:23:56Z).
 
 > **同一事故的另一面**：`INCIDENT-20260817-onprem-stale-deploy` — 症狀面與補救（MDHQ 兩份報告、cloud pod 重推、drift scope）。兩份刻意不合併：一份記症狀與補救，一份記機制。
+
+### [2026-08-19] RESOLVED（dream 判定）
+
+- 機制修復已 live 驗證：on-prem pod 真的在消費 Event Hub（SAS 進 Jenkins-sync ConfigMap），
+  且 2026-08-18 起與 AKS 同步重啟（LIS-7690 uptime parity probe）。
+- **Open item 4 已確認**：hl7_file_input 6868/6869 的 re-parse — 2026-08-19 daily triage
+  在 72h 窗（涵蓋 08-17）掃到 27 筆全部 parse 成功、`parse_finished=0` 為 0 筆，
+  兩單已恢復。
+- Open item 1（SP + Key Vault）= **VP-17756**（Leo:「未來會做」）；item 2 rotation hazard
+  跟著 VP-17756；item 3 是設計問題，留給該 ticket。本檔標 resolved。

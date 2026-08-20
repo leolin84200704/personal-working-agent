@@ -2245,3 +2245,56 @@ provider/clinicadmin calendar 抄一次**，之後**永不再同步**。
 不要等辯論或 review 才觸發。VP-17714 另有一條值得保留的自律：
 **自己提的反對理由查不實，要主動撤回**（擔心錯連結外溢到 Google/Outlook → 查完發現 150105
 根本沒有該 integration、歷來 0 筆同步，回報時明講這條不成立）。
+
+## 【EXTRACTED 2026-08-19 · VP-17752】「Alerting 存在」不等於「alerting 會響」
+
+- **prod 的 `SENTRY_DSN` 從未設過**：VP-17544 把 order-abandonment 上報寫好、測綠、部署——但 DSN
+  只進了 STAGING ConfigMap。AKS 與 on-prem 兩個 prod pod 每次開機都 log
+  `SENTRY_DSN not configured — error reporting is disabled`，講了好幾週沒人讀。
+  **prod 從來沒有任何一則 order-abandonment alert 響過**，這就是 hl7_file_input 6848/6556
+  隱形六天／一個月的全部原因。
+- 修法（2026-08-18，已完成）：DSN + `SENTRY_ENVIRONMENT=production` 寫進三份 ConfigMap
+  （AKS default ns 的 Jenkins-sync 副本、AKS emr-v2 ns、on-prem），pod 重啟後**從 pod 內
+  發真實 test event 拿回 HTTP 200 + event id 才算通**（`failure_class=channel_test`）。
+  `Sentry initialised` 只代表 DSN 能 parse，不代表通。
+- **檢查程序**：信任任何 alert path 之前——(1) 讀 pod 自己的 startup line；(2) 從該環境發一則
+  真實 event 走完全程。這是 Hot lesson「Channel liveness is third-party state」的 config 變體。
+- **同形事故**：VP-17559 的 Key Vault break（staging 驗過、prod 假設會通）。
+  **在容易的環境驗過 config，不能推定另一個環境也有**——staging/prod ConfigMap 是兩份實體。
+- 殘留：`SENTRY_DSN` / Kafka SAS 搬 Key Vault = VP-17756；Sentry 端 alert rule（依
+  `failure_class` 路由給 PM）未設，Leo 已知。
+
+## 【EXTRACTED 2026-08-19 · LIS-7690】emr-v2 / on-prem 操作 gotchas（全部 probe 實證）
+
+- **fresh worktree push 必撞 pre-push hook**：`.git/hooks/pre-push` 跑 `npx prisma generate`，
+  沒 `node_modules` 時 npx 抓 Prisma 7.x，會拒絕 repo（pin ^6.15）的 `datasource.url`（P1012）。
+  解法：用 pinned binary 驗（`node_modules/.bin/prisma validate` + dummy `DATABASE_URL`）再
+  `--no-verify` push。
+- **appserver04（192.168.60.5）只收密碼 auth，key auth 真的被拒**——歷來所有 BatchMode 失敗
+  都是這原因，不是不通。macOS 無 sshpass，用 `/usr/bin/expect` + env var 帶密碼。
+  完整 recipe + 密碼在 `~/src/credential/onprem-appserver-ssh.md`（不入 repo）。
+  kubectl 在 appserver04 `/usr/local/bin/kubectl`（k8s v1.22.3，6 nodes = 192.168.60.2-7）。
+- **on-prem ConfigMap 是明文 secret 庫**（prod DB URL 含密碼、JWT_SECRET、Kafka SAS、
+  `VIBRANT_API_TOKEN`）——查值用 `-o jsonpath` 指定 key，**絕不 grep 整份 yaml dump**。
+- **emr-v2 的 `/health` 無法辨識環境**：`environment` 欄位是 `NODE_ENV`，staging pod 也回
+  `production`；真值在 `ENVIRONMENT`/`SERVER_ENVIRONMENT` env。`SWAGGER_ENABLED=false` 沒接線，
+  `/api/docs` 照樣 200。
+- **live cluster 有 repo 裡不存在的物件**：emr-v2 兩條 short-path ingress（order/fhir）、
+  transformer-v2 的 Service+Ingress 全都只在 cluster 裡。**寫 endpoint 文件 / 查路由一律
+  probe live cluster，不能只讀 repo yaml**。
+- **on-prem prod image tag 是 `:latest` 非 SHA-pinned**——INCIDENT-20260817 十三天 silent drift
+  的結構性成因，尚未修。
+- emr-v2 auth 兩條路（`jwt.strategy.ts`）：內部 HS256（可自組，secret 在 prod ConfigMap；
+  mint 工具 + 說明在 `~/src/credential/emr-v2-jwt-signing.md` / `mint-emr-v2-token.py`，
+  驗 token 用 `integration-management/health`——`@SkipDataAccessCheck` + read-only）；
+  partner FHIR RS256（私鑰在 OAuth service，不可自組）。secrets 一律留在 credential 目錄，LTM 只記指標。
+
+## 【EXTRACTED 2026-08-19 · RESULTCHECK】report-status API 的 token 前綴 + sandbox 連 prod DB
+
+- `getReportStatusListV2` / `testHierarchyForReports`：`Authorization: <token>` **RAW，
+  不加 Bearer**——加了直接 401。（對照：`getLegacyBundleMapping` 用 ORDER_API_TOKEN 時**要** Bearer；
+  同一個 pricing endpoint 用 VIBRANT_API_TOKEN 時又拒絕 `bearer `。每個 endpoint 記各自的前綴，別類推。）
+- 從本機 sandbox 連 prod `lis_emr`（lisportalprod2）現在強制 TLS：mysql2 要帶
+  `ssl:{rejectUnauthorized:false}`，否則 `--require_secure_transport=ON` 直接拒連。
+- on-prem coresamples gRPC `192.168.60.6:30276` 從本機 ECONNREFUSED 時，cloud
+  `10.224.0.199:30276` 是可用替代。

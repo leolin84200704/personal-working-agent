@@ -105,7 +105,7 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
 ### LIS-transformer-v2
 - **Purpose**: LIS frontend GraphQL API gateway
 - **Tech**: NestJS 11, TypeScript, Prisma (PostgreSQL + MySQL dual schema)
-- **Port**: 3390
+- **Port**: 3390。**部署端點（LIS-7690 實測 2026-08-18，詳見 repo README PR #571）**：AKS-only（ns `transv2`，無 on-prem、無 NodePort）——prod `https://api.vibrant-america.com/v2/portal/trans-service` → svc `lis-transv2-service:3246`（3 replicas）、staging `.../trans-service-st` → `:3247`。GraphQL introspection 兩個 cloud env 都**關**（僅 `platform_type==='local'` 開，Bishop Fox hardening，不是故障）。**v1/v2 前綴分界**：`/v1/...`（含 wellness `/v1/portal/trans-service`、`/v1/portal/calendar`）全部是 v1 `LIS-transformer`；本 repo 只服務 `/v2/portal/trans-service`。Service/Ingress 物件不在 repo yaml，只在 cluster。
 - **Key Areas**: `src/trans/` (orders/patients), `src/calendar/`, `src/setting/`, `src/questionnaire/`
 - **Setup**: `npx prisma generate` for both schemas, then `npm run start:dev`
 - **Migration scripts**: `scripts/` 目錄（standalone ts-node）或 `src/calendar/migration/`（NestJS service，但 gRPC 不可用）
@@ -143,7 +143,7 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
 ### lis-backend-emr-v2
 - **Purpose**: EMR system backend (AutoIntegrate) — **future replacement for EMR-Backend (Java legacy)**
 - **Tech**: NestJS, TypeScript, MySQL 8.0, Prisma, Kafka, BullMQ (sidecar Redis `emptyDir`)
-- **Port**: 3000 (HTTP) / 5000 (gRPC self-server)。on-prem NodePorts：prod gRPC `192.168.60.6:31317`、prod HTTP `31318`（31316 是死的 legacy port，yaml 註解已改、Jenkinsfile echo 仍殘留）；staging gRPC `31319` / HTTP `31320`。
+- **Port**: 3000 (HTTP) / 5000 (gRPC self-server)。on-prem NodePorts：prod gRPC `192.168.60.6:31317`、prod HTTP `31318`（31316 是死的 legacy port，yaml 註解已改、Jenkinsfile echo 仍殘留）；staging gRPC `31319` / HTTP `31320`。**另有兩個 repos 先前漏記的 live gRPC NodePorts（LIS-7690 cluster 實測 2026-08-18）**：`28305`（`lis-emr-v2-grpc-service-prod`）、`28301`（`lis-emr-v2-grpc-service`），都 → container 5000；in-cluster 另有 `lis-emr-v2-internal-{prod,staging}` 與舊 ClusterIP `lis-emr-v2-http-service{,-prod}`（28300/28302→3000）。公開 HTTPS 端點全表在 **emr-v2 README「Service Endpoints」section（PR #377）**，全部 live 驗證過。⚠ on-prem prod image tag 是 **`:latest` 非 SHA-pinned** — INCIDENT-20260817 十三天 silent drift 的結構性成因，未修。
 - **⚠️ `.env DATABASE_URL` 指 prod**: `lisportalprod2.mysql.database.azure.com / lis_emr`，不是 dev。`prisma migrate deploy` / `db execute` / `db push` 前要先 verify schema element 存在。`_prisma_migrations` table **不存在於 prod**，所以 `prisma migrate status` 會報所有 migration 未 applied（schema 早已 manual SQL apply）— 別誤信 status，個別 `SHOW COLUMNS` / `SHOW TABLES` 驗證。
 - **Repo convention `/scripts/` 在 `.gitignore`**：one-shot ts-node ops scripts（`_apply-*.ts`, `seed-*.ts`）不入版控。deploy-required 的 seed 改放 `prisma/seed.ts` 或 dump SQL fixture 進 migration folder；ad-hoc script 留 local。
 - **JWT auth `isAdmin` derive 規則**：`auth.service.ts:36-41` 從 `internal_user_role` 比對 allowlist `['admin','super_admin','system_admin']` (lowercase) 算 isAdmin — payload 內直接寫 `isAdmin: true` 會被覆蓋。Bypass `validateCustomerAccess` / `validateApply` 要設 `internal_user_role: 'admin'`，不是 `'sales'`。Auth header 用 JWT_SECRET 從 .env 簽出來即可（HS256）。
@@ -197,6 +197,7 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
 - **Purpose**: Legacy Java EMR order parsing (being migrated to emr-v2)
 - **Tech**: Java 8, Maven, MyBatis, gRPC
 - **Build**: Run mybatis-generator + protobuf plugins, then `mvn package`
+- **部署狀態（LIS-7690 cluster 實測 2026-08-18）**：on-prem 四個 deployment（`lis-emr-prod`/`lis-emr-result-prod`/`lis-emr-dev`/`lis-emr-result-dev`）**全部 0/0 replicas = 完全停止**；`emr-prod` Service（50051→NodePort 31316）還在但無人應答，`~/src` 下無任何 repo 引用該 port。VP-17460 的「兩條 Java reader path 待確認」在 deployment 層面已不可能在跑。
 
 ### LIS-backend-results-grpc
 - **Purpose**: gRPC server for test results — `testresult.TestResultInfoGrpcService` (`getTestsResultsDetailData` 等). lis-backend-emr-v2 result generation step 5 的下游

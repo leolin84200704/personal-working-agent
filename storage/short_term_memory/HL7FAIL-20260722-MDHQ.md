@@ -25,6 +25,7 @@ links:
 - QH-4352
 - QH-4608
 - QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
 - VEJO-DELETION-20260804
 - VP-14787
 - VP-15279
@@ -77,11 +78,14 @@ links:
 - VP-17628
 - VP-17631
 - VP-17685
+- VP-17686
 - VP-17691
 - VP-17715
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17810
+- VP-17812
 - emr-integration
 - fhir-api
 tags:
@@ -97,7 +101,7 @@ summary: 'Two 07-22 hl7_file_input failures (6673 Caroline Xanthakis / 6677 Ange
   retained local file on the next 15-min tick. Samples 2602089/2602090 created, correct
   customer+clinic, no duplicates. No Jira ticket (Leo direct request); requested_by=customer_not_found-fix-20260723.'
 jira_status: none
-score: 0.4114
+score: 0.4162
 ---
 
 # HL7FAIL-20260722 — MDHQ customer_not_found x2 (Caroline Xanthakis / Angela Jordan)
