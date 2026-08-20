@@ -95,7 +95,31 @@ with tempfile.TemporaryDirectory() as tmp:
           ["INCIDENT-20260518", "QH-1104", "VP-16720", "VP-17748"])
 
     dropped = sorted(prior["entry_ids"] - set(ef.ENTRY_ID_RE.findall(out)))
-    check("an entry with no STM source is reported as dropped", dropped, ["VP-16720"])
+    check("an entry with no STM source is detected as unrenderable", dropped, ["VP-16720"])
+
+    # ...and is carried over rather than refused. Refusing would have been worse
+    # than useless: an orphan stays an orphan, so every later run would refuse
+    # too, and the only escape would be --prune — deleting the very thing the
+    # check exists to protect.
+    carried = ef.orphan_entries(path, {"VP-17748"})
+    carried_ids = sorted(e["ticket"] for entries in carried.values() for e in entries)
+    check("the orphan is recovered from the file itself", carried_ids, ["VP-16720"])
+    section = list(carried.keys())[0]
+    check("it keeps its section", section, ("other", "Other"))
+    check("it keeps its body", "body text" in carried[section][0]["body"], True)
+    check("it keeps its date", carried[section][0]["date"], "2026-06-01")
+
+    merged = dict(grouped)
+    for key, entries in carried.items():
+        merged.setdefault(key, []).extend(entries)
+    out2 = ef.render(merged, prior)
+    check("a carried entry survives the next render",
+          sorted(ef.ENTRY_ID_RE.findall(out2)), ["VP-16720", "VP-17748"])
+    check("nothing is left to drop once orphans are carried",
+          sorted(prior["entry_ids"] - set(ef.ENTRY_ID_RE.findall(out2))), [])
+
+    check("an entry the scan DID produce is not treated as an orphan",
+          ef.orphan_entries(path, {"VP-16720"}), {})
 
     # No prior file: the first run must still work.
     fresh = ef.render(grouped, ef.read_existing(pathlib.Path(tmp) / "absent.md"))
