@@ -7,7 +7,7 @@ score: 0.1615
 base_weight: 0.9
 urgency: 4
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-20
 summary: Leo's working rules for this instance — reporting, ticket handling, Jira
   mechanics, and repo hygiene. The job-specific residue of the native auto-memory
   store; universal engineering discipline lives in factory ENGINEERING-LESSONS.
@@ -79,6 +79,17 @@ links:
   staging **and** prod → post-deploy health clean → live verification *after* the
   final deploy recorded in STM. "Requires a manual step before deploy" is a red
   flag, not a footnote.
+- **A "stop chasing this" decision from Leo is recorded in the affected STM the
+  same session** — the nightly closeout audit re-derives open items from STM, so
+  a no-follow-up decision that lives only in conversation gets re-raised every
+  night until the reminder becomes noise. Write a dated `Leo: no further
+  follow-up` note under the STM's latest section (keep the finding itself on
+  record; only the action leaves the carry list). 2026-08-20: three carried
+  digest items (VP-17734 classic-PDF defect, VP-17686 staging rows, VP-17825
+  main promotion — the latter runs on a fixed release schedule and was never an
+  action item) were closed out this way after the VP-17734 flag had repeated
+  three nights. Corollary: a digest flag carried ≥3 nights is a question for
+  Leo, not a permanent fixture.
 - **A defect found in our own scope becomes a ticket in the same session** —
   and the reverse for other teams. Own scope (emr-v2, transformer, Leo's
   services): file it, assign Leo, link the parent, then reference the ticket id
