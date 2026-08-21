@@ -171,3 +171,61 @@ MSH-4 的語意是「送件的診所」，我們的 `clinic_id` 記的是「該 
 3. 21 個 multi-customer key 中，實際來過單的只有 Parsley 的 2 個 NPI（5 筆單），
    歷史答案是 11733 / 11740。若要收斂資料，就把這兩個 NPI 的 `Virtual` 列（14933/14944）
    `ordering_enabled` 關掉，讓現況變成明文規則，而不是靠 row order。
+
+---
+
+# 已執行：(NPI, clinic_id) 去重（2026-08-21）
+
+Leo 裁定三件事後執行：唯一性範圍取 **(NPI, clinic_id)**（保留跨診所 provider）；
+**有 result 傳送史的列只關 `ordering_enabled`、不刪**；保留者以**實際有 result 活動的 customer** 為準。
+
+- 備份（執行前全量）：`~/src/credential/ehr-integrations-live-npi-backup-20260821.json`（1,211 列，所有 LIVE 帶 NPI 的列）
+- 動作清單：`reference/npi-clinic-dedup-plan-20260821.csv`（198 列，含每列的 keep_id / rtr 量 / 判斷依據）
+
+| 項目 | 值 |
+|---|---|
+| 處理的 (NPI, clinic) 群組 | 180 |
+| **DELETE** | **155 列**（無自身 result 傳送史） |
+| **DISABLE**（`ordering_enabled=0`，列保留） | **43 列**（42 列有自身 result 傳送史 + 1 列 `cmmcb6x79002kyn07hbf6ehb2` 掛著 3 筆 onboarding email 寄送紀錄，不刪以保 audit trail） |
+| 表總列數 | 1,270 → 1,115（−155） |
+| LIVE + ordering 帶 NPI 的列 | 1,144 → **946**；distinct NPI 889；clinic 549 |
+| 保留者與「原本行為」不同的群組 | 42（其中 36 組是同 customer 的換列，無路由變化；**6 組是跨 customer**，見下） |
+| `last_modified_by` 標記 | `hung.l@zymebalanz.com NPI-CLINIC-DEDUP-20260821` |
+
+## 6 組跨 customer 的路由變更（刻意，依「result 活動」準則）
+
+| NPI \| clinic | 原本會走到 | 改為 | 依據（result 傳送筆數） |
+|---|---|---|---|
+| 1134304983 \| 11738 | 10655 | **8221** | 0 → 60 |
+| 1457616708 \| 71872 | 7121 | **4317** | 0 → 195 |
+| 1669482139 \| 132145 | 30177 | **30111** | 6 → 277 |
+| 1245828383 \| 149877 | 46332 | **47629** | 2 → 60 |
+| 1487999850 \| 15956 | 7163 | **10335** | 0 → 3 |
+| 1639180516 \| (clinic NULL) | 1974 | **1968** | 5 → 6 |
+
+Parsley 的 4 個 NPI 維持實測歷史結果（11733 / 11740 / 10820 保留，`Virtual` 那組的 14933/14940/14942/14944 移除）。
+
+## 驗證（100%，非抽查）
+
+- 刪除的 155 個 id：`SELECT` 回 0 筆存在
+- 停用的 43 個 id：43/43 為 `ordering_enabled=0` 且 `status='LIVE'`
+- 不變量：LIVE + ordering 中 `(customer_npi, clinic_id)` 重複 = **0**
+- 反向稽核（更寬條件）：仍有 52 個 NPI 落在 >1 個 ordering 列 —— 全部是**跨診所的同一位醫師**（預期保留），
+  其中 15 個是「一列 clinic_id 為 NULL + 一列有真 clinic」的配對，見下方待決事項
+- Consumer-layer readback：在 emr-v2 **prod pod 內**用 pod 自己的 Prisma client 重跑，
+  duplicates=0、946 列，且 4 個原本歧義的 NPI 各自只解出 1 個候選列
+  （11733 / 11740 / 8221 / 4317），與預期一致
+
+## 待決：15 組「NULL clinic + 真 clinic」配對（未動）
+
+`clinic_id IS NULL` 的列與同 NPI 的正常列分屬不同群組，所以沒被去重。這批不只是冗餘 ——
+`resolveOrderingIntegration` **不過濾 clinic**，NULL-clinic 列若贏了 tie-break，parser 會因
+`clinic_id=0` 直接判 `customer_not_found`，訂單失敗。目前 LIVE+ordering 仍有 **59 列** clinic_id 為 NULL/0。
+
+15 組配對（左＝有真 clinic，右＝NULL）：1003336108 / 1023218161 / 1083900310 / 1124183017 /
+1144288861 / 1285925735 / 1295025658 / 1427076488 / 1548367923 / 1558520965 / 1629059274 /
+1629512744 / 1669482139 / 1679508675 / 1790723013。
+
+其中 1295025658、1427076488、1679508675 的 NULL 列是 `FULL_INTEGRATION`，會**贏過**真 clinic 的
+`ORDER_ONLY` 列 → 這些 NPI 的單今天應該是失敗的。要按同一套政策處理（有 result 史→停用、否則刪），
+還是先補 `clinic_id`（若那是設定漏填而非重複），需要 Leo 決定。

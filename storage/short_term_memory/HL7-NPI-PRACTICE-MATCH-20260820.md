@@ -184,3 +184,30 @@ score: 1.0125
 - 結論修正：建議 **分層 fallback**（ORC-12 解得到就以它為準，(npi, practice) 只當 fallback），
   上線前必做「MSH-4 vs clinic_id vs coresamples clinic」全量對帳；若要收斂資料，
   就把 Parsley 那 2 個 NPI 的 Virtual 列（14933/14944）ordering_enabled 關掉，讓現況變成明文規則。
+
+## 已執行：(NPI, clinic_id) 去重（2026-08-21，Leo 指令 + 三項裁定）
+
+裁定：唯一性取 **(NPI, clinic_id)**（保跨診所 provider，也與 npi+practice 複合 key 一致）；
+**有 result 傳送史的列只關 ordering_enabled 不刪**；保留者以**實際有 result 活動的 customer** 為準。
+
+- 備份：`~/src/credential/ehr-integrations-live-npi-backup-20260821.json`（1,211 列，執行前全量）
+- 動作清單：`reference/npi-clinic-dedup-plan-20260821.csv`（198 列）
+- 執行結果：180 群組 → **DELETE 155 列 / DISABLE 43 列**（42 有 result 史 + 1 掛 onboarding email 寄送紀錄）。
+  表 1,270→1,115 列；LIVE+ordering 帶 NPI 1,144→946 列 / 889 NPI / 549 clinic。
+  `last_modified_by='hung.l@zymebalanz.com NPI-CLINIC-DEDUP-20260821'`
+- **不變量成立**：LIVE + ordering_enabled 中 `(customer_npi, clinic_id)` 重複 = 0（DB 端與 prod pod 端各驗一次）
+- Consumer readback（Gate 7）：在 emr-v2 prod pod 內用 pod 自己的 Prisma client 重跑
+  resolveOrderingIntegration 的邏輯 —— 4 個原本歧義的 NPI 各只解出 1 列（11733 / 11740 / 8221 / 4317）
+- **6 組跨 customer 的路由刻意改變**（依 result 活動）：1134304983|11738 10655→8221（0→60 筆）、
+  1457616708|71872 7121→4317（0→195）、1669482139|132145 30177→30111（6→277）、
+  1245828383|149877 46332→47629（2→60）、1487999850|15956 7163→10335（0→3）、
+  1639180516|NULL 1974→1968（5→6）。其餘 36 組是同 customer 換列，無路由變化。
+- 38 個 customer 從此沒有 ordering-enabled 列（重複帳號，含 Parsley Virtual 的 14933/14940/14942/14944）；
+  其中 17 列刪除後該 customer 也不再有 result-capable 列，但這 17 個 customer 的 rtr 量全部為 0（休眠帳號）。
+
+### 待決（未動）：15 組「NULL clinic + 真 clinic」配對
+`clinic_id IS NULL` 與正常列分屬不同群組所以沒被去重，且 `resolveOrderingIntegration` 不過濾 clinic
+→ NULL 列若贏 tie-break，parser 會因 clinic_id=0 判 customer_not_found（訂單失敗，不只是冗餘）。
+LIVE+ordering 仍有 59 列 clinic_id NULL/0。其中 1295025658 / 1427076488 / 1679508675 的 NULL 列是
+FULL_INTEGRATION，會贏過真 clinic 的 ORDER_ONLY 列 → 這些 NPI 的單今天應該就是失敗的。
+選項：照同一套政策處理，或先補 clinic_id（若是漏填而非重複）。等 Leo。
