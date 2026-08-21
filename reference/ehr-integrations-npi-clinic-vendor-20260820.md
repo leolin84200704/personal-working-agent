@@ -229,3 +229,56 @@ Parsley 的 4 個 NPI 維持實測歷史結果（11733 / 11740 / 10820 保留，
 其中 1295025658、1427076488、1679508675 的 NULL 列是 `FULL_INTEGRATION`，會**贏過**真 clinic 的
 `ORDER_ONLY` 列 → 這些 NPI 的單今天應該是失敗的。要按同一套政策處理（有 result 史→停用、否則刪），
 還是先補 `clinic_id`（若那是設定漏填而非重複），需要 Leo 決定。
+
+---
+
+# 去重後殘餘的不確定性（2026-08-21 盤點）
+
+清單：`reference/npi-remaining-ambiguity-20260821.csv`（52 列，含勝者、tie 判定、兩邊的 result 量）
+
+## 依 ORC-12 送什麼分兩種情況
+
+**(1) ORC-12 送 customer_id（`fetchById`）→ 幾乎乾淨，只剩 3 個 customer 有 >1 個 ordering 列**
+（候選集是該 customer 的所有列，不過濾 NPI/clinic）
+
+| customer | 列數 | clinic 數 | 說明 |
+|---|---|---|---|
+| 43262 | 4 | 4 | Anna Emanuel（FollowThatPatient）真的跨 4 家診所 → 選錯會掛到別家 clinic |
+| 22533 | 2 | 1 | 同 clinic、兩個不同 NPI → clinic 相同，對下單影響小 |
+| 8310 | 2 | 1 | 同 clinic 同 NPI，但其中一列 `clinic_id IS NULL` → 選到那列會失敗 |
+
+**(2) ORC-12 送 NPI（`fetchByNpi`；MDHQ 已證實走這條）→ 還有 52 個 NPI 歧義**
+
+| 分類 | 數量 |
+|---|---|
+| 多 clinic + 多 customer | 50 |
+| 多 clinic、同 customer | 2 |
+| 勝者由 degenerate tie（`updated_at` 完全相同 → DB row order）決定 | 22 |
+| **勝者是 `clinic_id IS NULL` 的列 → 今天下單直接失敗** | **6** |
+| NPI 欄位是垃圾值（`Internal N`） | 1 |
+
+這 52 個全部是「同一位醫師在多家診所」的合法形狀 —— 正是 (NPI, clinic) 唯一性刻意保留的那批。
+**在只比對 NPI 的前提下無法再收斂**；一旦比對加入 practice_id，它們全部變成確定
+（因為 (NPI, clinic) 現在已經唯一）。也就是說：**剩下的不確定性 100% 來自「比對時沒有用 practice」，不是資料還髒。**
+
+## 立即可修的 6 個失敗案例（勝者是 NULL-clinic 列）
+
+| NPI | 真 clinic | 狀態 |
+|---|---|---|
+| 1285925735 | 17147 Parsley Health Virtual | **近 90 天活躍** |
+| 1295025658 | 17147 Parsley Health Virtual | **近 90 天活躍** |
+| 1679508675 | 17147 Parsley Health Virtual | **近 90 天活躍** |
+| 1003336108 | 47510 FEM Centre (Colleyville) | 無近期單 |
+| 1427076488 | 43943 FEM Centre (Colleyville) | 無近期單 |
+| 1558520965 | 40752 Index Health, Inc | 無近期單 |
+
+## 選錯代價最大的幾個（兩個 customer 都有真實 result 量）
+
+| NPI | customer / result 筆數 | 現在的勝者 |
+|---|---|---|
+| 1710993514 | 10344: 849 vs 19574: 0 | 10344（TIE 決定） |
+| 1043533128 | 6305: 773 vs 23199: 2 | 6305 |
+| 1932611027 | 18804: 197 vs 5568: 110 | 18804（TIE 決定） |
+| 1851809230 | 14761: 141 vs 6306: 0 | 14761（TIE 決定） |
+| 1487999850 | 22533: 105 vs 10335: 3 | 22533（TIE 決定） |
+| 1740214022 | 25168: 78 vs 25337: 0 | 25168 |
