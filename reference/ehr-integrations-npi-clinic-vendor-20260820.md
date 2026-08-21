@@ -282,3 +282,58 @@ Parsley 的 4 個 NPI 維持實測歷史結果（11733 / 11740 / 10820 保留，
 | 1851809230 | 14761: 141 vs 6306: 0 | 14761（TIE 決定） |
 | 1487999850 | 22533: 105 vs 10335: 3 | 22533（TIE 決定） |
 | 1740214022 | 25168: 78 vs 25337: 0 | 25168 |
+
+---
+
+# 方案 B 執行 + 全量非確定性盤點（2026-08-21）
+
+## B：停用所有無法通過 clinic 檢查的 ordering 列
+
+範圍從 6 列擴大到**所有 `clinic_id` 為 NULL/0 的 LIVE ordering 列**——這類列被選中時 100% 以
+`customer_not_found` 失敗（`applyIntegrationOverrides` 填 0 → parser 直接退），留著 `ordering_enabled=1`
+純屬危害，也是其他組隨時可能翻掉的來源。
+
+- 備份：`~/src/credential/null-clinic-disable-backup-20260821.json`（59 列）
+- 執行：**59 列 `ordering_enabled=0`**（含那 6 個現行失敗案例），`last_modified_by='hung.l@zymebalanz.com NULL-CLINIC-DISABLE-20260821'`
+- LIVE+ordering 列 956 → **897**
+- 驗證：59/59 已為 0；反向稽核「仍有無法通過 clinic 檢查的 ordering 列」= **0**；被停用的 25 列仍保有 result 能力（設計如此）
+
+那 6 個 NPI 現在會落到同 NPI 已在運作的列：14936/14932/14930 @17147、21723 @40752（Index Health）、
+5059 @47510、6748 @43943。
+
+## 全量非確定性盤點（B 之後）
+
+方法：不用 `ehr_integrations.customer_npi` 近似，而是照實際比對路徑——在 prod pod 內對 **845 個 NPI**
+逐一呼叫 coresamples `GetCustomerByNPINumber` 取真正的 customer 集合，再組出候選列集合。
+清單：`reference/order-routing-nondeterminism-20260821.csv`
+
+| 路徑 | 有歧義的 key | 由 type 決定 | 由 updated_at 決定 | **由 DB row order 決定** |
+|---|---|---|---|---|
+| ORC-12 送 NPI（`fetchByNpi`） | **35** 個 NPI | 15 | 5 | **15** |
+| ORC-12 送 customer_id（`fetchById`） | **2** 個 customer | 0 | 0 | **2** |
+
+- 35 個 NPI 案例裡，**34 個候選列跨多個 clinic**、33 個跨多個 customer
+- customer 路徑只剩 2 個：
+  - `43262`（Anna Emanuel，FollowThatPatient）4 列跨 4 診所（2930/8003/36290/144510）→ 永遠落在 2930，純靠 row order
+  - `22533`（Discovery Health Healing Center）2 列同診所 40598、兩個不同 NPI、**report_option 一個 CLASSIC 一個 PERSONALIZED** → 報告樣式由 row order 決定
+
+## 4 個現在選錯帳號的（row order 決定，且勝者不是有量的那個）
+
+| NPI | 現在的勝者 | result 量 | 應該是 |
+|---|---|---|---|
+| 1932611027 | 5568 @48359 | 5568:110 vs 18804:**197** | 18804 |
+| 1851809230 | 6306 @122453 | 6306:0 vs 14761:**141** | 14761 |
+| 1659604197 | 33169 @138608 | 33169:0 vs 33203:**9** | 33203 |
+| 1740623677 | 7337 @10040 | 7337:0 vs 15964:**9** | 15964 |
+
+## 結論：資料層已到極限，完全消除必須改比對規則
+
+37 個案例裡只有 1 個（cust 22533）是「同診所」的純重複，其餘 **全部是同一位醫師在多家診所／多個帳號**。
+比對的 key（NPI 或 customer_id）裡沒有診所這個維度，所以：
+
+- **資料層無法再消除** —— 除非砍掉其他診所的整合（等於讓那些診所不能下單）
+- **一旦把 practice_id 納入比對，這 34 個全部一次歸零** —— 因為 `(customer_npi, clinic_id)` 已經唯一（前一輪達成）
+
+可做的中間降級：把 17 個 row-order 案例改成「明文資料決定」（用 result 量選勝者後把它的 `updated_at` 推新，
+或啟用一直存在但 code 從未讀取的 `priority` 欄位），順手修正上面 4 個選錯的。這不會讓選擇「正確」，
+但會讓它**不再因為無關的 UPDATE 而翻**。
