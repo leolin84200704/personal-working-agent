@@ -337,3 +337,74 @@ Parsley 的 4 個 NPI 維持實測歷史結果（11733 / 11740 / 10820 保留，
 可做的中間降級：把 17 個 row-order 案例改成「明文資料決定」（用 result 量選勝者後把它的 `updated_at` 推新，
 或啟用一直存在但 code 從未讀取的 `priority` 欄位），順手修正上面 4 個選錯的。這不會讓選擇「正確」，
 但會讓它**不再因為無關的 UPDATE 而翻**。
+
+---
+
+# 給 PM 的清單：診所歸屬無法驗證（2026-08-21）
+
+方法：取近 180 天 **1,177 筆**真實 inbound 訂單（有 `order_input.clinic_id` 者），從 on-prem pod 讀
+**原始 HL7**（1,176 筆比對成功），抽出 MSH-4 / MSH-6 / ORC-12 / ORC-17，與我們**實際送給 Place Order 的
+`clinic_id`** 逐筆對照。清單：
+- `reference/hl7-practice-field-by-vendor-20260821.csv`（53 個 vendor×MSH-4×送出 clinic 組合）
+- `reference/hl7-practice-vs-sent-clinic-mismatch-20260821.csv`（逐筆）
+
+## 每家 vendor 送什麼
+
+| Vendor | 訂單數 | ORC-12 送什麼 | 診所欄位 | 可用嗎 |
+|---|---|---|---|---|
+| MDHQ (Cerbo) | 917 | NPI | MSH-4，語意混雜 | ✘ |
+| THM | 236 | NPI | MSH-4 = `0` 或空（184 筆）；其餘是 customer_id | ✘ |
+| OPTIMANTRA | 16 | NPI | MSH-4 = customer_id | ✘ |
+| **FollowThatPatient** | 4 | **customer_id** | **MSH-6 + ORC-17 = 我們的 clinic_id** | **✔** |
+| Practice Fusion | 2 | NPI | MSH-4 = customer_id | ✘ |
+| NICHOLS | 1 | NPI | MSH-4 = 1999（不明） | ✘ |
+
+## MSH-4 的語意分布（1,176 筆）
+
+| MSH-4 實際是什麼 | 組合數 | 訂單數 |
+|---|---|---|
+| 就是我們的 `clinic_id`（可用） | 19 | **285** |
+| 其實是 `customer_id`（provider 帳號，不是診所） | 23 | **665** |
+| 對不上我們任何欄位 | 9 | **223** |
+
+也就是說：**只有 24% 的訂單，HL7 裡真的帶著我們認得的診所號**。其餘 76% 送的是 provider 帳號或
+無法解讀的數字 —— 這些單的診所完全由我們自己的 `ehr_integrations` 那一格決定，而且沒有任何交叉驗證的方法。
+
+## 兩個要談的問題（性質不同）
+
+**問題 1 — ORC-12 送 provider 帳號、而該帳號跨多個 location**（目前僅 FollowThatPatient / Next Health）
+
+已經誤送：`sample 2597376`（2026-07-16）HL7 的 MSH-6 與 ORC-17 都寫 **36290**（Next Health Studio City），
+我們送出 **2930**（Next Health 主店）。原因：ORC-12 = customer `43262`（Anna Emanuel）在 4 個 clinic
+各有一列，比對不看診所 → tie-break 永遠取 2930。同一組的另兩筆碰巧對（一筆的 provider 帳號只掛一個
+location、一筆本來就是 2930）。
+
+要談：Next Health 每個 location 給獨立的 provider 帳號，或我們改讀 ORC-17 / MSH-6（他們已經在送了）。
+
+**問題 2 — 其餘 vendor 根本沒送可用的診所號**（MDHQ / THM / OptiMantra / PF / NICHOLS，1,172 筆）
+
+這是「就算我們把 practice_id 納入比對也還不能用」的根因。要逐 vendor 談規格：
+MSH-4（或 MSH-6 / ORC-17）必須固定送 **Vibrant 的 clinic_id**。
+
+最大的幾個（MSH-4 送的是 customer_id）：
+
+| MSH-4 送的值 | 我們送出的 clinic | 訂單數 | vendor |
+|---|---|---|---|
+| 9889 | 93796 | 140 | MDHQ |
+| 4953 | 5492 | 134 | MDHQ |
+| 18879 | 129655 | 85 | MDHQ |
+| 5794 | 7094 | 80 | MDHQ |
+| 11078 | 128087 / 5621 | 48 / 8 | MDHQ |
+| 9161 | 13658 | 43 | MDHQ |
+| 32826 | 138318 | 29 | MDHQ |
+| 45416 | 149050 | 13 | OPTIMANTRA |
+| 23170 / 22760 / 20614 / 20615 | 32351 | 52 | THM |
+
+完全對不上的：THM `0` 或空（184 筆）、MDHQ 32650→138167（31）、521443→126655（2）、
+139134→6212（2）、119996→6341（1）、10806→136719（2）、NICHOLS 1999→43976（1）。
+
+## 結論
+
+我們目前對「這張單有沒有掛對診所」**沒有偵測能力**——唯一被抓到的誤送案例，是因為
+FollowThatPatient 剛好送了真正的 clinic_id。其他 1,172 筆單的診所正確性無法驗證，只能相信
+onboarding 當時填的那一格。

@@ -1,0 +1,54 @@
+vendor,msh4,sent_clinic,orders,msh4_is
+MDHQ,9889,93796,140,is customer_id/msh06_value
+THM,0,32351,134,unknown to us
+MDHQ,4953,5492,134,is customer_id/msh06_value
+MDHQ,150993,150993,121,SAME as sent clinic
+MDHQ,18879,129655,85,is customer_id
+MDHQ,5794,7094,80,is customer_id
+MDHQ,54101,54101,51,SAME as sent clinic
+THM,,32351,50,unknown to us
+MDHQ,11078,128087,48,is customer_id/msh06_value
+MDHQ,9161,13658,43,is customer_id/msh06_value
+MDHQ,32650,138167,31,unknown to us
+MDHQ,17147,17147,31,SAME as sent clinic
+MDHQ,32826,138318,29,is customer_id/msh06_value
+THM,23170,32351,28,is customer_id
+MDHQ,127265,127265,22,SAME as sent clinic
+MDHQ,43685,43685,15,SAME as sent clinic
+OPTIMANTRA,45416,149050,13,is customer_id/msh06_value
+MDHQ,150325,150325,13,SAME as sent clinic
+MDHQ,3366,127567,11,is customer_id/msh06_value
+MDHQ,12944,12944,9,SAME as sent clinic
+THM,22760,32351,9,is customer_id
+THM,20614,32351,9,is customer_id
+MDHQ,144330,144330,9,SAME as sent clinic
+MDHQ,11078,5621,8,is customer_id/msh06_value
+MDHQ,22376,66839,7,is customer_id
+MDHQ,33960,139319,6,is customer_id/msh06_value
+THM,20615,32351,6,is customer_id
+MDHQ,19079,19079,3,SAME as sent clinic
+MDHQ,9075,13505,2,is customer_id/msh06_value
+MDHQ,521443,126655,2,unknown to us
+OPTIMANTRA,138449,138449,2,SAME as sent clinic
+FOLLOWTHATPATIENT,3,2930,2,unknown to us
+MDHQ,139134,6212,2,is clinic_id/msh06_value
+MDHQ,10806,136719,2,is customer_id/msh06_value
+MDHQ,43685,1160,1,is clinic_id
+PF,7153,136913,1,is customer_id/msh06_value
+PF,13173,83668,1,is customer_id/msh06_value
+MDHQ,149855,149855,1,SAME as sent clinic
+MDHQ,137737,137737,1,SAME as sent clinic
+MDHQ,11372,11372,1,SAME as sent clinic
+MDHQ,19583,19583,1,SAME as sent clinic
+MDHQ,32826,17147,1,is customer_id/msh06_value
+NICHOLS,1999,43976,1,is customer_id/msh06_value
+MDHQ,72007,72007,1,SAME as sent clinic
+MDHQ,149894,149894,1,SAME as sent clinic
+MDHQ,119996,6341,1,unknown to us
+FOLLOWTHATPATIENT,3,8003,1,unknown to us
+OPTIMANTRA,153585,153585,1,SAME as sent clinic
+MDHQ,6731,125316,1,is customer_id/msh06_value
+FOLLOWTHATPATIENT,13,142676,1,unknown to us
+MDHQ,127660,127660,1,SAME as sent clinic
+MDHQ,10327,103279,1,unknown to us
+MDHQ,139134,139134,1,SAME as sent clinic
