@@ -458,3 +458,41 @@ clinic 5621 而非 128087 —— 帳務／報表歸屬仍是分裂的，要不�
 唯一真的用 customer_id 下單的 vendor 是 **FollowThatPatient**（4 筆，1 筆誤送）。
 MDHQ / THM / OptiMantra / PF / NICHOLS 全部送 NPI。所以 PM 要談的重點是「診所欄位不可信」那一項，
 不是「他們用 customer_id」。
+
+---
+
+# 誤記帳號／診所的訂單清單（2026-08-21）
+
+清單：`reference/orders-to-rebook-20260821.csv`（20 筆，含 sample_id、日期、處理引擎、金額、charge method）
+
+## 分成三組，成因不同
+
+| 組 | 筆數 | 處理引擎 | 內容 |
+|---|---|---|---|
+| A | **12** | **legacy Java v1**（pod `lis-emr-prod-*`） | 2025-01~2025-09，記在同一位醫師的另一個帳號下。Hilbert 8 筆、Lilli Link 2 筆、Glassman 1 筆、Grantsaris 1 筆 |
+| B | **1** | emr-v2 | 2026-06-17 sample 2579905，Abid Husain 記到 `cust 5021 @clinic 5621`（該帳號現在連整合列都沒有），應為 `35353 @128087`。customerPay $464.26 |
+| C | **7** | emr-v2 | 2026-06-18~07-06，帳號正確（35353）但**診所錯**：送出 `clinic 5621`，應為 `128087`。customerPay 共 $2,416.71 |
+
+**重要修正**：我上一輪說「這些是我們自己的比對翻掉」——只有 B、C（8 筆）成立。
+A 那 12 筆是 **legacy Java v1（order_clients findFirst）** 時代的產物，emr-v2 那時還沒接手這些客戶。
+
+A 組的診所全部相同（`order_clients` 顯示兩個帳號都掛同一個 clinic：Parsley 17147 / FG 60956），
+所以 A 只是「provider 帳號歸屬」不同，診所與病人都對；且 11/12 筆是 `patientPayLater`（病人自付）。
+
+B、C 共 8 筆全是 `customerPay`（practice 被請款），金額合計 **$2,881**，而且 C 組的診所是錯的
+（Boulder Longevity 的單記到 clinic 5621）。
+
+## 我沒有辦法自己搬
+
+訂單／sample 的 customer 與 clinic 歸屬存在 **core（lis_re / coresamples）**，不在 `lis_emr`。
+我這邊只有 `lis_emr` 的寫入權與 coresamples 的**唯讀** RPC；`lis_re`（192.168.10.166）從本機與
+appserver04 都是 TCP 通但 MySQL handshake 逾時，無法使用。而且改動已出帳的訂單歸屬會連動
+statement / commission，屬 billing 與 order team 的範圍。
+
+## 建議
+
+1. **A 組（12 筆，2025，v1 時代，patientPayLater）：不要回頭改。** 已出的報表與 commission 會被動到，
+   而診所與病人都是對的。留紀錄即可。
+2. **B + C 組（8 筆，2026-06~07，customerPay $2,881）：值得修。** 需要 order/billing team 執行，
+   我提供的 CSV 已含 sample_id 與應有的帳號／診所。
+3. 這兩組的成因（候選列排序不穩定）現在已經消除——所有相關 NPI 都只剩單一候選列。

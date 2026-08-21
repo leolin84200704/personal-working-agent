@@ -1,0 +1,21 @@
+issue,sample_id,accession,received,engine,provider,npi,from_customer,to_customer,sent_clinic,charge_method,total,vendor
+wrong provider account,2232300,,2025-01-23 02:30:06,legacy Java v1,Lilli Link,1013094069,14933,11733,(null),patientPayLater,226.93,MDHQ
+wrong provider account,2246407,,2025-02-05 19:00:06,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,415.82,MDHQ
+wrong provider account,2250622,,2025-02-18 16:15:06,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,160.0,MDHQ
+wrong provider account,2264241,,2025-03-10 20:45:06,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,255.82,MDHQ
+wrong provider account,2280018,,2025-04-02 18:45:06,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,227.6,MDHQ
+wrong provider account,2280049,,2025-04-02 19:00:06,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,227.6,MDHQ
+wrong provider account,2286105,,2025-04-11 01:45:05,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,213.69,MDHQ
+wrong provider account,2316989,,2025-05-27 18:00:07,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,520.0,MDHQ
+wrong provider account,2322356,,2025-06-03 23:45:07,legacy Java v1,Jamie Hilbert,1841683877,30756,38985,(null),patientPayLater,193.34,MDHQ
+wrong provider account,2371916,,2025-08-13 22:00:05,legacy Java v1,Jennifer Glassman,1861455032,14944,11740,(null),patientPayLater,400.0,MDHQ
+wrong provider account,2374927,,2025-08-18 21:00:07,legacy Java v1,Lilli Link,1013094069,14933,11733,(null),patientPayLater,320.0,MDHQ
+wrong provider account,2393122,,2025-09-15 15:17:33,legacy Java v1,Francienne Grantsaris,1790233351,17077,18326,(null),customerPay,225.0,MDHQ
+wrong provider account,2579905,,2026-06-17 17:17:16,emr-v2,Abid Husain,1669585618,5021,35353,5621,customerPay,464.26,MDHQ
+wrong clinic (same account),2581045,,2026-06-18 20:02:45,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,250,MDHQ
+wrong clinic (same account),2581521,,2026-06-19 16:17:18,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,250,MDHQ
+wrong clinic (same account),2582676,,2026-06-22 20:17:23,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,250,MDHQ
+wrong clinic (same account),2584182,,2026-06-24 16:47:16,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,433.13,MDHQ
+wrong clinic (same account),2584239,,2026-06-24 17:17:17,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,464.26,MDHQ
+wrong clinic (same account),2586089,,2026-06-26 20:00:23,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,494.26,MDHQ
+wrong clinic (same account),2590460,,2026-07-06 15:30:23,emr-v2,Abid Husain,1669585618,35353,35353,5621 -> should be 128087,customerPay,275.06,MDHQ
