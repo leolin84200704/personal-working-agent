@@ -4,7 +4,7 @@ type: stm
 category: emr_integration
 status: active
 created: 2026-08-20
-updated: '2026-08-20'
+updated: '2026-08-21'
 links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
@@ -211,3 +211,55 @@ score: 1.0125
 LIVE+ordering 仍有 59 列 clinic_id NULL/0。其中 1295025658 / 1427076488 / 1679508675 的 NULL 列是
 FULL_INTEGRATION，會贏過真 clinic 的 ORDER_ONLY 列 → 這些 NPI 的單今天應該就是失敗的。
 選項：照同一套政策處理，或先補 clinic_id（若是漏填而非重複）。等 Leo。
+
+## 2026-08-21 session 總結（Leo 要在 clear 後檢討流程，材料留在這）
+
+### 已執行的 prod 變更（4 次，全部有備份）
+
+| # | 動作 | 範圍 | 備份 |
+|---|---|---|---|
+| 1 | `(customer_npi, clinic_id)` 去重 | DELETE 155 列 + DISABLE 43 列（180 群組） | `~/src/credential/ehr-integrations-live-npi-backup-20260821.json` |
+| 2 | 停用永遠無法通過 clinic 檢查的 ordering 列 | 59 列 `ordering_enabled=0`（clinic_id NULL/0） | `~/src/credential/null-clinic-disable-backup-20260821.json` |
+| 3 | 修正 2 個「勝者不是實際在下單的帳號」 | 停用 12191@56132（NPI 1184178089）、21174@123597（NPI 1336296599） | `~/src/credential/winner-fix-backup-20260821.json` |
+| 4 | （無）歷史訂單歸屬**未動** — Leo 指令：不搬單 | — | — |
+
+結果：LIVE+ordering 列 1,144 → **895**；LIVE+ordering 中 `(npi, clinic)` 唯一；
+`clinic_id` NULL/0 的 ordering 列 = 0；每個 consumer readback 都在 prod pod 內用 pod 自己的 Prisma 驗過。
+
+### 交付物（全部在 `reference/`，已 push）
+- `npi-customer-clinic-vendor.csv`(895) / `-all-live.csv`(1,104) — 基礎盤點
+- `npi-customer-clinic-vendor-order-proven.csv`(160) — 排除 RESULT_ONLY + 該帳號真的下過單
+- `npi-customer-clinic-vendor-customerid-ordering.csv`(32) — 唯一用 customer_id 下單的 vendor（FollowThatPatient）
+- `pm-handoff-followthatpatient-20260821.md` — PM 議題單
+- `orders-to-rebook-20260821.csv`(20) — 誤記帳號/診所的訂單（**決定不搬**，僅留紀錄）
+- `order-routing-nondeterminism-20260821.csv`(37)、`same-npi-multiple-ordering-customers-20260821.csv`、
+  `order-routing-flips-observed-20260821.csv`、`hl7-practice-field-by-vendor-20260821.csv`、
+  `npi-clinic-dedup-plan-20260821.csv`、`npi-match-blockers-20260821.csv`、`npi-unique-cost-20260821.csv`
+
+### 還沒解決的（唯一會重複發生的案例）
+FollowThatPatient 的 `cust 43262`（Anna Emanuel）一個帳號掛 4 個 clinic（2930/8003/36290/144510）→
+每一筆不是 2930 的單都會被掛到 2930（已確認誤送 sample 2597376）。資料層無解，兩條路：
+拆成每 location 一個帳號（PM 單），或 emr-v2 改讀 `ORC-17`/`MSH-6`（他們已經在送）。
+
+### 流程問題（我的，供檢討）
+1. **順序錯**：先跑了資料收斂（變更 1），才確認 `resolveOrderingIntegration` 不看 clinic、
+   以及各 vendor 實際送哪個識別碼。應該先建立「比對行為 + vendor 送什麼」的事實基礎再談動資料。
+2. **論證用錯指標**：用「這個 clinic 有沒有下過單」論證「零代價」，被 Leo 當場反駁——
+   停用一列不會讓那家診所退件，會靜默改掛到別家。正確指標是「該 customer 帳號有沒有下過單」。
+3. **把條件句當結論**：「practice_id 進 key 就全部歸零」在我們還沒比對 practice 的前提下是計畫、不是現況，
+   被 Leo 指出。
+4. **歸因錯誤**：說 13 筆誤記是「我們自己的比對翻掉」，查 `last_update_pod_name` 後 12 筆屬 legacy Java v1 時代。
+   結論前應先確認是哪個引擎處理的。
+5. **交付格式來回**：Leo 要 CSV，我持續交 md；CSV 的篩選條件（排除 RESULT_ONLY、限真的用過 customer_id）
+   讓他講了三次才收斂。**要什麼格式先問清楚，不要用 md 代替 csv。**
+6. **技術性浪費**：raw HL7 讀取踩了兩次坑——awk 欄位偏移（ORC-12 在 `$13` 不是 `$12`，因為 segment name 占 `$1`）、
+   FTP 的檔案是 CR 分隔（要 `tr '\r' '\n'`）。expect 的 `timeout 60` 也讓一次全量掃描被截斷成部分結果。
+
+### 這次驗證方法上值得保留的
+- **原始 HL7 是唯一 ground truth**：欄位語意（ORC-12 是 NPI 還是 customer_id、診所在 MSH-4/MSH-6/ORC-17）
+  只能從 pod 上的歸檔檔確認，DB 裡的 `order_input` 是解析後的 outbound payload。
+- **sample → customer 用 coresamples `GetSampleRelevantInfo`**（5,352 筆全解、0 錯誤）；
+  customer → NPI 用 `GetCustomer`；customer → clinic 清單用 `ListCustomerAllClinics`（會回 30+ 個，證明
+  provider↔clinic 是多對多，「這個 customer 的 clinic」沒有唯一答案）。
+- **引擎歸因看 `hl7_file_input.last_update_pod_name`**：`lis-emr-prod-*` = legacy Java v1、
+  `lis-emr-v2-deployment-*` = emr-v2。
