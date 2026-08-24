@@ -1,0 +1,230 @@
+From 6c0c9da8ef0870bfb9ecce4f629db1a763f0c481 Mon Sep 17 00:00:00 2001
+From: Hung Fan Lin <leolin84200704@gmail.com>
+Date: Mon, 24 Aug 2026 11:25:54 -0700
+Subject: [PATCH] [VP-17868] Say which consult already used the accession
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+"The Accession ID selected has been used." does not say when it was used,
+so a provider whose accession is held by a consult that already happened
+(the normal case — a claim is only released on cancel / delete /
+accession swap, never when the consult takes place) goes looking through
+their upcoming consults, finds nothing, and files a ticket.
+
+Show the consult date when transv2 discloses it, fall back to wording
+that says past consults count too, and point at Support, which is where
+the unlock actually lives: resetEventAccession is exposed to admin /
+clinicadmin / clinical team, and its only UI is the internal wellness
+portal — nothing in this portal can release a claim.
+
+The alert also loses its hard 42px height: the longer copy wraps to two
+or three lines and a fixed box clipped it.
+
+supportEmail is interpolated instead of baked into the message because
+vue-i18n reads "@" in a message body as linked-message syntax.
+---
+ src/api/home/scheduledMeetingNewAPI.js        |  2 +-
+ src/graphql/queries/clinician-schedule.js     |  1 +
+ src/locales/HomePage/translations/de.json     |  3 +-
+ src/locales/HomePage/translations/en.json     |  3 +-
+ src/locales/HomePage/translations/es.json     |  3 +-
+ src/locales/HomePage/translations/fr.json     |  3 +-
+ src/locales/HomePage/translations/it.json     |  3 +-
+ src/locales/HomePage/translations/jp.json     |  3 +-
+ .../related-test-dialog/SearchOrders.vue      | 37 +++++++++++++++++--
+ 9 files changed, 47 insertions(+), 11 deletions(-)
+
+diff --git a/src/api/home/scheduledMeetingNewAPI.js b/src/api/home/scheduledMeetingNewAPI.js
+index 769a7f0f3..49d6dacb5 100644
+--- a/src/api/home/scheduledMeetingNewAPI.js
++++ b/src/api/home/scheduledMeetingNewAPI.js
+@@ -73,7 +73,7 @@ export function getEventsByAccesionIds(data) {
+  * Replaces the getEventsByAccesionIds check in the clinical consultant flow.
+  *
+  * @param {string} accessionId
+- * @returns {Promise<{ claimable: boolean, currentEventId: string|null }>}
++ * @returns {Promise<{ claimable: boolean, currentEventId: string|null, consultDate: string|null }>}
+  */
+ export async function checkIsAccessionClaimable(accessionId) {
+   const { data } = await patientProfilePageApolloClient.query({
+diff --git a/src/graphql/queries/clinician-schedule.js b/src/graphql/queries/clinician-schedule.js
+index 5940dcef4..af5914d14 100644
+--- a/src/graphql/queries/clinician-schedule.js
++++ b/src/graphql/queries/clinician-schedule.js
+@@ -5,6 +5,7 @@ export const IS_ACCESSION_CLAIMABLE = gql`
+     isAccessionClaimable(accession_id: $accessionId) {
+       claimable
+       currentEventId
++      consultDate
+     }
+   }
+ `
+diff --git a/src/locales/HomePage/translations/de.json b/src/locales/HomePage/translations/de.json
+index fb7f40b1e..93f83ebe7 100644
+--- a/src/locales/HomePage/translations/de.json
++++ b/src/locales/HomePage/translations/de.json
+@@ -174,7 +174,8 @@
+   "Telephone": "Telefon",
+   "Test Menu": "Testmenü",
+   "Test: { sample.items.join(', ') }": "Test: {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "Die ausgewählte Accession-ID wurde bereits verwendet.",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Diese Accession-ID wurde bereits für eine Beratung am {consultDate} verwendet. Jede Accession-ID kann nur für eine Beratung gebucht werden. Um sie erneut zu verwenden, wenden Sie sich bitte an {supportEmail}.",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Diese Accession-ID wurde bereits für eine Beratung verwendet, einschließlich bereits stattgefundener Beratungen. Jede Accession-ID kann nur für eine Beratung gebucht werden. Um sie erneut zu verwenden, wenden Sie sich bitte an {supportEmail}.",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "Die Vibrant Wellness-Plattform bietet Tests und Werkzeuge zur Verfolgung und Analyse des allgemeinen Wohlbefindens. Konsultationsdienste sind kostenlos und dienen nur zu Bildungs- und Informationszwecken. Sie sind nicht als Ersatz für medizinischen Rat, Diagnose oder Behandlung gedacht. Die Video- oder Audioaufnahme von Konsultationen ist für alle Parteien aufgrund der HIPAA-Datenschutzbestimmungen untersagt. Mit der Buchung einer Anbieter-Konsultation erkennen Sie an, dass Sie diese Bedingungen gelesen, verstanden haben und sich verpflichten, an diese gebunden zu sein. Wenn Sie nicht bereit sind, diese Bedingungen zu akzeptieren, können Sie keine Anbieter-Konsultation planen.",
+   "The billing address has been updated in Settings.": "Die Rechnungsadresse wurde in den Einstellungen aktualisiert.",
+   "The contact information has been updated in Settings.": "Die Kontaktdaten wurden in den Einstellungen aktualisiert.",
+diff --git a/src/locales/HomePage/translations/en.json b/src/locales/HomePage/translations/en.json
+index 40dfd442e..787d27841 100644
+--- a/src/locales/HomePage/translations/en.json
++++ b/src/locales/HomePage/translations/en.json
+@@ -179,7 +179,8 @@
+   "Telephone": "Telephone",
+   "Test Menu": "Test Menu",
+   "Test: { sample.items.join(', ') }": "Test: {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "The Accession ID selected has been used.",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "This Accession ID was already used for a consult on {consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact {supportEmail}.",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact {supportEmail}.",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.",
+   "The billing address has been updated in Settings.": "The billing address has been updated in Settings.",
+   "The contact information has been updated in Settings.": "The contact information has been updated in Settings.",
+diff --git a/src/locales/HomePage/translations/es.json b/src/locales/HomePage/translations/es.json
+index 68e9e8b38..8de1e46b1 100644
+--- a/src/locales/HomePage/translations/es.json
++++ b/src/locales/HomePage/translations/es.json
+@@ -174,7 +174,8 @@
+   "Telephone": "Teléfono",
+   "Test Menu": "Menú de Pruebas",
+   "Test: { sample.items.join(', ') }": "Prueba: {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "El ID de Acceso seleccionado ha sido utilizado.",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Este ID de Acceso ya se utilizó para una consulta el {consultDate}. Cada ID de Acceso solo puede reservarse para una consulta. Para volver a utilizarlo, comuníquese con {supportEmail}.",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Este ID de Acceso ya se utilizó para una consulta, incluidas las consultas que ya se realizaron. Cada ID de Acceso solo puede reservarse para una consulta. Para volver a utilizarlo, comuníquese con {supportEmail}.",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "La plataforma Vibrant Wellness proporciona pruebas y herramientas para rastrear y analizar el bienestar general. Los servicios de consulta son gratuitos y están destinados a fines educativos e informativos. No están destinados a sustituir el consejo médico, diagnóstico o tratamiento. Grabar video o audio de las consultas está prohibido para todas las partes debido a las Reglas de Privacidad de HIPAA. Al reservar una consulta con un proveedor, reconoce que ha leído, comprendido y acepta estar sujeto a estos términos. Si no acepta estos términos, no podrá programar una consulta con un proveedor.",
+   "The billing address has been updated in Settings.": "La dirección de facturación ha sido actualizada en Configuración.",
+   "The contact information has been updated in Settings.": "La información de contacto ha sido actualizada en Configuración.",
+diff --git a/src/locales/HomePage/translations/fr.json b/src/locales/HomePage/translations/fr.json
+index 0bb0fc64a..6b5eb63ec 100644
+--- a/src/locales/HomePage/translations/fr.json
++++ b/src/locales/HomePage/translations/fr.json
+@@ -174,7 +174,8 @@
+   "Telephone": "Téléphone",
+   "Test Menu": "Menu des tests",
+   "Test: { sample.items.join(', ') }": "Test : {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "L'ID d'accès sélectionné a été utilisé.",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Cet ID d'accès a déjà été utilisé pour une consultation le {consultDate}. Chaque ID d'accès ne peut être réservé que pour une seule consultation. Pour l'utiliser à nouveau, veuillez contacter {supportEmail}.",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Cet ID d'accès a déjà été utilisé pour une consultation, y compris les consultations déjà passées. Chaque ID d'accès ne peut être réservé que pour une seule consultation. Pour l'utiliser à nouveau, veuillez contacter {supportEmail}.",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "La plateforme Vibrant Wellness propose des tests et des outils pour suivre et analyser le bien-être général. Les services de consultation sont gratuits et destinés uniquement à des fins éducatives et d'information. Ils ne sont pas destinés à remplacer un avis médical, un diagnostic ou un traitement. L'enregistrement vidéo ou audio des consultations est interdit pour toutes les parties en raison des règles de confidentialité HIPAA. En réservant une consultation avec un fournisseur, vous reconnaissez avoir lu, compris et acceptez d'être lié par ces termes. Si vous n'acceptez pas ces termes, vous ne pourrez pas planifier de consultation avec un fournisseur.",
+   "The billing address has been updated in Settings.": "L'adresse de facturation a été mise à jour dans les paramètres.",
+   "The contact information has been updated in Settings.": "Les informations de contact ont été mises à jour dans les paramètres.",
+diff --git a/src/locales/HomePage/translations/it.json b/src/locales/HomePage/translations/it.json
+index 6bc37f35a..b956471c7 100644
+--- a/src/locales/HomePage/translations/it.json
++++ b/src/locales/HomePage/translations/it.json
+@@ -174,7 +174,8 @@
+   "Telephone": "Telefono",
+   "Test Menu": "Menu Test",
+   "Test: { sample.items.join(', ') }": "Test: {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "L'ID di Accesso selezionato è stato utilizzato.",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Questo ID di Accesso è già stato utilizzato per un consulto il {consultDate}. Ogni ID di Accesso può essere prenotato per un solo consulto. Per utilizzarlo di nuovo, contatta {supportEmail}.",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "Questo ID di Accesso è già stato utilizzato per un consulto, compresi i consulti già svolti. Ogni ID di Accesso può essere prenotato per un solo consulto. Per utilizzarlo di nuovo, contatta {supportEmail}.",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "La piattaforma di Vibrant Wellness offre test e strumenti per monitorare e analizzare il benessere generale. I servizi di consulto sono gratuiti e sono destinati solo a scopi educativi e informativi. Non sono destinati a sostituire il parere medico, la diagnosi o il trattamento. La registrazione video o audio dei consulti è vietata a tutte le parti a causa delle Regole sulla Privacy HIPAA. Prenotando un consulto con un fornitore, riconosci di aver letto, compreso e di accettare di essere vincolato da questi termini. Se non accetti di accettare questi termini, non sarai in grado di pianificare un consulto con un fornitore.",
+   "The billing address has been updated in Settings.": "L'indirizzo di fatturazione è stato aggiornato nelle Impostazioni.",
+   "The contact information has been updated in Settings.": "Le informazioni di contatto sono state aggiornate nelle Impostazioni.",
+diff --git a/src/locales/HomePage/translations/jp.json b/src/locales/HomePage/translations/jp.json
+index f7b1f7b8a..44e98d070 100644
+--- a/src/locales/HomePage/translations/jp.json
++++ b/src/locales/HomePage/translations/jp.json
+@@ -174,7 +174,8 @@
+   "Telephone": "電話",
+   "Test Menu": "テストメニュー",
+   "Test: { sample.items.join(', ') }": "テスト: {sampleItemsJoined}",
+-  "The Accession ID selected has been used.": "選択したアクセッションIDは既に使用されています。",
++  "This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "このアクセッションIDは {consultDate} のコンサルトで既に使用されています。1つのアクセッションIDで予約できるコンサルトは1回のみです。再度使用するには {supportEmail} にご連絡ください。",
++  "This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.": "このアクセッションIDは、すでに実施済みのコンサルトを含め、コンサルトで既に使用されています。1つのアクセッションIDで予約できるコンサルトは1回のみです。再度使用するには {supportEmail} にご連絡ください。",
+   "The Vibrant Wellness platform provides tests and tools to track and analyze general wellness. Consult services are complimentary and are intended for educational and informational purposes only. They are not intended to serve as a substitute for medical advice, diagnosis, or treatment. Video or audio recording of consults is prohibited by all parties due to HIPAA Privacy Rules. By booking a provider consult, you acknowledge you have read, understood, and agree to be bound by these terms. If you do not agree to accept these terms, you will not be able to schedule a provider consult.": "Vibrant Wellnessプラットフォームは、一般的な健康を追跡および分析するためのテストとツールを提供します。相談サービスは無料で、教育目的および情報提供のためのものです。医学的アドバイス、診断、または治療の代替としての提供を意図したものではありません。相談のビデオまたは音声録音は、HIPAAプライバシールールにより、すべての当事者によって禁止されています。プロバイダーの相談を予約することで、これらの条件を読み、理解し、同意したことを認めます。これらの条件に同意しない場合、プロバイダーの相談をスケジュールすることはできません。",
+   "The billing address has been updated in Settings.": "請求先住所が設定で更新されました。",
+   "The contact information has been updated in Settings.": "連絡先情報が設定で更新されました。",
+diff --git a/src/views/home/ScheduleMeeting/related-test-dialog/SearchOrders.vue b/src/views/home/ScheduleMeeting/related-test-dialog/SearchOrders.vue
+index b27c75319..65df1a7d3 100644
+--- a/src/views/home/ScheduleMeeting/related-test-dialog/SearchOrders.vue
++++ b/src/views/home/ScheduleMeeting/related-test-dialog/SearchOrders.vue
+@@ -58,11 +58,11 @@
+       </p>
+     </div>
+     <div v-if="isUsedAccession" class="my-6">
+-      <Alert data-testid="schedule-meeting.search-orders.accession-id-used-alert" :height="42" type="alert">
+-        <div class="flex items-center restriction-box pt-2.5">
+-          <img src="@/assets/orderTest/info_icon_red_15px.svg" class="pl-3 px-2" alt="error outline">
++      <Alert data-testid="schedule-meeting.search-orders.accession-id-used-alert" type="alert">
++        <div class="flex restriction-box py-2.5">
++          <img src="@/assets/orderTest/info_icon_red_15px.svg" class="pl-3 px-2 mt-1 self-start" alt="error outline">
+           <div>
+-            <span class="restriction-text">{{ $t("HomePage[\"The Accession ID selected has been used.\"]") }}</span>
++            <span class="restriction-text">{{ usedAccessionMessage }}</span>
+           </div>
+         </div>
+       </Alert>
+@@ -129,6 +129,8 @@ import moment from 'moment';
+ // NOTE: keep this key in sync with the removeItem call in logoutUser().
+ const RECENT_ORDERS_CACHE_KEY = "scheduleMeetingRecentOrders";
+ 
++const SUPPORT_EMAIL = "support@vibrant-america.com";
++
+ export default {
+   components: {
+     SearchOrderList,
+@@ -176,6 +178,9 @@ export default {
+       selectedOrderInfoMap: {}, // select the order list and put the element into this object, accesion id as key
+       isLoading: false,
+       isUsedAccession: false,
++      // ISO start time of the consult that already consumed the accession, when
++      // the backend is allowed to disclose it (VP-17868).
++      usedAccessionConsultDate: null,
+       testCategorySet: new Set(),
+       isExpired: false,
+       tubeInfo: [],
+@@ -208,6 +213,28 @@ export default {
+         ? this.orderList.slice(0, this.searchResultLimit)
+         : this.recentOrders;
+     },
++
++    // VP-17868: an accession stays claimed after its consult has taken place, so
++    // "already used" on its own sends providers looking for an upcoming consult
++    // they will never find. Name the consult date when the backend discloses it.
++    usedAccessionMessage() {
++      // supportEmail is interpolated rather than baked into the message: vue-i18n
++      // treats "@" in a message body as linked-message syntax, and interpolated
++      // values bypass the message compiler.
++      if (this.usedAccessionConsultDate) {
++        return this.$t(
++          "HomePage[\"This Accession ID was already used for a consult on ${consultDate}. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.\"]",
++          {
++            consultDate: moment(this.usedAccessionConsultDate).format("MMM D, YYYY"),
++            supportEmail: SUPPORT_EMAIL,
++          }
++        );
++      }
++      return this.$t(
++        "HomePage[\"This Accession ID has already been used for a consult, including consults that have already taken place. Each Accession ID can be booked for one consult only. To use it again, please contact ${supportEmail}.\"]",
++        { supportEmail: SUPPORT_EMAIL }
++      );
++    },
+   },
+ 
+   emits: ["close", "finishSearchOrders", "patientPageFinishLoading"],
+@@ -408,10 +435,12 @@ export default {
+ 
+         if (!claimableResult.claimable) {
+           this.isUsedAccession = true;
++          this.usedAccessionConsultDate = claimableResult.consultDate || null;
+           this.isLoading = false;
+           return;
+         } else {
+           this.isUsedAccession = false;
++          this.usedAccessionConsultDate = null;
+         }
+         // index refers to whichever list is currently rendered (recent orders or search results)
+         this.selectedOrderInfoMap[accessionId] = this.displayedOrders[index];
+-- 
+2.39.2 (Apple Git-143)
+
