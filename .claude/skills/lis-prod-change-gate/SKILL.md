@@ -1,6 +1,6 @@
 ---
 name: lis-prod-change-gate
-description: The mandatory safety checklist for any prod-impacting change in an LIS backend repo (code, schema, config, or a prod DB data fix). Use BEFORE and DURING any change that can reach production — editing a backend service, adding an env var, altering a schema, running a prod UPDATE/DELETE, or preparing a push/PR. Trigger on "改 emr-v2 / 改 prod", "加個 env / 設定", "跑個 SQL 修資料", "要 push 了", "可以部署嗎". Each gate exists because skipping it caused a real incident — walk them in order and do not skip ahead.
+description: The mandatory safety checklist for any prod-impacting change in an LIS backend repo (code, schema, config, or a prod DB data fix). Use BEFORE and DURING any change that can reach production — editing a backend service, adding an env var, altering a schema, running a prod UPDATE/DELETE, or preparing a push/PR. Also use when discussing or redesigning a matching/routing rule (order routing, customer resolution, dedup keys) or converging prod data toward a new key — Gate 1's baseline-first clause applies before any inventory or proposal. Trigger on "改 emr-v2 / 改 prod", "加個 env / 設定", "跑個 SQL 修資料", "要 push 了", "可以部署嗎", "改比對/路由規則", "去重 / 收斂資料". Each gate exists because skipping it caused a real incident — walk them in order and do not skip ahead.
 ---
 
 # LIS Prod Change Gate
@@ -20,6 +20,23 @@ This is an IRON rule (re-broken on VP-16832). Write these four, in order, before
 4. **改什麼** — the concrete edits
 
 If you can't write "改前" from real code, you don't understand the change yet — stop and investigate.
+
+**Baseline-first for matching/routing-rule work (HL7-NPI-PRACTICE-MATCH-20260820).** The 4-part
+analysis above triggers on code edits, but the same discipline applies to any *discussion, inventory,
+or prod data convergence* that targets a matching/routing rule (order routing, result routing,
+customer resolution, dedup keys). Deliverable #1 — before any inventory, proposal, or data change —
+is a one-page current-behavior baseline:
+1. The current matching **inputs and branches**, from real code (e.g. `ORC-12.1 ≤7 digits →
+   fetchById(customer_id), else fetchByNpi`), including paths that exist but may be unused.
+2. **Who actually walks each path today**, verified from raw payloads (per-vendor raw HL7 from
+   SFTP/pod archives — parsed DB columns like `order_input`/`msh06` are NOT evidence of what
+   senders transmit).
+3. The **tie-break rules** and which fields are **outputs of row selection vs match conditions**
+   (e.g. `clinic_id` is copied from the selected `ehr_integrations` row — an output, not a filter).
+The baseline goes **in the message to the human**, not buried in a report file. Skipping it on
+HL7-NPI-PRACTICE-MATCH cost ~7 turns of the human reverse-engineering the current system over two
+days, a dedup instruction issued on an incomplete (NPI-centric) model that the agent executed
+without pushing back, and prod data changes made before the vendor-field survey existed.
 
 ## Gate 2 — Scope confirmation
 If the ticket scope is ambiguous, run `ticket-requirements-clarify` first and confirm with the human/PM before coding. Prefer the minimal change; widening scope after confirmation is cheap, unwinding an over-built change is not.
