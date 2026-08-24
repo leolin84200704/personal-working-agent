@@ -16,13 +16,30 @@ Write the digest in Traditional Chinese (繁體中文) to match the existing kno
    - Extract any `VP-####` ticket ids from commit messages.
    - If any repo/API call returns 403/404 or errors, record it under an "無法存取 / 缺口" section and CONTINUE — never abort the whole job.
 
-3. JIRA — using the Atlassian tools, run JQL: `project = VP AND updated >= startOfDay() ORDER BY updated DESC` (limit ~50). For each issue capture: key, summary, status, assignee, and what changed today (new ticket / status transition / today's comments).
+3. DREAM PIPELINE HEALTH — read `$HOME/.lis-agent-state/dream/status` (a flat `key=value`
+   file written by `run-dream.sh` at the end of every run, whatever the outcome). It carries
+   `date`, `finished_at`, `outcome`, `nights_since_success`, `last_success`, `detail`, `log`.
+   This exists because the dream job aborted three nights running (2026-08-21..08-23) on an
+   uncommitted memory file and nothing surfaced it: the abort predates the dated log, so the
+   only symptom was a log file that stopped appearing. A macOS notification at 18:30 is not a
+   report. Rules:
+   - `outcome=success` and `nights_since_success=0` → one neutral line, no alarm.
+   - Anything else, or `nights_since_success >= 1` → report it prominently with the `outcome`,
+     the `detail` verbatim, and the `log` path, plus what to do (for `abort_dirty_memory`:
+     commit or discard the listed files, then `scripts/run-dream.sh`).
+   - File missing or unreadable → say exactly that. Do NOT infer that the dream ran.
+   Read only; never write to that directory.
 
-4. CROSS-LINK commits to tickets by `VP-####` id.
+4. JIRA — using the Atlassian tools, run JQL: `project = VP AND updated >= startOfDay() ORDER BY updated DESC` (limit ~50). For each issue capture: key, summary, status, assignee, and what changed today (new ticket / status transition / today's comments).
 
-5. WRITE the digest to `long-term-memory/daily-digest/<DATE>.md` (create the `daily-digest` dir if missing). Structure:
+5. CROSS-LINK commits to tickets by `VP-####` id.
+
+6. WRITE the digest to `long-term-memory/daily-digest/<DATE>.md` (create the `daily-digest` dir if missing). Structure:
    - Title `# Vibrant America Daily Digest — <DATE>` + generated timestamp (UTC).
    - Summary line: X commits across Y repos, Z tickets touched.
+   - `## Dream pipeline` — the step-3 result. Put it FIRST, before the code section: a stalled
+     dream means the memory this whole knowledge base runs on stopped being distilled, which
+     outranks any single day's commits. One line when healthy.
    - `## Code 變更（依 repo）` — per repo: commits (sha, author, msg, files), linked tickets.
    - `## Jira VP 動態` — grouped by new / status change / commented.
    - `## 交叉連結` — ticket ↔ commits.
@@ -31,7 +48,7 @@ Write the digest in Traditional Chinese (繁體中文) to match the existing kno
 
    DO NOT edit the curated knowledge files (`emr-integration.md`, `patterns.md`, `repos.md`, `failures.md`, `business-model*.md`, `ticket-routing.md`, `rules.md`, `repo-catalog.md`, `fhir-api.md`, `_index.md`). Only create/overwrite the single dated digest file. Promotion of insights into curated LTM is done manually by Leo.
 
-6. COMMIT + PUSH the single digest file to `main` (fast-forward only):
+7. COMMIT + PUSH the single digest file to `main` (fast-forward only):
    - `git fetch origin`
    - Re-point this worktree to the newest main: `git checkout --detach origin/main` (the worktree has no branch; the digest file written in step 5 is untracked and survives the checkout). Do NOT reset --hard.
    - `git add long-term-memory/daily-digest/<DATE>.md`

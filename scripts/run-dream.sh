@@ -21,6 +21,74 @@ DATE=$(date +%Y-%m-%d)
 LOG_DIR="$AGENT_ROOT/logs"
 mkdir -p "$LOG_DIR"
 
+# The dated log is claimed BEFORE the guards below, not after them. Until 2026-08-24
+# the dirty-memory abort ran while LOG_FILE was still unset, so its
+# `tee -a "${LOG_FILE:-/dev/null}"` discarded the message and the only surviving copy
+# went to the launchd stdout file, which never rotates. Three consecutive aborts
+# (08-21..08-23) were invisible for that reason: no dated log was created, so the
+# newest logs/launchd-stdout-*.log still read 08-20 and nothing else contradicted it.
+LOG_FILE="$LOG_DIR/launchd-stdout-$DATE.log"
+
+# Cross-job state. Home-relative on purpose: the daily-digest job runs in its own
+# worktree and must be able to read this without knowing where this repo is checked
+# out, and without reaching into Leo's working copy. Deliberately NOT inside the
+# repo — a status stamp is not memory and must never ride along in a dream commit.
+STATE_DIR="${DREAM_STATE_DIR:-$HOME/.lis-agent-state/dream}"
+mkdir -p "$STATE_DIR"
+STATUS_FILE="$STATE_DIR/status"
+LAST_SUCCESS_FILE="$STATE_DIR/last-success"
+
+# When did a run last actually finish? Two things derive from this single answer:
+# the Phase 0.5 closeout-audit window (so an aborted night's closures still get
+# audited the next time a run succeeds) and the digest's staleness report.
+LAST_SUCCESS=$(cat "$LAST_SUCCESS_FILE" 2>/dev/null || true)
+read -r CLOSEOUT_SINCE NIGHTS_SINCE_SUCCESS <<<"$(python3 - "${LAST_SUCCESS:-}" <<'PY'
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc)
+raw = (sys.argv[1] if len(sys.argv) > 1 else '').strip()
+try:
+    last = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+except ValueError:
+    # Nothing on record (first run after this change, or state dir wiped) — keep the
+    # original 24h window rather than inventing an unbounded one.
+    print((now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%SZ'), 0)
+else:
+    print(last.strftime('%Y-%m-%dT%H:%M:%SZ'),
+          max(0, round((now - last).total_seconds() / 86400)))
+PY
+)"
+
+# Every terminal path records why it ended. A night that produced no distillation
+# should be a fact someone can read the next morning, not an absence nobody notices.
+# The lock-held SKIP path deliberately does not write here: that instance has no
+# outcome of its own, and overwriting would hide the running instance's result.
+record_outcome() {
+    local outcome="$1"
+    local detail now
+    detail=$(printf '%s' "${2:-}" | tr '\n' ';' | tr -s ' ')
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    {
+        echo "date=$DATE"
+        echo "finished_at=$now"
+        echo "outcome=$outcome"
+        if [[ "$outcome" == "success" ]]; then
+            # This run IS the latest success — report it as such, not the previous one.
+            echo "nights_since_success=0"
+            echo "last_success=$now"
+        else
+            echo "nights_since_success=$NIGHTS_SINCE_SUCCESS"
+            echo "last_success=${LAST_SUCCESS:-never}"
+        fi
+        echo "detail=$detail"
+        echo "log=$LOG_FILE"
+    } > "$STATUS_FILE"
+    if [[ "$outcome" == "success" ]]; then
+        printf '%s\n' "$now" > "$LAST_SUCCESS_FILE"
+    fi
+}
+
 # A dirty memory file is a signal, not an obstacle. On 2026-08-19 an uncommitted
 # regeneration of long-term-memory/failures.md — 49 links short and missing an
 # entry that existed nowhere else — sat in the working tree. The dream agent
@@ -40,7 +108,13 @@ if [[ -n "$DIRTY_MEMORY" && "${DREAM_ALLOW_DIRTY_MEMORY:-0}" != "1" ]]; then
         echo "$DIRTY_MEMORY"
         echo "Inspect them (git diff), then commit or discard, and re-run."
         echo "To run anyway: DREAM_ALLOW_DIRTY_MEMORY=1 $0"
-    } | tee -a "${LOG_FILE:-/dev/null}"
+        if [[ -n "$LAST_SUCCESS" ]]; then
+            echo "Nights since the last successful run ($LAST_SUCCESS): $NIGHTS_SINCE_SUCCESS."
+        else
+            echo "No successful run on record."
+        fi
+    } | tee -a "$LOG_FILE"
+    record_outcome abort_dirty_memory "$DIRTY_MEMORY"
     osascript -e 'display notification "Dream aborted — uncommitted memory changes need a decision" with title "LIS Code Agent" sound name "Basso"' >/dev/null 2>&1 || true
     exit 1
 fi
@@ -49,11 +123,13 @@ if [[ "${1:-}" == "--dry" ]]; then
     echo "DRY RUN: would execute dream pipeline"
     echo "  Agent root: $AGENT_ROOT"
     echo "  Date: $DATE"
+    echo "  Log file: $LOG_FILE"
+    echo "  State dir: $STATE_DIR"
+    echo "  Last success: ${LAST_SUCCESS:-never} (nights since: $NIGHTS_SINCE_SUCCESS)"
+    echo "  Closeout window since: $CLOSEOUT_SINCE"
     echo "  Command: claude -p \"\$(cat scripts/dream.md)\" --model $DREAM_MODEL --allowedTools Read,Write,Edit,Glob,Grep,Bash"
     exit 0
 fi
-
-LOG_FILE="$LOG_DIR/launchd-stdout-$DATE.log"
 
 # Single-instance guard. Two dream runs must never overlap: on 2026-07-29 three
 # instances were live at once (a 17:03 run still inside its retry loop, the 18:30
@@ -87,6 +163,7 @@ echo "  Agent root: $AGENT_ROOT" | tee -a "$LOG_FILE"
 # log and no notification (output had no "API Error" so it looked like success).
 if ! command -v claude >/dev/null 2>&1; then
     echo "[$(date)] FATAL: claude CLI not found on PATH ($PATH)" | tee -a "$LOG_FILE"
+    record_outcome failed_no_cli "claude not on PATH: $PATH"
     osascript -e 'display notification "claude CLI not found — dream pipeline cannot run" with title "LIS Code Agent" sound name "Basso"' >/dev/null 2>&1 || true
     exit 1
 fi
@@ -100,7 +177,23 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-PROMPT=$(cat scripts/dream.md)
+# The run context is appended by the runner rather than hardcoded in dream.md so the
+# closeout window is computed, not assumed. Phase 0.5 used a fixed "last 24h": after
+# the 08-21..08-23 aborts, VP-17584 (closed 08-21) fell outside every subsequent
+# window and would never have been audited by any run.
+PROMPT="$(cat scripts/dream.md)
+
+---
+
+## Run context (generated by run-dream.sh)
+
+These values are computed from the recorded state of previous runs and OVERRIDE any
+default window named in the phases above.
+
+- \`CLOSEOUT_SINCE\`: $CLOSEOUT_SINCE
+- \`LAST_SUCCESSFUL_RUN\`: ${LAST_SUCCESS:-never}
+- \`NIGHTS_SINCE_SUCCESS\`: $NIGHTS_SINCE_SUCCESS
+"
 ATTEMPT=1
 MAX_ATTEMPTS=3
 SUCCESS=0
@@ -133,6 +226,7 @@ done
 
 if [[ $SUCCESS -eq 0 ]]; then
     echo "[$(date)] FAILED after $MAX_ATTEMPTS attempts" | tee -a "$LOG_FILE"
+    record_outcome failed_api "claude exited non-zero or reported API Error on $MAX_ATTEMPTS attempts"
     osascript -e 'display notification "Dream pipeline failed after retries" with title "LIS Code Agent" sound name "Basso"' >/dev/null 2>&1 || true
     exit 1
 fi
@@ -148,5 +242,9 @@ echo "[$(date)] Post-dream: capture eval snapshot dream-$DATE" | tee -a "$LOG_FI
 if ! python3 scripts/eval.py --label "dream-$DATE" 2>&1 | tail -30 | tee -a "$LOG_FILE"; then
     echo "[$(date)] WARN: eval.py failed (non-fatal)" | tee -a "$LOG_FILE"
 fi
+
+# Recorded last, after the post-dream steps: "success" means the whole pipeline ran,
+# and it is this stamp that moves the next run's closeout window forward.
+record_outcome success "closeout window covered: $CLOSEOUT_SINCE onwards"
 
 echo "[$(date)] Dream pipeline complete. Log: $LOG_FILE" | tee -a "$LOG_FILE"
