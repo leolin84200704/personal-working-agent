@@ -17,14 +17,28 @@ python3 scripts/reconcile-jira.py --apply
 
 ---
 
-## Phase 0.5: Closeout audit (tickets Done within the last 24h)
+## Phase 0.5: Closeout audit (tickets Done since `CLOSEOUT_SINCE`)
 
 > Added after the VP-17474 incident (2026-07-22): the ticket was marked Done while prod was
 > broken for ~20h — code requiring a manual DDL auto-deployed to prod without it. "Jira Done"
 > is a claim, not a fact. Audit every fresh closure against the full chain.
 
-For each ticket that transitioned to Done/completed in the last 24h (from Phase 0 flips + Jira
+The window is `CLOSEOUT_SINCE` from the **Run context** block at the end of this prompt —
+the end of the last *successful* run, not a fixed 24h. This matters because a night that
+aborts still lets tickets close: the 2026-08-21..08-23 dirty-memory aborts left VP-17584
+(closed 08-21) outside every later 24h window, so no run would ever have audited it. If the
+Run context block is absent, fall back to the last 24h.
+
+When `NIGHTS_SINCE_SUCCESS` is greater than 1, say so in the dream log and state the window
+you actually audited — a multi-night catch-up is worth seeing as such.
+
+For each ticket that transitioned to Done/completed in that window (from Phase 0 flips + Jira
 `status changed to Done` in the window, assignee = Leo/agent), verify the closure chain.
+
+Match on the **statusCategory**, not the status name. VP-17584 was closed by a move to
+`Inactive`, which sits in the `done` category — a `status changed to Done` JQL alone does not
+return it. Use `statusCategory = Done` in the JQL and treat every custom done-category status
+as a closure.
 Every check probes ground truth — never trust the plan of record (STM/PR body/Jira comment):
 
 1. **Find ALL merged PRs in the window** — search each work repo's recently merged PRs by
@@ -145,7 +159,7 @@ Write a dream log to `logs/dream-YYYY-MM-DD.md`:
 ## Ground truth reconciliation
 - Jira reconcile: N flipped to completed / skipped (no credentials) / M need manual review
 
-## Closeout audit (Done < 24h)
+## Closeout audit (window: <CLOSEOUT_SINCE> → now, N nights)
 - VP-XXXXX: PASS / FLAG: <reason>  (one line per audited ticket; "none due" if empty)
 
 ## Signals
