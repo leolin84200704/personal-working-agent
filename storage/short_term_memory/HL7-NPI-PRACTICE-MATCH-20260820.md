@@ -4,7 +4,7 @@ type: stm
 category: emr_integration
 status: active
 created: 2026-08-20
-updated: '2026-08-21'
+updated: '2026-08-24'
 links:
 - BETA-E2E-20260729
 - BIOINSIGHTS-SFTP-KEY
@@ -263,3 +263,24 @@ FollowThatPatient 的 `cust 43262`（Anna Emanuel）一個帳號掛 4 個 clinic
   provider↔clinic 是多對多，「這個 customer 的 clinic」沒有唯一答案）。
 - **引擎歸因看 `hl7_file_input.last_update_pod_name`**：`lis-emr-prod-*` = legacy Java v1、
   `lis-emr-v2-deployment-*` = emr-v2。
+
+## 2026-08-24 流程檢討（Leo review 定案 — transcript 驗證過）
+
+Leo 的假設：「提出很多方案但答不到點上，因為我不清楚（或忘記）『有人用 customer_id 下單、
+且我們一直是這樣判斷』」。回放 08-20/08-21 兩個 session（40a8c033 / 91b48a51）後**成立**，精確形狀：
+
+- **不是 agent 不知道，是 agent 沒講。** `ORC-12.1 ≤7碼 → fetchById(customer_id) / 否則 fetchByNpi`
+  從 08-20 就寫在本 STM，但第一份盤點交付（08-20 18:19）完全沒有現況段落——「取代今天的
+  ORC-12.1 → customer_id 比對」只以括號註記埋在報告 md 開頭。完整模型直到 08-21 22:37
+  （Leo 強制要求「以 1366420523 從頭講一次流程」）才第一次出現，開工約 28 小時後。
+- **量化損失**：至少 7 個 turn 是 Leo 在補課現行機制（08-20 18:26/18:30、08-21 22:19/22:25/
+  22:32/22:34/22:58「不是..」）；21:57 的去重指令是在不完整模型（NPI 中心）上下的，agent
+  照單全收沒有 push back「先確認 customer_id 路徑與各 vendor 送什麼」——這是流程問題 #1
+  （順序錯）的真正根源：agent 讓 Leo 也在錯的順序上做決策。
+- **事後查證的邊界**：真的送 customer_id 的只有 FollowThatPatient（180 天 4 筆）；Leo 22:58
+  設計的測試（同 NPI 出現在多個 customer 帳號，6 例）跑出來全部是 NPI 下單，翻帳號是
+  tie-break/legacy 造成——該推論線是負結果。customer_id 問題的真實形狀只有 43262 跨 4 clinic。
+- **修法（已定案）**：任何「改比對／路由規則」的討論，交付物 #1 = 一頁現況 baseline
+  （現行比對輸入欄位與分支＋每條路徑今天誰在走（原始 HL7 驗證）＋tie-break＋輸出欄位），
+  且必須出現在給 Leo 的訊息裡、不是埋在報告檔。已寫入 `lis-prod-change-gate` Gate 1
+  （擴大觸發範圍到規則討論與資料收斂），walk PR。
