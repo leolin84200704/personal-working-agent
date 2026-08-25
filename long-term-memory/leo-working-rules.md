@@ -65,6 +65,12 @@ links:
 - **The bias to act applies to reversible diagnosis steps, not to prod state
   changes built on a single measurement.** See factory lesson 安靜的觀測窗不是故障證據
   (VP-17561: an unnecessary rollback re-delivered results for 17 samples).
+- **An STM's frontmatter summary is a write-time snapshot; the appended dated
+  `###` sections are the current truth — read to the bottom before reporting
+  status.** VP-17825 (2026-08-24): the summary still said "Gated: 2-row UPDATE +
+  backfill decision", both had been executed four days earlier and recorded in
+  appended sections; the stale summary was reported to Leo and written into a PR
+  description.
 
 ## Tickets
 
@@ -134,6 +140,27 @@ links:
   Fixed at source in `~/.wezterm-local.lua` (untracked, which is why every earlier
   grep "proved" no such URL existed).
 - cloudId for Atlassian MCP calls: `373c4f18-fda5-4843-8438-6db1ac2e98f0`.
+- **Closure = done-category, not the name "Done"** (VP-17584). The VP workflow has
+  custom terminal statuses — `Inactive` sits in statusCategory `done` and PMs use
+  it as a close. JQL for closures must use `statusCategory = Done`;
+  `status changed to Done` misses them. `Inactive` + resolution `Done` often means
+  *superseded* (work landed under a sibling ticket), which looks identical to an
+  abandoned ticket from Jira alone — check the sibling's STM before calling a
+  closure hollow. When we supersede a ticket ourselves, leave one comment on the
+  superseded ticket saying where the deliverable landed.
+- **Dev To Do has no direct edge to Dev Blocked** — the only exits are Inactive /
+  Done / Dev in progress. Reaching Dev Blocked is two hops (→ Dev In Progress →
+  Dev Blocked), so the history shows a momentary Dev In Progress pass; not an
+  error. Generic: when a workflow lacks a transition, enumerate transitions from
+  the intermediate states before concluding the target is unreachable.
+- **Answer the Dev Blocked automation prompt** ("What's blocking / What you need
+  to unblock") in exactly that two-part shape — it pre-empts the bot re-firing,
+  and a blocked ticket with no recorded blocker reads as forgotten (the assignee
+  pays for that ambiguity). VP-17826 sat 3 days with the prompt unanswered.
+- **Read the linked-issue graph and the epic's children before believing a
+  ticket's status** (VP-17827): a Story can read Dev To Do while its blocker is
+  itself blocked, the PM decision is unmade, and the data-model story an
+  acceptance criterion depends on is Inactive — none of it visible on the ticket.
 
 ## Error contracts (LIS specifics)
 

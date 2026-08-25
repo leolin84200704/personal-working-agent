@@ -10,7 +10,7 @@ related:
 - VP-16166
 - QH-6775
 - HL7-NPI-PRACTICE-MATCH-20260820
-distilled: false
+distilled: true
 ---
 
 # 2026-08-24 — VP-17827 practice ID on EMR order placement: analysed, commented, blocked

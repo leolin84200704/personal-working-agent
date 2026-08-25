@@ -3,7 +3,7 @@ id: failures
 type: ltm
 category: technical
 status: active
-score: 1.2597
+score: 1.2886
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
@@ -93,6 +93,8 @@ links:
 - VP-17765
 - VP-17812
 - VP-17825
+- VP-17868
+- VP-17870
 - VP-9299
 - business-model
 - business-model-deep

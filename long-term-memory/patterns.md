@@ -2317,3 +2317,52 @@ provider/clinicadmin calendar 抄一次**，之後**永不再同步**。
   `ssl:{rejectUnauthorized:false}`，否則 `--require_secure_transport=ON` 直接拒連。
 - on-prem coresamples gRPC `192.168.60.6:30276` 從本機 ECONNREFUSED 時，cloud
   `10.224.0.199:30276` 是可用替代。
+
+## 【蒸餾 2026-08-24】provenance / 部署 / 驗證 gotchas（VP-17870, VP-17825, VP-17868）
+
+### git blame 被 reformat 毒化 —— provenance 一律 `git log -S`
+- `LIS-setting-consumer/src/setting-consumer/pns.service.ts`：2025-10-29 的 `636b9bc`
+  （掛在 vp-13729 的 formatter reflow，6271+/4689-）把 10.8k 行檔案大半 re-attribute
+  給 Leo，**行為零變更**。RM-628 就是 blame 到這個 commit 才把停用 gating 記成錯的
+  ticket。這檔案的 blame 近乎不可用；查「誰改了這個行為」用
+  `git log -S "<exact string>"` 或 `git log -L`，絕不能只看 blame。（通用：大型
+  reformat commit 存在的 repo 都適用。）
+
+### LIS-setting-consumer 的 main / stage_test 不是 promote-forward 對
+- VP-16549 在兩個 branch 各 land 一次（不同 SHA），兩份鄰近行 offset 不同 → 從 main
+  切的 branch merge 進 stage_test 必衝突。**正確做法：staging branch 從
+  `origin/stage_test` 切、main branch 從 `origin/main` 切，之間用 cherry-pick**
+  （#157/#158、#153/#154、#159/#160 先例，一票兩 PR）。
+- 兩 branch 都是 push 即 deploy（merge main = prod deploy，無人工閘）。stage_test →
+  main 的 "Stage test" promotion PR 會把同一 patch 第三次帶進 main —— 內容相同時
+  自動合併無害，但 back-to-back 雙 rollout 會讓 ~38 個 consumer group 同時 re-join，
+  產生一波 kafkajs `SyncGroup timeout`（自癒、無訊息遺失）——看到這 burst 先對 rollout
+  時間軸再懷疑 code。
+- envm 值：cloud prod=`prod`、staging=`stprod`、local=`local` → 只有 cloud prod 走
+  prod-only email 排除邏輯；staging 的 `*_disbursed` 事件照樣寄。
+
+### Setting Consumer 寄信驗證不需要 Postmark token（audit-log 法）
+- `createKafkaProducerConfig()` 每次成功寄信會 `saveToAudit()` → gRPC 進
+  `lis-auditlog-deployment`（ns default），該服務把 INSERT 原文寫進 log：
+  `entity_snapshot` = Postmark tag、`service_name` = 'Setting Consumer'。
+  `kubectl logs` grep tag 即可數寄信。**流量對照組**用 `lis-shipping-deployment`
+  （ns shipping）—— 它消費同一條 general-events stream 並 log 完整 payload，
+  「0 封 email」才能證明不是「0 筆事件」。注意 pod log 留存：shipping 只有數小時。
+
+### transformer-v2 `logger: false` —— Nest 內建 Logger 在 prod 完全靜默
+- `main.ts` 是 `NestFactory.create(AppModule, { logger: false })` → 所有用 Nest
+  `Logger` 寫的行（如 self-heal 的 backfill 訊息）**prod 不輸出**。要 ops 可見一律走
+  `LisLoggingService`（結構化 JSON）。查「為什麼 log 沒出現」先看這個，再懷疑 code path。
+
+### launchd job：plist 在 repo ≠ 已安裝（repo config ≠ runtime truth 家族）
+- `com.lis.consult-recipient.plist` 躺在 repo 但從未裝進 `~/Library/LaunchAgents`
+  → 「每日 job」零產出無人發現。宣稱排程存在前：`ls ~/Library/LaunchAgents` 確認
+  已裝 + `launchctl kickstart` 實跑一次看真輸出，不是 load 完就算數。
+
+### 動工前的兩個 pre-check（VP-17868 代價換來的）
+- **跨 repo 工作先驗寫入權**：`gh api repos/{owner}/{repo} --jq .permissions.push`。
+  va-portal 對 Leo 是 false —— FE half 只能出 patch 檔交接，計畫時就要知道。
+- **錯誤訊息說「in use / contact X」前**：找到執行 remedy 的 code path，確認哪個
+  role、哪個 UI 擁有它（claim 的 unlock 只在 internal wellness portal，不在報錯的
+  va-portal）；「被誰占用」要嘛點名要嘛講明「過去的使用也算」，否則使用者在自己的
+  live 清單裡找不到就升級客訴。

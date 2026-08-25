@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.3489
+score: 1.3736
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -89,6 +89,7 @@ links:
 - VP-17538
 - VP-17539
 - VP-17544
+- VP-17584
 - VP-17589
 - VP-17591
 - VP-17628
@@ -102,6 +103,7 @@ links:
 - VP-17752
 - VP-17810
 - VP-17812
+- VP-17827
 - fhir-api
 tags:
 - emr
@@ -1586,6 +1588,24 @@ repush 是有副作用的動作 —— 送出前把 accession 對回 ticket 最�
   old LIS `/orderinfo/SubmitRequisitionFormHandler/NewOrdering`，patient info 由
   `buildCompletePatientInfoMap` 在下單時組好送出 → **事後補 profile 地址不會回頭改
   requisition**；要新 requisition 得請 order team 重產。
+  - **修正（2026-08-21，VP-17812 deep-dive 推翻部分敘述）**：那個 handler 只建
+    sample/tracking rows，**不 render 任何 PDF** —— 系統在下單時**沒有**產生
+    requisition PDF。`requsitionPDF_<barcode>*.pdf` 是 lab accessioning 掃描的
+    **紙本** requisition（`order_received_tracking` status ReqScanned），存 on-prem
+    FTP 192.168.10.114 `/requsitionfolder/`；path 在
+    `vibrant_america_information.{order_received_tracking,sample_data}.sample_requisition_filepath`
+    （該 DB on-prem only，lisportalprod2 無 grant）。下單時真正產生的是 Order
+    Summary / Blood Draw form（order-management pdf_gen_service，R2 cache-first，
+    「最新版」需 invalidation）——客戶口語的「requisition」常指這個。
+  - **Server-to-server 取 scanned req 的建議路徑**：LIS-Shipping
+    `GET /files/internal/requisition-form?sample_id=`（JWT，cloud 可達，最多 merge
+    5 份掃描）。emr-v2 零相關 code —— 任何 vendor 交付都是新開發。
+  - **存在性是機率不是保證**：掃描檔只在「紙本隨檢體到 + accessioning 有掃」才存在。
+    實測（2026-08-21 prod）：MDHQ 4/6 有、FOLLOWTHATPATIENT 0/3；finger-stick 居家
+    kit（Prospera 型）幾乎不會有 → 「隨 result 附掃描 req」不是可承諾的 contract。
+  - **需求出處要驗**（Leo challenge 成立）：Prospera 從未直接要過 requisition form；
+    唯一來源是 PM relay 的 ticket 描述。**對方回答我們問的選項 ≠ 對方提出需求**——
+    寫 spec 前先要到原始需求原文。
 - **Missing Information flag 不會自動清**：coresamples `sample_processor.go:1320` 由
   issue type（94/100/101/60/64）驅動，`issue_display` id 14 = Missing Address Issue。
   地址補了 flag 仍在，要 issue 端 resolve event（ops 動作）。
@@ -1619,3 +1639,35 @@ new-vendor spec / PM 能力詢問，以下列為準（2026-08-19 對 origin/main
 - Vendor 主張「已有整合」時先跑五表查證（ehr_vendors / ehr_integrations / order_clients /
   sftp_folder_mapping / hl7_file_input）＋ Jira 全文搜——Prospera 五表全零，
   「currently implemented」是 vendor 側的說法，不是我們 DB 的事實。
+
+## 【蒸餾 2026-08-24】ehr_integrations (NPI, clinic) 收斂後的現況 + HL7 practice 欄位事實（HL7-NPI-PRACTICE-MATCH / VP-17827）
+
+2026-08-21 執行了三波 prod 收斂（全部有備份在 `~/src/credential/*backup-20260821.json`，
+動作清單在 `reference/npi-clinic-dedup-plan-20260821.csv`）。**之後讀 ehr_integrations
+要以這個狀態為前提**：
+
+- **不變量（已驗證成立）**：LIVE + ordering_enabled 之中 `(customer_npi, clinic_id)`
+  無重複；`clinic_id` NULL/0 的 ordering 列 = 0（59 列已停 ordering）。
+  LIVE+ordering 從 1,144 列收斂到 **895 列**。有 result 傳送史的列只停 ordering 不刪。
+- **6 組 NPI 的路由刻意改變**（保留者依「實際有 result 活動的 customer」裁定）——
+  之後這些 NPI 的單掛到不同 customer 是預期行為，不是 bug（清單見 STM
+  HL7-NPI-PRACTICE-MATCH-20260820 §去重）。
+- **待決**：15 組「NULL clinic 列與真 clinic 列同 NPI」的配對沒動（分屬不同群組）。
+- **HL7 practice 欄位的量測結論**（~180 天原始檔，`reference/hl7-practice-field-by-vendor-20260821.csv`）：
+  6 個實際下單 vendor 中 **5 個（MDHQ/THM/OptiMantra/Practice Fusion/NICHOLS）沒有可用
+  practice 欄位** —— ORC-12 是 NPI、MSH-4 多半是 Vibrant customer_id。只有
+  FOLLOWTHATPATIENT 在 MSH-6 + ORC-17 送 Vibrant clinic_id 而我們沒讀；也是唯一
+  用 customer_id 下單的 vendor（180 天 4 筆）。已證實誤送 1 例（sample 2597376，
+  cust 43262 跨 4 clinic 全掛 2930）。**任何 practice-attribution 設計必須是 ORC-12
+  resolve 之上的 layered fallback，不能取代**（反例：clinic 6212 的單 MSH-4 帶別家
+  customer_id 但今天成功）。
+- **驗證方法（可複用）**：欄位語意只能從 pod 上歸檔的**原始 HL7** 確認（DB `order_input`
+  是解析後 outbound payload）；FTP 檔是 CR 分隔要 `tr '\r' '\n'`，awk 欄位 ORC-12 在
+  `$13`（segment name 占 `$1`）。引擎歸因看 `hl7_file_input.last_update_pod_name`：
+  `lis-emr-prod-*` = legacy Java v1、`lis-emr-v2-deployment-*` = emr-v2。
+  sample→customer 用 coresamples `GetSampleRelevantInfo`；customer→clinic 用
+  `ListCustomerAllClinics`（會回 30+ 個 —— provider↔clinic 是多對多，
+  「這個 customer 的 clinic」沒有唯一答案）。
+- **規則討論的順序紀律**已進 `lis-prod-change-gate` Gate 1（baseline-first，PR #43）：
+  改比對/路由規則前，交付物 #1 = 一頁現況 baseline（比對輸入欄位與分支＋每條路徑
+  今天誰在走＋tie-break＋輸出欄位），且要出現在給 Leo 的訊息裡。

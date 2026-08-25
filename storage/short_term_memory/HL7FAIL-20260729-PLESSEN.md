@@ -82,6 +82,7 @@ links:
 - VP-17538
 - VP-17539
 - VP-17544
+- VP-17584
 - VP-17589
 - VP-17591
 - VP-17628
@@ -95,6 +96,7 @@ links:
 - VP-17752
 - VP-17810
 - VP-17812
+- VP-17827
 - emr-integration
 - fhir-api
 tags:
@@ -112,7 +114,7 @@ summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck pa
   Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
   team scope) — hand-off package given to Leo.'
 jira_status: n/a
-score: 0.4971
+score: 0.4445
 ---
 
 # hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap

@@ -1,12 +1,13 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-20 (dream run). +1 entry, distilled tonight — the VP-17812
-> Prospera spec record (docx-delivery rule -> leo-working-rules.md; vendor-facing
-> capability ground-truth table -> emr-integration.md).
+> Last updated: 2026-08-24 (dream run, 4-night catch-up). +1 entry, distilled
+> tonight — the VP-17827 practice-id record (Jira workflow two-hop + linked-graph
+> rule -> leo-working-rules.md; dirty-guard escalation -> factory proposals inbox).
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-24 | vp17827-practice-id-blocked | VP-17827, VP-17826, VP-16163, VP-16164, VP-16165, VP-16166, QH-6775, HL7-NPI-PRACTICE-MATCH-20260820 | true |
 | 2026-08-20 | vp17812-prospera-spec | VP-17812, QH-6764, VP-16245, VP-16987, VP-17475, BIOINSIGHTS-onboarding | true |
 | 2026-08-18 | vp9299-status-list-v2 | VP-9299, VP-17753, VP-17754, VP-17755, VP-16859, PH-850 | true |
 | 2026-08-18 | factory-update-throughput-cost | framework-sync, ENFORCEMENT-LADDER.md, WORK-LOOP.md | true |
