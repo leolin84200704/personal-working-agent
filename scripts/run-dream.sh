@@ -238,6 +238,30 @@ if ! python3 scripts/extract-failures.py 2>&1 | tee -a "$LOG_FILE"; then
     echo "[$(date)] WARN: extract-failures.py failed (non-fatal)" | tee -a "$LOG_FILE"
 fi
 
+# Commit the index this run just regenerated. Without this the run finishes with
+# long-term-memory/failures.md dirty, and the dirty-memory guard above then
+# aborts the NEXT night — the run locks its successor out of the room.
+#
+# It is intermittent, which is why it kept coming back: extract-failures.py is
+# idempotent, so a night that distilled nothing new leaves no diff and nothing
+# blocks. A night that DID distil something leaves a diff, and the more
+# productive the run, the more certain it is to block the next one. Observed
+# 2026-08-19, 2026-08-21..23 and 2026-08-25.
+#
+# Scoped to exactly this one path: the guard exists because a human must decide
+# about memory files somebody else left dirty, and that stays true. This commits
+# only the artifact this run produced itself, and only when it actually changed.
+if ! git -C "$AGENT_ROOT" diff --quiet -- long-term-memory/failures.md 2>/dev/null; then
+    if git -C "$AGENT_ROOT" add long-term-memory/failures.md &&
+       git -C "$AGENT_ROOT" commit -q -m "[dream] refresh failure index ($DATE)" \
+           -- long-term-memory/failures.md; then
+        echo "[$(date)] Committed regenerated failure index" | tee -a "$LOG_FILE"
+    else
+        echo "[$(date)] WARN: could not commit failure index — the next run will abort on it" \
+            | tee -a "$LOG_FILE"
+    fi
+fi
+
 echo "[$(date)] Post-dream: capture eval snapshot dream-$DATE" | tee -a "$LOG_FILE"
 if ! python3 scripts/eval.py --label "dream-$DATE" 2>&1 | tail -30 | tee -a "$LOG_FILE"; then
     echo "[$(date)] WARN: eval.py failed (non-fatal)" | tee -a "$LOG_FILE"
