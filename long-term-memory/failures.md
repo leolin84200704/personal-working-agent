@@ -7,7 +7,7 @@ score: 1.2886
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
-updated: 2026-08-20
+updated: 2026-08-24
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -93,6 +93,7 @@ links:
 - VP-17765
 - VP-17812
 - VP-17825
+- VP-17827
 - VP-17868
 - VP-17870
 - VP-9299
@@ -109,27 +110,27 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 77 entries across STM
+summary: Auto-aggregated failure index from 79 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-20 — total 77 entries
+> Last updated: 2026-08-24 — total 79 entries
 
 ## Themes
 
 - [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 22 entries
-- [Other / uncategorized](#other) — 12 entries
+- [Other / uncategorized](#other) — 13 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 10 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
 - [Scope / requirement / PM communication](#scope-communication) — 4 entries
+- [Auth / permission / role](#auth-permission) — 3 entries
 - [Error handling / throw vs log](#error-handling) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
-- [Auth / permission / role](#auth-permission) — 2 entries
 - [gRPC / network / timeout](#grpc-network) — 2 entries
 - [Tool / cwd / branch / repo confusion](#tool-usage) — 1 entries
 - [GraphQL / API design](#graphql-api) — 1 entries
@@ -521,6 +522,10 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 
 (none this run)
 
+### **[[VP-17827]]**
+
+None this session.
+
 ---
 
 ## Build / TypeScript / Tooling <a id='build-tooling'></a>
@@ -546,18 +551,6 @@ Edited `src/proto/customer.proto` (`package lis`, legacy LIS host) before realiz
 ### **[[VP-15460]]** — `2026-04-28` — redlock CommonJS interop (#88)
 
 Production NestFactory crash at startup: `TypeError: redlock_1.default is not a constructor`. Root cause: `redlock@4` is plain CommonJS (`module.exports = Redlock`, no `.default`); this repo's `tsconfig.json` only sets `allowSyntheticDefaultImports`, not `esModuleInterop`, so `import Redlock from 'redlock'` compiled to `redlock_1.default` (undefined). Should have caught this at code review by recognizing redlock's package age + checking `tsconfig`.
-
-### **[[VP-16337]]** — `2026-04-27 23:38` — **Mistake:** Initially added the new RPC + messages to `src/proto/customer.proto` and `dist/proto/customer.proto`.
-
-**Root cause:** Two parallel proto trees exist in this repo:
-- `src/proto/customer.proto` — `package lis;`, used by v1 client connecting to legacy LIS gRPC `192.168.60.6:30276` (`grpcConfig.customer`)
-- `src/proto-v2/customer.proto` — `package coresamples_service;`, used by v2 client connecting to coreSamples `10.224.0.199:32100` (`grpcConfigV2.customer`)
-
-`GetClinicIDsByNPINumber` lives only in coreSamples — must go into proto-v2.
-
-**Recovery:** Reverted both `src/proto/` and `dist/proto/` edits, then applied the changes to `src/proto-v2/customer.proto` only (no `dist/proto-v2/` exists, so single file).
-
-**Detection trigger:** Reading `src/config/grpc.config.ts` for endpoint info — saw `getProtoV2Path` and `package: 'coresamples_service'` for the v2 customer client.
 
 ### **[[VP-16520]]** — `2026-05-28` — 把自己造成的 prisma client drift 誤判為「stale 假象」
 
@@ -613,6 +606,18 @@ Nothing caught this before prod:
 All three were green because the client is **mocked** in the specs — a mock happily answers to
 whatever name the caller invents, so the specs asserted the wrong name and agreed with themselves.
 See the lesson extracted to `long-term-memory/patterns.md`.
+
+### **[[VP-16337]]** — `2026-04-27 23:38` — **
+
+**Root cause:** Two parallel proto trees exist in this repo:
+- `src/proto/customer.proto` — `package lis;`, used by v1 client connecting to legacy LIS gRPC `192.168.60.6:30276` (`grpcConfig.customer`)
+- `src/proto-v2/customer.proto` — `package coresamples_service;`, used by v2 client connecting to coreSamples `10.224.0.199:32100` (`grpcConfigV2.customer`)
+
+`GetClinicIDsByNPINumber` lives only in coreSamples — must go into proto-v2.
+
+**Recovery:** Reverted both `src/proto/` and `dist/proto/` edits, then applied the changes to `src/proto-v2/customer.proto` only (no `dist/proto-v2/` exists, so single file).
+
+**Detection trigger:** Reading `src/config/grpc.config.ts` for endpoint info — saw `getProtoV2Path` and `package: 'coresamples_service'` for the v2 customer client.
 
 ---
 
@@ -878,6 +883,36 @@ ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktre
 
 ---
 
+## Auth / permission / role <a id='auth-permission'></a>
+
+### **[[INCIDENT-2604156666]]** — Lessons for testing
+
+- `.spec.ts` 文件不能信賴 — 跟 service code 不同步演進（4b10e1a + 多次 service refactor 都沒同步 spec），可能長期沒人跑
+- 應該每個 PR 跑該 service spec；或者 CI gate 上有 spec 必過要求
+
+### **[[LIS-7690]]** — `2026-08-18 17:10` — on-prem cluster not inspectable — RESOLVED 18:10 by Leo
+
+First attempt `ssh -o BatchMode=yes leo@192.168.60.5` → `Permission denied (publickey,password)`
+(same wall as failures.md:496). **Resolution: the account takes PASSWORD auth, not a key** — Leo
+supplied the password in-session. Key auth genuinely is refused, which is why every previous
+BatchMode attempt failed and the blocker looked absolute. Mechanics that work from this laptop
+(no `sshpass` on macOS, `ssh` will not read a password from a pipe): drive it with `/usr/bin/expect`,
+password passed in via env var, never written to disk:
+```
+spawn ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no leo@192.168.60.5 $cmd
+expect -re {[Pp]assword:} { send -- "$env(ONPREM_PW)\r" }
+```
+`kubectl` is at `/usr/local/bin/kubectl` on appserver04 (control-plane node, k8s v1.22.3, 6 nodes
+`appserver01-06` = `192.168.60.2-7`). The password is NOT recorded here — ask Leo, or read it from
+`~/src/credential/` if he chooses to store it there.
+
+### **[[VP-17868]]**
+
+- First BE commit was made with `core.hooksPath=/dev/null`. The repo points `core.hooksPath` at the factory githooks; bypassing them was wrong and pointless. Reset and recommitted through the hooks.
+- `git push` to va-portal: 403. `gh api repos/Vibrant-America/va-portal --jq .permissions.push` → false. Leo's account cannot write to the FE repo; the FE half needs the FE team or a permission grant.
+
+---
+
 ## Error handling / throw vs log <a id='error-handling'></a>
 
 ### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
@@ -931,31 +966,6 @@ None that cost rework. Two near-misses worth naming:
 - 修正：resolver 只比對 `is_practice === true`(Leo 一開始就說 clinic-level)。個人 shortcut 忽略 → 永遠用診所 preset。live 驗證 40660@144510 改解析到 727441(PSA+Foundation) 非 724454(33-test)。
 - spec.ts: fetch mock 預設 is_practice:true，加 personal-vs-practice 測試。108 tests pass。
 - 差異清單 doc(2506653698) v2 已更正 Finding 2（個人 vs 診所，emr-v2 已解決，無需 catalog 動作）；Finding 1(Magnesium) 仍是 catalog action。
-
----
-
-## Auth / permission / role <a id='auth-permission'></a>
-
-### **[[INCIDENT-2604156666]]** — Lessons for testing
-
-- `.spec.ts` 文件不能信賴 — 跟 service code 不同步演進（4b10e1a + 多次 service refactor 都沒同步 spec），可能長期沒人跑
-- 應該每個 PR 跑該 service spec；或者 CI gate 上有 spec 必過要求
-
-### **[[LIS-7690]]** — `2026-08-18 17:10` — on-prem cluster not inspectable — RESOLVED 18:10 by Leo
-
-First attempt `ssh -o BatchMode=yes leo@192.168.60.5` → `Permission denied (publickey,password)`
-(same wall as failures.md:496). **Resolution: the account takes PASSWORD auth, not a key** — Leo
-supplied the password in-session. Key auth genuinely is refused, which is why every previous
-BatchMode attempt failed and the blocker looked absolute. Mechanics that work from this laptop
-(no `sshpass` on macOS, `ssh` will not read a password from a pipe): drive it with `/usr/bin/expect`,
-password passed in via env var, never written to disk:
-```
-spawn ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no leo@192.168.60.5 $cmd
-expect -re {[Pp]assword:} { send -- "$env(ONPREM_PW)\r" }
-```
-`kubectl` is at `/usr/local/bin/kubectl` on appserver04 (control-plane node, k8s v1.22.3, 6 nodes
-`appserver01-06` = `192.168.60.2-7`). The password is NOT recorded here — ask Leo, or read it from
-`~/src/credential/` if he chooses to store it there.
 
 ---
 
