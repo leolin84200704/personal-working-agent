@@ -300,3 +300,14 @@ heredoc 沒寫進去要整個重跑。修法是只在這些字出現在實際 SQ
 **下次重測**：`scripts/agent-perf-metrics.py`，同一支腳本、同樣視窗定義，累積 15+ 個 LIS session 再跑。
 判讀：`tools/turn` 回到 9 附近且 `product-work` 回到 70% 附近 = 儀式成本收斂；
 若只有 model 欄變成 fable 而其他不動，代表瓶頸確實在儀式與 guard，不在模型。
+
+## Jira 狀態與部署狀態是兩條互不同步的時間線（cross-ticket review 2026-08-26；證據 VP-16166 / VP-17915 / LIS-7716 / VP-17685 / VP-17870）
+
+兩個方向的漂移都是常態，不是異常：
+- **code 先活、票後關**：VP-16166 的 code 在 prod 跑了 ~21 小時、衍生票 VP-17915 都已 Done 了，本票還躺在 Dev To Do（Leo 隔天下午才轉）；LIS-7716 merge 進 main（= auto-deploy）當晚 Jira 仍 Dev To Do；VP-17870 deploy 後兩天 Jira 才 Done。
+- **票先關、code 後活**：VP-17685 在第一個（還是壞的）PR merge 前 1 分鐘就被轉 Done。
+
+規則：**兩個方向都不要用 Jira status 推部署狀態**。部署真相 = pod image SHA（fetch 後比對）+ DB/行為證據；
+Jira 是 Leo 的 bookkeeping，會晚也會早。實務上：(1) 在還開著的票底下 ship 了 code → STM 記「live since X、Jira 仍 Y」
+並在回報裡明講，dream closeout audit 靠這行對上；(2) 反過來看到票 Done 不代表能觀察到工作成果已生效。
+reconcile 的「local completed / Jira 未 done」manual-review 名單多半是這條時間差，先查 deploy 證據再判斷是不是真漂移。

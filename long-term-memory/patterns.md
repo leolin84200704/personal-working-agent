@@ -1645,10 +1645,11 @@ VP-17503 是「騎在已驗證機制上的刪除型改動」，一個帶明確�
 以及 configured / unset 兩種回傳形狀。比讀 proto 檔推測便宜太多，
 而且這正是上面那條「37% 是 empty string」被發現的方式。
 
-### worktree + config-yaml-coupling pre-commit hook：yaml 快照只在 main checkout（VP-17628 / VP-17589 兩次踩）
-`lis-emr-v2-config.yaml` / `lis-emr-v2-config.prod.yaml` 是**未被 track 的檔案，只存在於主 checkout**。
-新開的 worktree 裡沒有它們 → hook 對任何碰 `GRPC_V2_SETTING_*` 之類 env 的 commit 直接擋下。
+### worktree + config-yaml-coupling pre-commit hook：yaml 快照只在 main checkout（VP-17628 / VP-17589 兩次踩；VP-16166/VP-17916 補全）
+`lis-emr-v2-config.yaml` / `lis-emr-v2-config.prod.yaml` 是**被 `.gitignore: *-config.yaml` 忽略的檔案，只存在於主 checkout**（worktree 與 fresh clone 都沒有）。
+效果依 guard 分支而異：有的分支會**擋下** env commit（VP-17628 案例），Gate-4 的 env-declared 檢查則是**靜默通過**（glob 匹配 0 檔 = 無條件 pass）——VP-16166 的 3 個新 env 就是這樣在 worktree 裡漏掉的。
 解法是把那兩個 yaml **複製進 worktree** 讓 hook 解析得到（不是 `--no-verify` 繞過）。
+兩個補充事實（VP-17916 調查，2026-08-26）：(1) 檔名以 gate 規則文本寫的 `lis-emr-v2-config.yaml` 為準——Jenkinsfile 裡的 `azure-lis-emr-v2-config.yaml` 是 CI 從 cluster 匯出用的**另一個**名字，用它搜會誤判「檔案不存在」；(2) 這份快照沒有任何部署路徑會讀（Jenkins 的 configmap 是 cluster 自己 round-trip），比對對象本身是過期快照。source-of-truth 決策開在 VP-17916。
 
 ## 【蒸餾 2026-08-10】CI 變慢的真正原因不在 Jenkinsfile 裡 —— 先跟 CI server 要每個 stage 的實測時間（VP-17653 / VP-17656）
 
@@ -2366,3 +2367,50 @@ provider/clinicadmin calendar 抄一次**，之後**永不再同步**。
   role、哪個 UI 擁有它（claim 的 unlock 只在 internal wellness portal，不在報錯的
   va-portal）；「被誰占用」要嘛點名要嘛講明「過去的使用也算」，否則使用者在自己的
   live 清單裡找不到就升級客訴。
+
+## 【蒸餾 2026-08-26】VP-16166 / VP-17915 / LIS-7716 / VP-17914 一輪蒸餾
+
+### 一個查詢判定「這張表沒有 writer」：`MAX(created_at) == 表的 CREATE_TIME`（VP-16166）
+information_schema 只能證明表**存在**，證明不了表**活著**。`practice_integrations` 有 516 rows、schema 正確，
+但 MAX(created_at) 精確等於建表那一分鐘 = 落地起零寫入。接手任何「已經有的表」之前先跑這一句；
+誤判的代價是把功能蓋在死表上（PRD 差點這樣寫）。
+
+### grep-for-evidence 之前先對載體下 sanity 斷言（VP-16166 兩例同 root cause）
+「找到 0 個」只有在「載體確實有東西」成立時才是證據。兩個實案：
+- `kubectl logs` 沒帶 `-c` 打到雙 container pod（k8s v1.22 強制要求）→ 指令每次都在報錯，5 個 grep 全落在錯誤訊息上
+  → 拿到「全部 0」的假陰性。救回來的唯一原因是它與 DB 明明有 2 筆單矛盾。
+- expect 腳本會把 `spawn` 指令原文 echo 到 stdout，grep pattern 自己匹配自己 → 假陽性且會蓋掉真命中。
+  修法：`log_user 0` + 下游 `grep -v '^spawn'`。
+確定性作法：任何 log/輸出 grep 前，先斷言總行數 > 0 或某個必定存在的 marker 在場，再對內容下斷言。
+同族 gotcha（LIS-7716）：`mysql -N -B` 的輸出會被 password warning 行污染，shell 變數抓到空/髒值
+→ 先 `2>/dev/null` 且驗證變數非空再用。emr-v2 prod DB 密碼含特殊字元，連線字串要先 URL-decode（`%40`→`@`）。
+
+### 從世界讀到一個 SHA，先 fetch 再說它是誰（VP-16166 部署誤判）
+拿 cluster 的 image SHA 對一個**沒重新 fetch 的本地 ref** 下結論 → 對 Leo 說「prod 沒有這個 code」，
+實際已經跑了 17.5 小時。image tag / commit SHA 是外部世界的狀態；比對前 `git fetch`，否則就是拿記憶當 ground truth。
+
+### emr-v2 部署拓撲：parse 訂單的是 on-prem pod，不是 AKS（VP-16166/VP-17915 定案）
+- 同一個 deployment 名字 `lis-emr-v2-deployment-prod` 存在於**兩個 cluster**：AKS（ns `emr-v2`，容器名 `lis-emr-v2-prod`）
+  與 on-prem（ns `default`）。**order intake 實際發生在 on-prem pod**——監控訂單處理去看 AKS pod log 的線永遠不會響；
+  DB row（`hl7_file_input`）是不在乎哪個 pod 寫的訊號，當 primary。
+- on-prem prod 原本跑 `:latest`（移動標籤，外部無法知道跑哪一版）。VP-17915（2026-08-26 prod 驗證）後 Jenkins
+  line 232 路徑也 sed 成 `:${GIT_SHA}`，且 `case "$APPLY_OUT"` 守衛保證一次部署只滾一次。
+  副產品：ReplicaSet 清單即部署史（讀 RS 的 image tag 序列）。
+- exec 進 pod 前每次重新 resolve pod 名——prod pod 會在你工作中途被別人 deploy 掉（VP-17914 實例）。
+
+### emr-v2 repo 分支拓撲與 worktree 開工 checklist（VP-16166 + LIS-7716 收斂）
+- integration branch 是 `staging`（**沒有** stage_test——那是 transformer repo 的名字）；promote 用「Staging」PR staging→main。
+  從 main 切的 branch 要改 base 到 staging：`git rebase --onto origin/staging origin/main <branch>`（直接 rebase 會重放 main 的 commit）。
+- fresh worktree checklist：`npm install`（要**自己的** node_modules——symlink 主 checkout 會讓 prisma generate 改到別的 branch 腳下；
+  從舊 branch `cp -a` 687MB 比重裝快但可能缺新依賴）→ `prisma generate` → `prisma generate --schema=prisma/schema.test.prisma`。
+  缺 test-client 會有 5 個 suite 假死，長得跟 regression 一模一樣。
+
+### Enforcement 放哪一層：用「可測性」當判準（LIS-7716 debate 的可攜結論）
+gateway 前門 gate 得再嚴，資源服務自己不 gate 就存在直呼繞過——而「跨服務的 authz 洞」是 system property，
+單 repo 測試寫不出 negative test。把 gate 放在資源擁有端（讀 signed JWT claim 自己驗），authz 反例立刻變成
+單 repo 可寫的 spec。選 enforcement 位置時，「哪一層能讓這個性質變成可測試的」是有效的決勝準則。
+
+### Vibrant API 的 Bearer 前綴不一致（VP-17914）
+report-status API（`/result/getReportStatusListV2` 等）要 `VIBRANT_API_TOKEN` **含 `Bearer ` 前綴**整串送；
+其他端點收 raw token。兩種變體 server 端同時存在——401 時先切另一種格式再懷疑 token 失效。
+Atlassian MCP 斷線時的 fallback：`~/src/credential/atlassian-api-token.md`（Basic auth）直打 `rest/api/3` 可用。

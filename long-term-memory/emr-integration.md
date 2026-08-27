@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.3736
+score: 1.3984
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -22,6 +22,7 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
+- LIS-7716
 - QH-1660
 - QH-2257
 - QH-2577
@@ -104,6 +105,7 @@ links:
 - VP-17810
 - VP-17812
 - VP-17827
+- VP-17914
 - fhir-api
 tags:
 - emr
@@ -682,6 +684,15 @@ PRD: Confluence「Automated New EHR Integrations」(page 1781628967)
 - **internal gate**：approve/reject/history + list「跨 customer 看全部」皆需 `internal_user_role`（Sales 也算 internal，非 admin）；一般 customer 只看自己。要新增 internal 動作時，list 的可見性 gate 要一起放寬，否則能動手卻看不到佇列。
 - **AC「Every resolution action writes an audit log entry」→ `ehr_vendor_inquiry_status_history`**（append-only，mirror `EhrIntegrationStatusHistory`：inquiry_id FK / from_status / to_status / reason / changed_by / created_at），每次 approve/reject 與 status update 同一個 `$transaction` 寫一筆。inline `reviewed_by`/`reviewed_at`/`rejection_reason` 只存最新狀態、會被覆蓋，**不能當 audit trail**。此 pattern 通用於本 repo 任何 approve/reject ticket。
 
+### report_option 生命週期 + self-service（LIS-7716, 2026-08-26 staging E2E 過）
+
+- **「re-provision 會 reset report_option」的真正機轉不是欄位被改，是換了一個 row**：auto-integrate 的 `create()` 是 plain prisma create——無 upsert、無 (customer_id, clinic_id) unique constraint → 重新提交整合請求會生出**全新 row** 吃 `@default(CLASSIC)`，舊 PERSONALIZED row 還在但 push 端 `findFirst(status LIVE, orderBy integration_type desc)` 挑哪個 LIVE row 是任意的（Maristany/Zendesk 746900 就是這樣丟掉 PERSONALIZED）。dedupe + unique constraint 是 open follow-up（LIS-7716 comment 185604）。**同 clinic 有多個 LIVE row 時，任何 per-integration 設定都可能被 sibling 蓋掉——查設定失效先數 LIVE rows**。
+- **釐清舊條目**：上方 Follow Existing 表的「script 已自動處理（getReportOption）」只對**手動 insert-ehr-integration script 路徑**成立；API `create()` 路徑在 2026-08-26 前**沒有** carry-over（省略就靜默 CLASSIC）。LIS-7716 補上：create() 先找同 clinic LIVE 非 stub row（同 vendor 優先）carry-over + loud log。
+- **建立後可改了**：`PATCH /integration-management/auto-integrate/requests/:id/report-option`（LIVE-only；偵測同 clinic sibling LIVE 並在 response 大聲標示；寫 last_modified_by + ehr_integration_notes TECHNICAL row old→new；值相同 changed:false 不留 note）。`update()` 收到 reportOption 現在 400 指向新 endpoint（原本 accept-but-ignore 靜默 no-op，VP-17408 同類）。push 端 fresh-read 本來就成立（processor 執行時查 DB），改完下一次 push 生效。
+- **Authz 放在資源擁有端**（emr-v2 自己 gate，不靠 transformer-v2 前門）：internal isAdmin，或 JWT `user_roles` exact-match {CLINIC, CLINICADMIN, CLINIC_ADMIN_ADDON}（case-insensitive）且 `user.clinic_id === integration.clinic_id`；明確無視 @SkipDataAccessCheck（VP-16980）。
+- prod 實體欄位 = `enum('CLASSIC','PERSONALIZED') NOT NULL DEFAULT 'CLASSIC'`（2026-08-26 實測 980 CLASSIC / 136 PERSONALIZED）；repo 裡 20250911 migration 的 Postgres 語法只是檔案殘留。
+- 全新 practice 無前行 row 的預設：Leo 拍板**維持 CLASSIC**（不改 schema default）。
+
 ---
 
 ## 插入後驗證 Checklist
@@ -696,6 +707,14 @@ customer_name（gRPC）, customer_id, customer_provider_NPI, customer_practice_n
 server_folder, local_folder, emrName
 
 ---
+
+## Abandoned-order quarantine（VP-16166, 2026-08-25 起 prod live）
+
+- **emr-v2「訂單被放棄」的唯一出口是 `alertOrderNotPlaced`**（`logRetryExhausted` retry 用盡 + `markTerminalFailure` 首次即 terminal 都走它）——要對被放棄的單掛任何行為，掛這裡；quarantine capture 與 VP-17544 的 Sentry→Slack 告警因此描述同一組單。
+- 兩張新表 `quarantined_orders` + `resolution_logs`（staging+prod DDL 已逐欄驗證）。capture 涵蓋**所有** failure class（unknown_provider / unknown_origin / OTHER_FAILURE），`final_outcome` 與 `quarantine_reason` 分離（provider 有 match、後段才失敗 = ROUTED + OTHER_FAILURE，不污染 provider 解析失敗率）；emr-v2 沒實作的 identity step 記 SKIPPED 不記 NO_MATCH。raw HL7 從 pod 磁碟讀（`localDir/file_name`），讀不到寫 `raw_capture_error` 仍建 row。歷史 87 筆舊單**不回填**（Leo 2026-08-26 定案）。
+- **為什麼需要 resolution_logs 才能量失敗率**：`hl7_file_input.customer_not_found` 在成功 re-parse 時被**清掉**（7 月 MDHQ add-provider 三筆實證）——用可變欄位當失敗計數器 = 讓復原銷毀證據，PRD 的 KPI 只有 append-only 紀錄能產生。
+- **`practice_integrations`（VP-16164）是凍結快照，不可依賴**：516 rows 的 `MAX(created_at)` == 表的 CREATE_TIME（2026-05-27），此後零 writer；83 個現役 order-sending clinic 沒有 row。live routing 唯一真源仍是 `ehr_integrations`。
+- Expiry cron 不用 redis lock：兩個 UPDATE 的守衛全在 WHERE（`status=OPEN` / `warning_notified_at IS NULL`），多 pod 併發 = no-op（VP-17422 redis fail-open 事故的反面設計）。
 
 ## hl7_file_input Triage（Regular Ops）
 
@@ -996,6 +1015,16 @@ WHERE (ei.integration_type <> 'FULL_INTEGRATION' OR ei.ordering_enabled = 0)
 - **所有邊界情況都往 final push 掉**：deferred-only accession（Gut-Zoomer-only barcode）、沒訂 deferred report、deferred 先完成 → 都收斂成「一次完整的 final push」。config 空/無法解析亦然（fail-safe）。
 - **`ehr_integrations.status` enum 只有 PENDING/APPROVED/LIVE/REJECTED — 沒有 PAUSED**。要停用一筆（如測試用）integration 走 `result_enabled=0`（eligibility 硬性要求它）。
 - **prod E2E 安全模式（VP-17344 手法的延伸）**：在**同一個真實 customer** 底下開測試 integration 是安全的，只要新功能自己的過濾條件保證兩者不會同時命中——這裡 push-level 精確比對 + 測試列指向 Vibrant 自家 SFTP `/Test/Input/EMR_V2/VP17715`，所以重放真事件不可能碰到客戶的 MDHQ 目錄。重放來源 = prod pod 打 cloud Event Hub `general-sample-events`（SASL 密碼走 Key Vault `kafka-sas-connection-string`，pod 上 DefaultAzureCredential 直接可用）。驗完把測試列 `result_enabled=0` 收掉。
+
+### PER_REPORT_GROUP 補送稽核 + 安全 replay 手法（VP-17914, 2026-08-26 prod 執行 8 筆全驗證）
+
+- **「欠一次 GROUP:MAIN」的稽核查詢可複用**：MAIN reports 全 Final ∧ deferred（GUT5）仍 Preliminary ∧ `result_transmission_records` 無 `GROUP:MAIN` scope row → 這張單欠一次 push。VP-17914 用它找出 7 筆（trigger event 落在 INCIDENT-20260817 on-prem stale-Prisma 窗口，`PER_REPORT_GROUP` enum error 吃掉）。
+- **補送方式選 event replay，不要直接 gRPC**：從 AKS prod pod 重放 `new_report_status_updated`（addon 帶 generated/total short names）到 Event Hub `general-sample-events`（kafkajs + `KAFKA_CLOUD_SASL_PASSWORD` env，VP-17715 E2E 同法）→ ORGANIC handler 自己 enqueue `GROUP:MAIN` 並帶 dedup shield。直接呼叫 generateResultHl7 會寫 null-scope row，GROUP:MAIN 沒有 shield → 之後 organic 事件來會重複投遞。
+- **GUT5 先完成的邊界**：per VP-17715 matrix 這種單永遠不會 fire GROUP:MAIN，唯一 trigger 是 NTZ finalization——過期未 final 時用 pod 內 HTTP `POST /api/v1/result/generate/{sampleId}`（admin JWT 用 pod 的 JWT_SECRET 自簽；port 3000、prefix `api/v1`、container `lis-emr-v2-prod`、ns `emr-v2`）。dry-run 版 `generate-content` 可先看產出（333 bytes 無 OBX = 空殼，不要送）。
+- **`_order_infototest.B` 的 namespace 是 `test.id`，不是 `test.test_id`**（celiac serology = 8/11/14/17；HLA DQ8/DQ2 = 1244/1256/2504/2507）。order-level「有沒有 assign 某檢驗」以這張表為準。
+- **`testHierarchyForReports` 對 0 個 finished test 的 sample 回的是 TEMPLATE**（noGen 也會顯示 HLA）——只有 resulted/preliminary accession 反映真實 assignment，別拿未收件 accession 的 hierarchy 當證據。
+- **「報告缺 marker」先查 catalog provisioning，再懷疑 pipeline**：custom bundle 雙胞胎可以被建成不同 test set（No-Genetics 112328 建立時就沒 celiac，With-Genetics 112327 從第一天就有；LBS-1723 2026-08-14 補齊）。A/B 法：兩個 bundle 的訂單按 created date 對 `_order_infototest` 數 marker rows，斷點對上 fix ticket 的 resolve 時間即定案。pre-fix 已出的報告**無法回溯生成**（lab 根本沒跑 assay）——答案是 redraw，不是 repush。
+- 病人名 `TEST^ZZZTEST` = practice 自己的 test patient——repush/催件前先看 PID，可能是對方在驗新功能。
 
 ### general_sample_events 事件語意（設計 partial push 時查證，ClickHouse 192.168.62.85:8123 kafka db）
 

@@ -71,3 +71,10 @@ summary: Ticket keyword to repo/module routing table
 - **"Update vendor list"** / **"Settings EMR vendor"** → `ehr_vendors` 表 + `vendor-management/` module
 - **"vendor public/private"** → `ehr_vendors.is_public` 欄位，source of truth 是 Notion EMR Vendor List
 - **永遠用 lis-backend-emr-v2**，EMR-Backend 是 legacy
+
+## Provider Portal 前端 repo 對應（LIS-7716, 2026-08-26）
+
+- **provider portal = `va-portal`（現行 Vue app）+ `ehr-frontend`（新版，經 `EhrSettingIframe.vue` iframe 嵌入，beta flag `newVAsetting`）**。兩邊的 settings 元件互為鏡射（va-portal 用 Dialog/ResponsiveButton + data-testid；ehr-frontend 用 BaseModal/Button 無 testid），改一個 UI 常要雙份。
+- **`LIS-frontend` 是內部 lab-ops app，與 provider portal 無關**——別把 provider-facing ticket 路由過去。
+- Settings 一般走 transformer-v2 `/v2/portal/trans-service`，**但 EHR Integrations（Third-party tab，beta program 22 `auto_emr_integration` gate）直接打 emr-v2** `…/lisapi/v1/lis/emr-service[-staging]/api/v1/integration-management`（useEMRService.js），不經 transformer-v2。
+- Leo 對 portal 前端**無 push 權**（va-portal `permissions.push=false`）——FE half 只能出 patch 檔交接；跨 repo 計畫時先 `gh api repos/{owner}/{repo} --jq .permissions.push` 驗權。

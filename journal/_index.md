@@ -1,12 +1,15 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-24 (dream run, 4-night catch-up). +1 entry, distilled
-> tonight — the VP-17827 practice-id record (Jira workflow two-hop + linked-graph
-> rule -> leo-working-rules.md; dirty-guard escalation -> factory proposals inbox).
+> Last updated: 2026-08-26 (dream run, 2-night window). +2 entries, both distilled
+> tonight — vp16166-quarantine (abandonment quarantine + frozen-table/carrier-sanity
+> lessons) and lis-7716-report-option (report_option lifecycle + portal routing).
+> Archived 2 distilled 07-27 entries (>30d).
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-26 | lis-7716-report-option | LIS-7716, VP-17408, VP-16980, VP-16734 | true |
+| 2026-08-25 | vp16166-quarantine | VP-16166, VP-17915, VP-17916, VP-16163, VP-16164, VP-17342, VP-17422, VP-17544 | true |
 | 2026-08-24 | vp17827-practice-id-blocked | VP-17827, VP-17826, VP-16163, VP-16164, VP-16165, VP-16166, QH-6775, HL7-NPI-PRACTICE-MATCH-20260820 | true |
 | 2026-08-20 | vp17812-prospera-spec | VP-17812, QH-6764, VP-16245, VP-16987, VP-17475, BIOINSIGHTS-onboarding | true |
 | 2026-08-18 | vp9299-status-list-v2 | VP-9299, VP-17753, VP-17754, VP-17755, VP-16859, PH-850 | true |
@@ -24,6 +27,6 @@
 | 2026-07-31 | minilm-removal | (none) | true |
 | 2026-07-29 | vp17532-availability-vs-booked-events | VP-17532, VP-16850, VP-17190, VP-16499, VP-16410 | true |
 | 2026-07-29 | beta-e2e-cancel-gateway | BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500 | true |
-| 2026-07-27 | vp17499-vp17500-placerid-namespace | VP-17497, VP-17499, VP-17500 | true |
-| 2026-07-27 | vp17497-placerid-reclaim | VP-17497, VP-17283, VP-17286, VP-17475 | true |
+| ~~2026-07-27~~ | ~~vp17499-vp17500-placerid-namespace~~ | VP-17497, VP-17499, VP-17500 | archived 2026-08-26 → `archive/journal/` |
+| ~~2026-07-27~~ | ~~vp17497-placerid-reclaim~~ | VP-17497, VP-17283, VP-17286, VP-17475 | archived 2026-08-26 → `archive/journal/` |
 | ~~2026-07-15~~ | ~~vp17421-stale-reminders~~ | VP-17421, VP-16921, VP-16499 | archived 2026-08-16 → `archive/journal/` |

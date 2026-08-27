@@ -18,6 +18,7 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
+- LIS-7716
 - QH-1660
 - QH-2257
 - QH-2577
@@ -86,6 +87,7 @@ links:
 - VP-17810
 - VP-17812
 - VP-17827
+- VP-17914
 - emr-integration
 - fhir-api
 relations:
@@ -113,7 +115,7 @@ summary: Leo 決定：所有 HL7 inbound order 改用 customer_npi + practice_id
   result 用且 667/1154 存的是 customer_id，不可當對照。實證追加：MDHQ 的 ORC-12 送 NPI（33/33），撞 key 的
   5 筆歷史單全部下給較早的 backfill 列（11733/11740），但那是 row order 的巧合；且 clinic 6212 的 2 筆 2026-08
   單 MSH-4=139134 與我們的 clinic_id=6212 不符，改用 (npi, MSH-4) 會把它們變成 customer_not_found。
-score: 1.035
+score: 0.9893
 ---
 
 # HL7 order matching 改為 customer_npi + practice_id — 決策記錄與盤點
