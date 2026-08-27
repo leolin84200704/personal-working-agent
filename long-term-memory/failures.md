@@ -7,7 +7,7 @@ score: 1.2886
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
-updated: 2026-08-24
+updated: 2026-08-26
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -34,6 +34,7 @@ links:
 - QH-919
 - VP-15460
 - VP-16164
+- VP-16166
 - VP-16168
 - VP-16169
 - VP-16172
@@ -110,22 +111,22 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 79 entries across STM
+summary: Auto-aggregated failure index from 82 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-24 — total 79 entries
+> Last updated: 2026-08-26 — total 82 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 22 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 24 entries
 - [Other / uncategorized](#other) — 13 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 10 entries
 - [DB / migration / backfill](#db-migration) — 8 entries
-- [Deploy / commit / push coordination](#deploy-coordination) — 6 entries
+- [Deploy / commit / push coordination](#deploy-coordination) — 7 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
 - [Scope / requirement / PM communication](#scope-communication) — 4 entries
 - [Auth / permission / role](#auth-permission) — 3 entries
@@ -173,6 +174,46 @@ Picked `lock.release()` from redlock@5 docs while installing redlock@4. The two 
 ### **[[VP-16164]]** — `2026-05-27` — COUNT(DISTINCT) 把 null 當一致的陷阱
 
 一致性分析說 legacy_result_send_type「always consistent」，但 pipeline parity 抓到 1 個 group 有 [null, SFTP]。COUNT(DISTINCT) 忽略 null，所以判為一致。實際 backfill 把 null 正規化成 group 值。本案 pipeline 等價（null→SFTP）無害，但要記得 null 在一致性分析會被低估。
+
+### **[[VP-16166]]** — [2026-08-26 14:2x PDT] 用錯檔名 → 錯的根因寫進了 Jira 票
+
+我斷言 pre-commit 的 guard 1「從 repo 搬離 root-level config 那天起就是死的、glob 匹配 0 個檔案」，
+並把這個結論寫進 **VP-17916 的 description** 與 factory PR #69。**錯的**。
+
+我找的是 `azure-lis-emr-v2-config.yaml`（Jenkins 從 cluster 匯出用的名字），guard 找的是
+`lis-emr-v2-config.yaml`。後者**存在**於 Leo 主 checkout（Jul 21、129 keys vs cluster 144）。
+
+真實缺陷比我說的窄也更有意思：那對檔案被 `.gitignore: *-config.yaml` 忽略，所以只存在於當初
+產生它的那一份工作目錄，**worktree 與 fresh clone 都沒有** → guard 在主 checkout 是啟用的、
+在 worktree 靜默跳過。我這次三個 env 之所以漏掉，就是因為我全程在 worktree commit。
+而且它比對的來源是一份沒有任何部署讀取的過期快照。
+
+**為什麼這次特別該記**：前兩個錯誤只影響我給 Leo 的口頭回報，這個錯誤**寫進了別人會讀的
+artifact**（Jira description + PR body）。錯的根因會把後面接手的人送去修不存在的問題。
+已更正 VP-17916 的 description（保留「已更正」標注，不默默覆蓋），並關掉 PR #69。
+
+**Root cause 與前兩次同源**：我沒有先確認「我要找的東西叫什麼」。Gate 4 的規則文本
+（`lis-prod-change-gate` skill）裡就寫著正確檔名 `lis-emr-v2-config.yaml`，我卻用 Jenkinsfile
+裡看到的匯出檔名去搜。可攜的作法：**斷言「查無此物」之前，先用規則/文件裡給的名字查一次，
+而不是用自己從程式碼推論出的名字。**
+
+### **[[VP-16166]]** — [2026-08-26 17:1x] 兩次「把壞掉的指令當成證據」
+
+**(a) 五個 0 的假陰性**：查 on-prem pod log 時，`kubectl logs` 沒給 `-c`（該 pod 有 2 個
+container，k8s v1.22 強制要求），指令每次都在報錯，我的 5 個 grep 全部落在錯誤訊息上，
+於是拿到「orders processed=0 / abandonment=0 / QUARANTINE=0」。**這與 DB 明明有 2 筆單直接矛盾，
+矛盾才是唯一救我的東西**——若當時剛好真的是 0 筆單，我會把一個報錯的指令當成「一切正常」交出去。
+補 `-c lis-emr-v2-prod` 後真實 log 是 36,328 行。
+
+**(b) 自我匹配的假陽性**：monitor 透過 expect 抓 on-prem log，而 expect 會把 `spawn` 的指令原文
+印到 stdout——那行裡就含著 `QUARANTINE|RETRY-EXHAUSTED|...` 這串 grep pattern，所以過濾器抓到了
+自己的指令。危害不是噪音，是**它會把真正的命中蓋掉**。修法：`onprem.exp` 在送密碼前 `log_user 0`，
+monitor 端再加 `grep -v '^spawn'` 雙重防護。
+
+**共同 root cause**：兩者都是「拿指令的**通道狀態**當工作的**產物**」。(a) 沒有斷言「我真的讀到
+日誌了」（總行數 > 0），(b) 沒有斷言「我讀到的是日誌而不是我自己的迴音」。可預防的確定性作法：
+**任何 grep-for-evidence 都先對載體下一個 sanity 斷言**（總行數、已知必定存在的 marker），
+再對內容下斷言；只有「找到 0 個」而沒有「載體有東西」是無效證據。
 
 ### **[[VP-16251]]** — `2026-04-21 21:50` — Script 產出的資料有 3 個問題需手動修正:
 
@@ -725,6 +766,39 @@ LTM patterns.md 304-308 行早就有「兩 DB 都要 apply」、但實際上線�
 ### **[[VP-15460]]** — `2026-04-28` — Migration not applied automatically
 
 Agent committed migration SQL to repo and assumed release pipeline would `prisma migrate deploy` it. Leo had to remind: "你 sftp_folder_mapping 的改動還沒真的上傳到 database". Then `prisma migrate deploy` failed with P3005 (DB never baselined for prisma migrations) → fell back to `prisma db execute --file <sql>` (raw SQL apply). Then "192.168.60.11:3306 也要 apply" — second DB. Lesson: this repo has two MySQL instances + Prisma is not the migration source-of-truth in prod.
+
+### **[[VP-16166]]** — `2026-08-25 15:34` — 我用 `git restore --staged --worktree src` 清掉了 Leo 正在編輯的東西
+
+**做了什麼**：清理 `feature/leo/VP-17342` 那份 checkout 時，執行了
+`git restore --staged --worktree src .DS_Store`，把 61 個 staged 檔案的 index 內容
+全部丟棄，並把 `rp.md` / `API resource/` / `source/` / `docs/CICD-DEPLOY-WALKTHROUGH.md`
+搬離 repo。Leo 當下正在手動改同一個 repo，回報「檔案不見了」。
+
+**恢復到什麼程度**：搬走的檔案 100% 還原（內容與 mtime 都在）；branch 也還在
+（`git push --delete` 被 pre-push hook 的 build 擋下來，origin 從未被刪，
+從 `origin/feature/leo/VP-17342` 重建 local branch）。**救不回來的**是那 61 個檔的
+index 內容：`git fsck` 只找到 1 個 unreachable blob（那些 blob 在歷史別處仍可達，
+不是孤兒），且拿指紋（相對 origin/main 89 檔 / +465 / −9105）掃過 7/1 後
+origin/main + origin/staging 的 400 個 commit **沒有任何 commit 對得上**——
+那是人工混出來的狀態，無法從歷史重建。VS Code / Cursor 的 local history 當天
+14:00 後也是空的。
+
+**Root cause**：我在 15:24 讀了 `git status`（當時 src 底下沒有 unstaged 修改），
+15:34 才執行不可逆指令，中間隔了 ~10 分鐘和數次工具呼叫。Leo 的批准是針對
+「丟棄陳舊內容」這個**判斷**，而我把它當成對**當下檔案狀態**的批准——但那個狀態
+是十分鐘前的快照，而且我明知 Leo 有可能同時在動同一個 repo（我自己在報告裡
+寫過「不碰你那份有未 commit 工作的 checkout」）。
+
+**可預防**：可以，而且是廉價的。兩條確定性機制：
+1. **不可逆指令前重讀狀態**——`git restore --worktree` 前立刻重跑一次
+   `git status --porcelain` 並與批准當下的清單比對，有差異就停下來問。
+2. **先做一個丟棄前的備份 ref**——`git stash create` / `git commit` 到一個
+   throwaway branch，再執行丟棄。成本一秒，換到的是「丟錯了還救得回來」。
+   我兩條都沒做，才會從「可回復的錯誤」變成「不可回復的錯誤」。
+
+**次要教訓**：我當時的分析（那 61 個檔沒有獨特價值）事後看是對的——42 個與
+origin/main 逐 byte 相同、19 個是被 main 取代掉的舊碼。但**分析正確不等於執行安全**。
+一個正確的判斷加上一個不安全的執行方式，結果仍然是資料遺失。
 
 ### **[[VP-17120]]** — `2026-07-03 00:15` — CORRECTION: /tmp ingestion was NOT a pre-deploy-wide state — it was the AKS Phase A test pods
 
