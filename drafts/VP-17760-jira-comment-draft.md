@@ -1,58 +1,48 @@
 # VP-17760 — Jira comment draft (EN, for Leo to review/post)
 
-> Target: VP-17760, addressed to Nan Wu (reporter) + api-product.
-> Context: implementation PR is up; two things need their side.
+> Target: VP-17760, addressed to Nan Wu (reporter) + order team (Fangyuan
+> Yang) + api-product. Revised 2026-08-28 after staging E2E: gateway question
+> answered itself (works); the new item is that the documented Cancellation
+> Preview is not actually deployed.
 
 ---
 
-Unblocked and implemented — the missing piece, a read-only cancellation
-pre-check, shipped today as order-management's `GET /orders/cancellation-preview`
-(documented on the Cancel Order API Confluence page, section 2). PR #386
-(draft, → staging) implements `GET /orders` as documented: lookup by exactly
-one of `orderId` / `placerId`, with `status`, `kit` (status + tracking
-number), `lab`, `report` (status + the two counts), `cancellation`
-(cancellable / fee / reason), and `exceptions`.
+`GET /orders` is implemented, merged to staging, and verified end-to-end —
+including through the external gateway: both the documented
+`GET /v1/orders?orderId=|placerId=` (base path, query string intact) and
+`GET /v1/orders/status` work with a client-credentials token, so no gateway
+change is needed. Full lookup verified: place → poll (`processing` while
+placement is in flight, then `placed`), lookup by the returned `orderId` or
+by `placerId`, cancel → `cancelled` with `reason: already_cancelled`,
+uniform 404 for unknown/cross-tenant ids.
 
-Two items need a decision/action outside this repo:
+Three items for other owners:
 
-**1. Pre-placement statuses (contract addition — needs a mintlify update).**
-The documented enum starts at `placed`, but the recovery scenario this ticket
-exists for happens BEFORE `placed`: a caller times out, polls, and the order
-is still mid-placement — or placement failed. Answering 404 there sends the
-caller straight back to the blind re-POST this endpoint was built to replace,
-and for a row stranded mid-placement (pod death) the caller would loop on
-GET→404 / re-POST→duplicate forever with no way out. So for the caller's OWN
-orders, the lookup also returns:
+**1. Order team — the documented Cancellation Preview is not deployed.**
+The Confluence page (Cancel Order API §2) documents
+`GET /orders/cancellation-preview` returning `is_cancellable` /
+`not_cancellable_reason`. The live endpoint on BOTH staging and prod
+currently answers 200 with the legacy billing-summary shape instead:
+`is_refundable`, and no cancellability fields (verified 2026-08-28 with raw
+probes; note a cancelled order answers `is_refundable: true`, so
+`is_refundable` cannot stand in for cancellability). Our side detects the
+legacy shape and reports `cancellation: null` (unknown) — the moment the
+documented response deploys, the block lights up with no change needed from
+us. Please share the deploy timeline.
 
-* `processing` — placement still in flight (or stranded; retry the GET, or
-  re-POST the same placerId later)
-* `rejected` — the request was rejected (fix and re-POST the same placerId;
-  it is reclaimable)
-* `failed` — our pipeline failed (re-POST the same placerId)
-* `dry_run` — the row was placed while the integration ran in dryrun mode
+**2. api-product — mintlify updates.** (a) Add the four pre-placement
+statuses to the `status` enum: `processing`, `rejected`, `failed`,
+`dry_run` — returned only for the caller's own orders whose placement has
+not (yet) completed; hiding them behind 404 would strand a caller whose
+placement died mid-flight (GET→404 / re-POST→duplicate forever). (b) Drop
+the five fields agreed on 13 Aug (kit.shippedAt / kit.deliveredAt /
+kit.carrier / report.availableAt / exceptions[].raisedAt) — the docs still
+show them. (c) `cancellation` may be `null` while item 1 is pending.
 
-These are visible only to the owning customer — cross-tenant/unknown ids
-still answer a uniform 404. Please add the four values to the `status` enum
-in the API docs (and drop the five fields we agreed on 13 Aug: kit.shippedAt
-/ kit.deliveredAt / kit.carrier / report.availableAt / exceptions[].raisedAt —
-the docs still show them).
+**3. FYI, mapping note now live:** a *preliminary* report reports
+`status: analyzing`, not `report_available` — flipping early would stop
+customers polling before the final report exists; partial availability stays
+visible via `report.generatedReportCount` vs `totalReportCount`.
 
-**2. Gateway route confirmation (api-product).** The docs promise
-`GET /orders?orderId=...` — a base-path GET with a query string. The verified
-gateway behavior covers `POST /v1/orders` and the `/v1/orders/*` subpath
-passthrough; whether the base-path route forwards GET with the query string
-intact is unverified. The service binds both shapes, so either works the
-moment the gateway does:
-
-* preferred: route `GET /v1/orders` → `GET /api/v1/order-intake` (query string
-  preserved)
-* already-proven fallback: `GET /v1/orders/status` rides the existing subpath
-  passthrough
-
-Please confirm which one the gateway will support so the docs can state it.
-
-One mapping note, as proposed on 13 Aug and now implemented: a *preliminary*
-report reports `status: analyzing`, not `report_available` — flipping early
-would stop customers polling before the final report exists; partial
-availability stays visible via `report.generatedReportCount` vs
-`totalReportCount`.
+Known limitation (documented): `orderId` exists only for orders placed after
+13 Aug (PH-855); older orders are identified by `placerId`.
