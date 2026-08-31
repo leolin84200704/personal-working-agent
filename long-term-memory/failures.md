@@ -7,7 +7,7 @@ score: 1.332
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
-updated: 2026-08-26
+updated: 2026-08-31
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -94,12 +94,15 @@ links:
 - VP-17753
 - VP-17754
 - VP-17755
+- VP-17760
 - VP-17765
 - VP-17812
 - VP-17825
 - VP-17827
 - VP-17868
 - VP-17870
+- VP-18030
+- VP-18050
 - VP-9299
 - business-model
 - business-model-deep
@@ -114,25 +117,25 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 82 entries across STM
+summary: Auto-aggregated failure index from 86 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-26 — total 82 entries
+> Last updated: 2026-08-31 — total 86 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 24 entries
-- [Other / uncategorized](#other) — 13 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 25 entries
+- [Other / uncategorized](#other) — 14 entries
 - [Build / TypeScript / Tooling](#build-tooling) — 10 entries
-- [DB / migration / backfill](#db-migration) — 8 entries
+- [DB / migration / backfill](#db-migration) — 9 entries
 - [Deploy / commit / push coordination](#deploy-coordination) — 7 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
+- [Auth / permission / role](#auth-permission) — 4 entries
 - [Scope / requirement / PM communication](#scope-communication) — 4 entries
-- [Auth / permission / role](#auth-permission) — 3 entries
 - [Error handling / throw vs log](#error-handling) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
 - [gRPC / network / timeout](#grpc-network) — 2 entries
@@ -479,6 +482,15 @@ for (PatientAddress a : patient.getPatient_address())
 - Worktree node_modules cloned from a stale branch checkout missed staging's newer deps (@azure/identity, @sentry/node) → 5 TS2307 build errors; `npm install` in the worktree fixed it. Lesson: after cloning node_modules into a worktree, run npm install before trusting the build.
 - `npx jest <full path>` matched 0 tests (testRegex vs path mismatch in this repo) — use a name pattern (`npx jest kafka-report-finished-listener`).
 
+### **[[VP-17760]]**
+
+- 2026-08-27: `npx prisma format` rewrote the entire 1148-line schema →
+  polluted diff; reverted, re-applied 5 lines by hand. Rule: never run
+  prisma format on this repo's schema for a surgical edit.
+- 2026-08-28: assumed prod container name `lis-emr-v2` — actual
+  `lis-emr-v2-prod` (staging: `lis-emr-v2-staging`). Query
+  .spec.containers[*].name first.
+
 ### **[[VP-17812]]**
 
 - Probe script round 1-2: guessed columns not in prod schema (ehr_vendors.api_enabled,
@@ -569,6 +581,15 @@ Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`
 ### **[[VP-17827]]**
 
 None this session.
+
+### **[[VP-18030]]**
+
+- 2026-08-31: `echo ===` and a commit -m containing backtick-quoted `to`
+  both got mangled by zsh (=== → "== not found"; `to` command-substituted to
+  empty inside double quotes). One stray non-English word also slipped into
+  a commit message body. Fixed by amend before push. Rules: heredoc
+  (`git commit -F - <<'MSG'`) for any commit message with punctuation;
+  grep -P '[^\x00-\x7F]' the message and changed files before commit.
 
 ---
 
@@ -738,6 +759,10 @@ Root cause: 第一次跑時我用 `tail -50` 截取 output，後段顯示 record
 - Root cause: 沿用 scripts/check-vp16329.ts 的 hardcode 單值模式，改成 array 時沒用 `Prisma.join()`。
 - 正解: `import { Prisma }` + `IN (${Prisma.join(CLINICS)})`，或對信任的整數陣列直接字串內插建 SQL。
 - 教訓: 多值 IN 查詢務必**先驗證回傳筆數合理**（20 clinic 只回 1 筆就該起疑），不能直接拿來下「不存在」結論。對應 [[feedback_batch_db_verify]] / [[feedback_join_scope_reverse_audit]]。
+
+### **[[VP-18050]]**
+
+- GraphQL wire spec first asserted the resolver's clinic-user gate using a patient token that carried `patient_id` + `barcode` but no `clinic_id`. `AuthGuard.validatePatient` rejected it one layer earlier ("Missing required patient identifiers"), so the test proved nothing about the resolver. Fixed by giving the token the identifiers the guard requires, so the request actually reaches the gate under test. Cheap instance of a general trap: a rejection test that passes for the wrong reason looks identical to one that passes for the right reason.
 
 ### **[[VP-16720]]** — `2026-06-01` — **
 
@@ -924,6 +949,46 @@ billing（見上一節）。這是本次驗證的範圍上限，已在 PR #316 �
 
 ---
 
+## Auth / permission / role <a id='auth-permission'></a>
+
+### **[[INCIDENT-2604156666]]** — Lessons for testing
+
+- `.spec.ts` 文件不能信賴 — 跟 service code 不同步演進（4b10e1a + 多次 service refactor 都沒同步 spec），可能長期沒人跑
+- 應該每個 PR 跑該 service spec；或者 CI gate 上有 spec 必過要求
+
+### **[[LIS-7690]]** — `2026-08-18 17:10` — on-prem cluster not inspectable — RESOLVED 18:10 by Leo
+
+First attempt `ssh -o BatchMode=yes leo@192.168.60.5` → `Permission denied (publickey,password)`
+(same wall as failures.md:496). **Resolution: the account takes PASSWORD auth, not a key** — Leo
+supplied the password in-session. Key auth genuinely is refused, which is why every previous
+BatchMode attempt failed and the blocker looked absolute. Mechanics that work from this laptop
+(no `sshpass` on macOS, `ssh` will not read a password from a pipe): drive it with `/usr/bin/expect`,
+password passed in via env var, never written to disk:
+```
+spawn ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no leo@192.168.60.5 $cmd
+expect -re {[Pp]assword:} { send -- "$env(ONPREM_PW)\r" }
+```
+`kubectl` is at `/usr/local/bin/kubectl` on appserver04 (control-plane node, k8s v1.22.3, 6 nodes
+`appserver01-06` = `192.168.60.2-7`). The password is NOT recorded here — ask Leo, or read it from
+`~/src/credential/` if he chooses to store it there.
+
+### **[[VP-17755]]** — `2026-08-27` — `git add -A` 在共用 checkout 掃進了別人的編輯
+
+- 現象：commit 61e6e70 目標只含 VP-17753 變更，實際混入了 Leo 同時在 working tree 做的
+  VP-17755 gate 移除——違反 Leo 明定的「一票一斷點 commit」。
+- Root cause：本 session 假設 checkout 為自己獨占，用 `git add -A` 全量 staging；實際上
+  Leo 的互動 session 同時在編輯同一份 working tree（同機同 path，非 worktree 隔離）。
+- 可預防：staging 一律點名檔案（`git add <paths>`）+ commit 前 `git status -s` 對照
+  「這次我改了哪些檔案」清單；或共用機器上先 `git stash list`/`status` 偵測第三方編輯。
+- 交接訊號：對方 session 以 cross-session message 叫停，本 session 立即停止 git 操作。
+
+### **[[VP-17868]]**
+
+- First BE commit was made with `core.hooksPath=/dev/null`. The repo points `core.hooksPath` at the factory githooks; bypassing them was wrong and pointless. Reset and recommitted through the hooks.
+- `git push` to va-portal: 403. `gh api repos/Vibrant-America/va-portal --jq .permissions.push` → false. Leo's account cannot write to the FE repo; the FE half needs the FE team or a permission grant.
+
+---
+
 ## Scope / requirement / PM communication <a id='scope-communication'></a>
 
 ### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
@@ -957,36 +1022,6 @@ ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktre
 所以改成 `markTerminalFailure` 不覆寫 `last_update_pod_name`。
 **教訓：guard 抓到的不一定是新變數，可能只是既有變數的新使用點；用「塞空值進 config」
 去消除警告會偷偷改變 `??` 的語意。**
-
----
-
-## Auth / permission / role <a id='auth-permission'></a>
-
-### **[[INCIDENT-2604156666]]** — Lessons for testing
-
-- `.spec.ts` 文件不能信賴 — 跟 service code 不同步演進（4b10e1a + 多次 service refactor 都沒同步 spec），可能長期沒人跑
-- 應該每個 PR 跑該 service spec；或者 CI gate 上有 spec 必過要求
-
-### **[[LIS-7690]]** — `2026-08-18 17:10` — on-prem cluster not inspectable — RESOLVED 18:10 by Leo
-
-First attempt `ssh -o BatchMode=yes leo@192.168.60.5` → `Permission denied (publickey,password)`
-(same wall as failures.md:496). **Resolution: the account takes PASSWORD auth, not a key** — Leo
-supplied the password in-session. Key auth genuinely is refused, which is why every previous
-BatchMode attempt failed and the blocker looked absolute. Mechanics that work from this laptop
-(no `sshpass` on macOS, `ssh` will not read a password from a pipe): drive it with `/usr/bin/expect`,
-password passed in via env var, never written to disk:
-```
-spawn ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no leo@192.168.60.5 $cmd
-expect -re {[Pp]assword:} { send -- "$env(ONPREM_PW)\r" }
-```
-`kubectl` is at `/usr/local/bin/kubectl` on appserver04 (control-plane node, k8s v1.22.3, 6 nodes
-`appserver01-06` = `192.168.60.2-7`). The password is NOT recorded here — ask Leo, or read it from
-`~/src/credential/` if he chooses to store it there.
-
-### **[[VP-17868]]**
-
-- First BE commit was made with `core.hooksPath=/dev/null`. The repo points `core.hooksPath` at the factory githooks; bypassing them was wrong and pointless. Reset and recommitted through the hooks.
-- `git push` to va-portal: 403. `gh api repos/Vibrant-America/va-portal --jq .permissions.push` → false. Leo's account cannot write to the FE repo; the FE half needs the FE team or a permission grant.
 
 ---
 
