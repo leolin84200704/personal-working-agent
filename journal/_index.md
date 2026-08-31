@@ -1,13 +1,16 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-26 (dream run, 2-night window). +2 entries, both distilled
-> tonight — vp16166-quarantine (abandonment quarantine + frozen-table/carrier-sanity
-> lessons) and lis-7716-report-option (report_option lifecycle + portal routing).
-> Archived 2 distilled 07-27 entries (>30d).
+> Last updated: 2026-08-31 (dream run, 5-night window). +2 entries, both distilled
+> tonight — vp17753-55-bug-to-task-and-handoff (Event Hub cap, syntheticSuccess,
+> shared-checkout git add -A incident) and vp17760-get-orders (doc-ahead-of-deploy,
+> degrade-not-default; entry arrived without frontmatter — added). Archived 3
+> distilled >30d entries (07-29 x2, 07-31).
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-28 | vp17760-get-orders | VP-17760, VP-17517, VP-17531, VP-17497, VP-17499, PH-855, VP-17975, VP-17318 | true |
+| 2026-08-27 | vp17753-55-bug-to-task-and-handoff | VP-17753, VP-17754, VP-17755, VP-9299 | true |
 | 2026-08-26 | lis-7716-report-option | LIS-7716, VP-17408, VP-16980, VP-16734 | true |
 | 2026-08-25 | vp16166-quarantine | VP-16166, VP-17915, VP-17916, VP-16163, VP-16164, VP-17342, VP-17422, VP-17544 | true |
 | 2026-08-24 | vp17827-practice-id-blocked | VP-17827, VP-17826, VP-16163, VP-16164, VP-16165, VP-16166, QH-6775, HL7-NPI-PRACTICE-MATCH-20260820 | true |
@@ -24,9 +27,9 @@
 | 2026-08-04 | onprem-decom-audit | (none) | true |
 | 2026-08-04 | dob-sex-interception-and-address-chain | VP-17544, VP-17587, VP-17584, VP-17598, VP-17591, VP-17480 | true |
 | 2026-08-03 | blocked-verdict-shelf-life | (none) | true |
-| 2026-07-31 | minilm-removal | (none) | true |
-| 2026-07-29 | vp17532-availability-vs-booked-events | VP-17532, VP-16850, VP-17190, VP-16499, VP-16410 | true |
-| 2026-07-29 | beta-e2e-cancel-gateway | BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500 | true |
+| ~~2026-07-31~~ | ~~minilm-removal~~ | (none) | archived 2026-08-31 → `archive/journal/` |
+| ~~2026-07-29~~ | ~~vp17532-availability-vs-booked-events~~ | VP-17532, VP-16850, VP-17190, VP-16499, VP-16410 | archived 2026-08-31 → `archive/journal/` |
+| ~~2026-07-29~~ | ~~beta-e2e-cancel-gateway~~ | BETA-E2E-20260729, VP-17517, VP-17531, VP-17499, VP-17500 | archived 2026-08-31 → `archive/journal/` |
 | ~~2026-07-27~~ | ~~vp17499-vp17500-placerid-namespace~~ | VP-17497, VP-17499, VP-17500 | archived 2026-08-26 → `archive/journal/` |
 | ~~2026-07-27~~ | ~~vp17497-placerid-reclaim~~ | VP-17497, VP-17283, VP-17286, VP-17475 | archived 2026-08-26 → `archive/journal/` |
 | ~~2026-07-15~~ | ~~vp17421-stale-reminders~~ | VP-17421, VP-16921, VP-16499 | archived 2026-08-16 → `archive/journal/` |

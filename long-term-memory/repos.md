@@ -3,7 +3,7 @@ id: repos
 type: ltm
 category: technical
 status: active
-score: 1.0803
+score: 1.1138
 base_weight: 0.9
 created: 2026-04-22
 updated: 2026-04-22
@@ -79,6 +79,9 @@ links:
 - VP-17561
 - VP-17577
 - VP-17714
+- VP-17753
+- VP-17754
+- VP-17755
 - VP-17765
 - VP-17825
 - VP-17868
@@ -231,6 +234,18 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
 - **Tech**: NestJS 9.3, Bull/Redis queues, 20+ Kafka topics
 - **Port**: 6457
 - **Note**: `setting-consumer.controller.ts` ~16K lines
+- **⚠ syntheticSuccess（VP-17755 反方發現）**：`sendNotification`（azure-notification-producer.ts:306-348）
+  失敗時 enqueue Bull 後回硬寫的 `errorCode:0`——**errorCode==0 ≠ 已送達**，不可當成功判準
+  （拿它寫抑制 key 會把「還在重試」變成永久抑制）。
+- **failed_notification 只有 writer 沒有自動 retry reader**：寫入 = 給 operator 手動恢復的紀錄，
+  不會觸發重寄（VP-17753 的降級紀錄靠此保證不重複送）。
+- **去重的真身 = acquireEventLock per-event**（Redis NX 300s + trigger_history 永久 row）；
+  per-sample dedup gate 已刪（VP-17755，死碼，writer 從未存在）。eachMessage 外層 catch 吞 throw +
+  autoCommit → handler 內任何未接的 throw = 該 event 永久靜默遺失（VP-17753 的失效鏈）。
+- **測試陷阱**：spec mock 'src/redis-sentinal'（virtual）蓋不到 `./redis-sentinal` 這種不同 specifier——
+  真 ioredis 連線會讓 jest 永不退出；要對兩個 specifier 都 `jest.mock`。
+- main / stage_test 不是 promote-forward 對（詳 patterns.md 2026-08-24 條目）；deploy 需要 named
+  Entra identity（PR #165，AKS RBAC namespace "setting"）。
 
 ### Portal-Calendar（legacy，VP-16499 specialty 追查 2026-07-14；**repo 已 ARCHIVED**，2026-07-15 確認不可 push/PR）
 - **Purpose**: legacy portal calendar/clinician service — `/v1/portal/calendar/*/clinicians/first-available` 的真身（**不是** transformer-v2）。consult-reminder 程式碼已遷至 LIS-transformer `src/calendar/email/`（見該 section）；on-prem pods 的 Bull 連不上 redis（無 REDIS_URL）— 別再把 reminder 事故算到它頭上（VP-17421 教訓）

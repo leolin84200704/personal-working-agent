@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.3984
+score: 1.4479
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -22,7 +22,9 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
+- LBS-1762
 - LIS-7716
+- PH-847
 - QH-1660
 - QH-2257
 - QH-2577
@@ -102,10 +104,12 @@ links:
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17760
 - VP-17810
 - VP-17812
 - VP-17827
 - VP-17914
+- VP-18030
 - fhir-api
 tags:
 - emr
@@ -1700,3 +1704,39 @@ new-vendor spec / PM 能力詢問，以下列為準（2026-08-19 對 origin/main
 - **規則討論的順序紀律**已進 `lis-prod-change-gate` Gate 1（baseline-first，PR #43）：
   改比對/路由規則前，交付物 #1 = 一頁現況 baseline（比對輸入欄位與分支＋每條路徑
   今天誰在走＋tie-break＋輸出欄位），且要出現在給 Leo 的訊息裡。
+
+## 【蒸餾 2026-08-31】Partner API GET /orders 上線事實 + repush 操作工具箱（VP-17760 / LBS-1762 / VP-17914 更正）
+
+### GET /orders lookup mode 已上 prod（VP-17760, 2026-08-28）
+- 路由三條等價：gateway `GET /v1/orders?orderId=|placerId=`（base-path，query string 完好）、
+  `GET /v1/orders/status`、內部 `order-intake/status` subpath——sandbox gateway 兩種 shape 都驗過；
+  **prod partner 憑證不存在**（beta = sandbox-only clients），第一個 prod partner onboarding 要補驗 gateway。
+- Own-tenant 全狀態可見（processing/rejected/failed/dry_run 也回 200）——這是 contract 擴充，動機是
+  timeout recovery（stuck received row 若 404 會逼 caller re-POST 進 duplicate 死循環，VP-17686 類）。
+- Degrade 語意：core transport error → 503；core NOT-FOUND → row-only 200；shipping/report/preview 失敗
+  → 該 block null + warn。**cancellation block 目前 prod 恆為 null**：order team 文件上的
+  cancellation-preview（Confluence 2593816583 §2）兩個 env 都沒部署，回的是 legacy billing shape；
+  `[CANCELLATION_PREVIEW_SHAPE]` warn 消失 = 上游部署了、block 自動亮起。
+- `order_intake.order_id` 自 PH-855 起才寫入，從未 backfill——舊 row 只能用 placerId 查。
+  (customer_id, order_id) index 已 ALTER staging+prod。監看點：`[ORDER_STATUS_KIT]`（unmapped kit status）、
+  `[ORDER_STATUS_EXCEPTION]`（未分類 issue keyword，要餵回 keyword 表）。
+- List mode = VP-18030（in progress）；mintlify 欠帳：4 個 pre-placement status + 5 個 dropped fields。
+
+### Repush 操作工具箱（LBS-1762，17/17 實證）
+- **`ehr_integrations.updated_at` 是 app-managed（prisma @updatedAt）**：raw SQL UPDATE 不動它、不留
+  ehr_integration_notes。「值變了但 updated_at/notes 無痕」= 有人直接下 SQL（IT/Zendesk 路徑）——
+  這是區分 manual fix vs API 路徑的 forensic 訊號，也代表 updated_at 舊 ≠ 沒人改過（LBS-1764 同理）。
+- **GenerateResultHl7 是同步 RPC**（~50–60s/call，含生成+SFTP 上傳）：批次 repush 一開始就
+  `run_in_background`，否則撞 Bash 10-min timeout。grpcurl client 被 kill **不會取消** server 端
+  handler——in-flight 會自己跑完；重跑前必查 result_transmission_records 最新 row 防重複觸發。
+- **SFTP post-verify 不必止步於 rtr TRANSMITTED**：用 emr-v2 node_modules 的 ssh2-sftp-client +
+  `ehr_vendors` 表 creds 直接 list vendor 目錄確認檔案落地（空資料夾 ≠ 失敗——多數 vendor 收走即刪，先看 archive 目錄）。
+
+### Validation order（TEST^ZZZTEST）的「Awaiting Sample」等不會自己好（VP-17914 更正 2026-08-27）
+- Validation order 依設計**沒有實體檢體**：要 lab/ops 手動 tube receive（tube_receive rows 人工建）
+  才能出結果。看到 validation order 卡 Awaiting Sample，答案是「請 ops 跑 manual receive + result 流程」，
+  不是「等收樣」也不是「redraw」——redraw 指引只適用真病人單。此更正修掉 08-26 結論裡對
+  2608186060 的誤判（它是 ZZZTEST validation 單，不是 clinical re-order）。
+- 同案發現的 recovery 先例：7 個 accession 的 main-group 檔案 finished 但 delivery trigger 落在
+  on-prem consumer 停擺窗（08-17 已修的 incident）——已 event-replay repush、Cerbo 確認收取。
+  「trigger 掉進已知 outage 窗」是查 missing-delivery 時該主動掃的一類。

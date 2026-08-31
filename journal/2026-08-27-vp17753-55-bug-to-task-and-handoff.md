@@ -6,7 +6,7 @@ related:
 - VP-17754
 - VP-17755
 - VP-9299
-distilled: false
+distilled: true
 ---
 
 # VP-17753/54/55 — Bug→Task 更正、三票分析與動工、共用 checkout 事故與交接

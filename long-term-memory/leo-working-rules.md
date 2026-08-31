@@ -311,3 +311,18 @@ heredoc 沒寫進去要整個重跑。修法是只在這些字出現在實際 SQ
 Jira 是 Leo 的 bookkeeping，會晚也會早。實務上：(1) 在還開著的票底下 ship 了 code → STM 記「live since X、Jira 仍 Y」
 並在回報裡明講，dream closeout audit 靠這行對上；(2) 反過來看到票 Done 不代表能觀察到工作成果已生效。
 reconcile 的「local completed / Jira 未 done」manual-review 名單多半是這條時間差，先查 deploy 證據再判斷是不是真漂移。
+
+## Ticket 上寫的修法是假設，不是 spec（cross-ticket review 2026-08-31；證據 VP-17754 / VP-17755 / VP-17760 / VP-17914）
+
+本輪 5 張結案票裡有 4 張的「票面修法或前提」被證據推翻：
+- VP-17754：票建議「尊重 caller 的 sessionTimeout options」→ Event Hubs broker 上限 300s，照做會讓
+  三個 prod consumer 起不來。正解是刪掉謊言（移除 options）。
+- VP-17755：票給的選項之一「恢復 dedup writer」→ syntheticSuccess + 24h key 壓合法通知 + 500 行 race，
+  三刀砍死；prod 量測（30 天 16,578 samples 僅 1 個 24h 內重複）證明 gate 無存在價值。正解是刪 gate。
+- VP-17760：契約字面（404 for non-finalized）會讓 endpoint 在自己的核心場景（timeout recovery）失明；
+  Confluence 已文件化的上游 API 根本沒部署。
+- VP-17914：票的前提「pipeline 掉資料」→ 實為 catalog provisioning 從未含這些 marker。
+
+規則：**ticket 的 remediation 建議與前提描述都要當 hypothesis 對待**，Explore-as-critic（讀碼 + broker/
+平台限制 + prod 量測）是驗它的手段，翻案率高到不值得跳過。Routine 分類（跳過 debate）只適用「照既有
+pattern 的 config/integration 票」，任何「票面已給修法」的 code 票不因此變 Routine。

@@ -18,7 +18,9 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
+- LBS-1762
 - LIS-7716
+- PH-847
 - QH-1660
 - QH-2257
 - QH-2577
@@ -86,10 +88,12 @@ links:
 - VP-17734
 - VP-17748
 - VP-17752
+- VP-17760
 - VP-17810
 - VP-17812
 - VP-17827
 - VP-17914
+- VP-18030
 - emr-integration
 - fhir-api
 tags:
@@ -110,7 +114,7 @@ summary: 'hl7_file_input 6746 (order_28984_1785429636_83.hl7, /turnpaughemr/orde
   clinic 13505, active, no duplicates (core-verified). Leo direct request, no Jira
   ticket; requested_by=customer_not_found-fix-20260731.'
 jira_status: none
-score: 0.454
+score: 0.4003
 ---
 
 # HL7FAIL-20260730 — Turnpaugh customer_not_found (Vincent Grove)

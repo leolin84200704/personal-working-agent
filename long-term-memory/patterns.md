@@ -2414,3 +2414,35 @@ gateway 前門 gate 得再嚴，資源服務自己不 gate 就存在直呼繞過
 report-status API（`/result/getReportStatusListV2` 等）要 `VIBRANT_API_TOKEN` **含 `Bearer ` 前綴**整串送；
 其他端點收 raw token。兩種變體 server 端同時存在——401 時先切另一種格式再懷疑 token 失效。
 Atlassian MCP 斷線時的 fallback：`~/src/credential/atlassian-api-token.md`（Basic auth）直打 `rest/api/3` 可用。
+
+## 【蒸餾 2026-08-31】VP-17753/54/55 + VP-17760 + VP-18030 一輪蒸餾
+
+### Azure Event Hubs Kafka 的 session.timeout 有硬上限 300s；kafkajs 沒有背景 heartbeat（VP-17754）
+- Event Hubs Kafka endpoint 允許 `session.timeout.ms` 6000–300000；超過 → broker 直接拒 JoinGroup
+  （INVALID_SESSION_TIMEOUT），consumer 起不來。kafkajs 2.x client 端不 clamp，也不會警告。
+- kafkajs **沒有背景 heartbeat thread**——只在訊息處理之間送 heartbeat；handler 內的 `heartbeat`
+  callback 若沒人呼叫（setting-consumer 全檔 0 個呼叫點），單一慢訊息不受任何 timeout 調整保護。
+  「調大 session timeout 保護慢訊息」在這個 stack 是安慰劑；根治 = 給慢的外呼加 timeout（axios 等）。
+- Event Hub 要求 rebalance timeout（= max.poll.interval 槽位）**嚴格大於** session timeout——把兩者
+  clamp 到同值剛好違規。
+
+### 共用 checkout 絕不 `git add -A`（VP-17753/55 事故，2026-08-27）
+- 同一台機器同一份 checkout 可能有另一個 session（Leo 親自或另一個 agent）同時在編輯。`git add -A`
+  會把別人的 working-tree 編輯掃進自己的 commit（實際發生：VP-17755 的 gate 移除混進 [VP-17753] commit，
+  破壞一票一 commit，事後靠 soft reset 重整）。
+- 規則：staging 一律點名檔案（`git add <paths>`）；commit 前 `git status -s` 對照「這次我改了哪些檔案」；
+  看到「不是我下的 commit / 檔案被人改了」要升級成「有另一個 actor」，不是當成順手幫忙。
+- 需要真隔離時用 worktree（emr-v2 已是慣例：`~/src/lis-backend-emr-v2.worktrees/{ticket}`）。
+
+### `npx prisma format` 會整檔重排——外科手術式 schema 編輯不要用（VP-17760）
+1148 行的 schema 被 format 產生全檔 diff。手動編輯 index/欄位行就好；diff 必須只含你要的行。
+
+### zsh 會吃掉 commit message / echo 裡的特殊字元（VP-18030 + 2026-08-31 dream 再現）
+- `echo ===`、`-m` 內的 backtick（`` `to` `` 被 command substitution 吃成空字串）都會被 zsh 改寫。
+- 規則：任何含標點的 commit message 走 heredoc（`git commit -F - <<'MSG'`）；separator 用 `---` 不用 `===`；
+  commit 前 `grep -P '[^\x00-\x7F]'` 檢查 message 與 changed files。
+
+### 用 emr-v2 的 DATABASE_URL 直連 prod DB 做 read-only probe（mysql2）
+- prisma 風格 URL 的 query params（`sslaccept`、`sslmode`、`connection_limit`）mysql2 不認；DB 端
+  `require_secure_transport=ON` 會拒非 TLS 連線。正解：`new URL(raw)` 手動拆，傳
+  `ssl:{rejectUnauthorized:false}`。ssh2-sftp-client / mysql2 都可直接用 emr-v2 的 node_modules。
