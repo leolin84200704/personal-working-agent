@@ -3,7 +3,7 @@ id: fhir-api
 type: ltm
 category: emr_integration
 status: active
-score: 1.386
+score: 1.3984
 base_weight: 1.0
 created: 2026-06-06
 updated: 2026-06-06
@@ -24,6 +24,7 @@ links:
 - LBS-1656
 - LBS-1762
 - LIS-7716
+- PH-847
 - QH-1660
 - QH-2257
 - QH-2577

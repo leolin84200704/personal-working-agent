@@ -3,7 +3,7 @@ id: repos
 type: ltm
 category: technical
 status: active
-score: 1.1138
+score: 1.1249
 base_weight: 0.9
 created: 2026-04-22
 updated: 2026-04-22
@@ -86,6 +86,7 @@ links:
 - VP-17825
 - VP-17868
 - VP-17870
+- VP-18050
 - VP-9299
 - business-model
 - business-model-deep
@@ -126,6 +127,8 @@ summary: 'Active repo reference: tech stack, ports, key areas, setup'
     - 規模（2026-07-31 量測）：5 月以來 **245 次 reset-while-active**，其中 **23 次 reset 的是未來的 event**；當下有 **2 個 accession 各持有 2 場 live 未來 consult**。所以這不是單一事故，是常態操作。
     - 診斷起點：拿 accession audit 的 actor（`user:N` = `lis_core_v7.user_id`，解析路徑見 memory「Calendar audit actor id lookup」）比對 reset 時間 vs. event 的 `is_canceled`/開始時間 —— **reset 時間落在一場 live 未來 event 之後 11 分鐘**就是這個形狀。
     - 想真的堵掉要在 reset 路徑加「原 event 尚未 cancel 就拒絕／連帶 cancel」，屬產品決策；Leo 目前選擇不改 code。
+  - **Batched claim status `claimStatuses`（VP-18050，PR #592→main / #593→stage_test，2026-08-31 皆 draft 未 merge）**：一次查多個 accession 的 claim 狀態＋consult date，服務 VP-18051 的搜尋結果 row-level「Consult booked」標籤（該 FE 未做，Leo 裁定）。設計約束是 disclosure gate 不是效能：`isAccessionClaimable` 收任意 accession id、不驗屬於 caller 的 clinic（VP-17868 因此把 `consultDate` 鎖在「viewer 綁在該 consult」後），batch 端點放大暴露面 → gate **逐 row 套用**、batch cap 20（理由寫進常數 doc comment，防止被當 throughput 旋鈕調大）、`isClaimable`/`claimStatuses` 共用同一 select + row-to-answer mapping（隱私控制不能有兩份會靜默分歧的複本）。
+    - **Row-level claim 資料進不了搜尋 response**：`SearchOrders.vue` 的 `loginServiceCloud.post('/trans/findPatient')` 由 **v1 LIS-transformer** 服務（無 calendar_prod 存取，且同時支撐 patient page），不是 transv2——別想把欄位塞進 findPatient。`getClaimedAccessionIds` 也不合用（回 150105 全部 ~3,640 claimed id、不帶日期、va-portal/wellness-portal 零 consumer）。
   - **Calendar RBAC 細節（`src/calendar/guard/auth.guard.ts`）**：`AuthGuard` 是 calendar 模組通用 guard；`validateClinicUser` 要求 clinic-user token 有 `user_id`+`clinic_id`，否則 `401 "Missing required clinic user identifiers"`（在進 resolver 前就擋）。`isAdminUser(user)` **只看 `user_roles[]`**（admin/clinic_admin/clinic）或 `user_permission`，**不看** `role`/`internal_user_role` 字串。`isClinicalTeamUser(user)` = `internal_user_role` 或 `role` === `'clinicalteam'`（內部跨 clinic、無 clinic_id，已在 guard 層豁免 identifier 檢查）。要放行某 role 做某 accession 操作 → guard(validateClinicUser 豁免) + resolver(allow-list) **兩處都要改**。
   - 詳細 email flow / Kafka 佈局見 `patterns.md` → "Clinical Consult Calendar Email Flow"
 - **Base branch = `stage_test`**（非 staging/main）；feature PR → stage_test。

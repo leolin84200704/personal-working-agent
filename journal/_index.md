@@ -1,14 +1,15 @@
 # Journal Index (Episodic Memory — L3a)
 
 > Auto-maintained by the dream pipeline. One line per entry, newest first.
-> Last updated: 2026-08-31 (dream run, 5-night window). +2 entries, both distilled
-> tonight — vp17753-55-bug-to-task-and-handoff (Event Hub cap, syntheticSuccess,
-> shared-checkout git add -A incident) and vp17760-get-orders (doc-ahead-of-deploy,
-> degrade-not-default; entry arrived without frontmatter — added). Archived 3
-> distilled >30d entries (07-29 x2, 07-31).
+> Last updated: 2026-08-31 (second dream run, same night). +1 entry distilled —
+> vp18050-batched-claim-status (landed 1 min before the first run's cutoff, so
+> the first run missed it; batch disclosure-gate design + two GraphQL test
+> false-greens → repos.md/patterns.md). First run tonight: +2 entries distilled
+> (vp17753-55, vp17760-get-orders), archived 3 distilled >30d entries.
 
 | Date | Slug | Related | Distilled |
 |------|------|---------|-----------|
+| 2026-08-31 | vp18050-batched-claim-status | VP-18050, VP-18051, VP-17868, PH-898, PH-899, SIIR-279, VP-16410 | true |
 | 2026-08-28 | vp17760-get-orders | VP-17760, VP-17517, VP-17531, VP-17497, VP-17499, PH-855, VP-17975, VP-17318 | true |
 | 2026-08-27 | vp17753-55-bug-to-task-and-handoff | VP-17753, VP-17754, VP-17755, VP-9299 | true |
 | 2026-08-26 | lis-7716-report-option | LIS-7716, VP-17408, VP-16980, VP-16734 | true |

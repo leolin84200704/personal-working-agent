@@ -107,6 +107,10 @@ v1 跟 v2 的 RPC 各有獨立 proto 檔，**改 RPC 前先看 `src/config/grpc.
 判斷規則：upstream 在 coreSamples Go repo（`package coresamples_service`）→ 改 proto-v2；upstream 在 LIS-transformer 系列 → 改 proto。
 v2 client wrapper 在 `src/modules/grpc/services/grpc-client-v2.service.ts`（`getCustomer` / `getCustomerByNPINumber` / `getClinicIDsByNPINumber` 等）。新 RPC method 仿既有 pattern：deadline + metadata + `client.RpcName(req, metadata, {deadline}, cb)`，輸入用 snake_case key 對應 proto field。
 
+### Proto 欄位 renumber 是雙向 breaking — vendored consumer 必須配對部署（VP-17748 / coreSamples PR #921）
+純 field-number 變更（欄位名不動）在**兩種部署順序下都會錯位解碼**：舊 consumer 對新 server 會把鄰位欄位解進錯的名字（實例：`patient_birthdate` 解進 `patient_gender`），反向亦然——**不存在安全的單邊部署窗口**。vendored proto 的 consumer sync PR 要跟 upstream 的 renumber PR 配對 merge/deploy（2026-08-18 實績：coreSamples #921/#922 先、emr-v2 #373/#374 十幾分鐘後跟上，兩 env 都保持順序）。改前先量 blast radius——別被 PR 的欄位表嚇到：emr-v2 result-push 路徑只讀 `sampleReleventResponse` 的 `customerId(4)`/`clinicIds(3)`（皆未動）；`patient_gender`/`patient_birthdate` 只浮出在診斷 REST route `GET /api/v1/grpc-v2/sample/:sampleId/relevant-info`。驗法：用 runtime 同款 stack（@grpc/proto-loader + keepCase + includeDirs）載入改後 proto 逐欄比對 upstream head blob，不要肉眼 diff。
+附帶 worktree 陷阱：fresh worktree 沒 node_modules 時 `npx prisma generate` 會抓最新 Prisma CLI（7.x 拒絕 `url = env("DATABASE_URL")`，pre-push gate 因此爆紅）——解法是 `npm ci`，不是 `--no-verify`；也不要 symlink 主 checkout 的 node_modules（兩 branch 的 schema.prisma 不同，共用 generate 會互相 clobber client）。
+
 ### Port 既有系統時必查 v1 deployment yaml（VP-16463 教訓）
 做 Java → TS / 任何「改寫既有 production 系統」的 port，**第一步要讀 v1 的 K8s/deployment/docker 設定**，不只看 application code。要逐項列出並在 v2 對應：
 1. **Filesystem paths**：v1 寫到哪？env var 名是什麼？路徑是不是掛在 PVC 上？
@@ -316,6 +320,10 @@ LIS-transformer / LIS-setting-consumer 是 **push 即 deploy**（GitHub Actions�
 
 ### 複雜 service method 的 auth-path unit test
 測試一個會觸發大量 downstream 邏輯的 service method 的授權前段時，用 `jest.spyOn(service as any, '<downstream-private-method>').mockResolvedValue(...)` 短路後續流程，只跑授權檢查再立即 return。避免 mock 整條 pipeline（prisma transactions、kafka publish、email service…）。範例：LIS-transformer-v2 的 `updateEventByPatient` 測試 spy `updateWholeEventRecord` / `mapEventToGraphQL` / `buildWholeEventUpdateData` / `resolveRecurringEditScope`，使 happy-path 測試短小可讀（VP-16361）。
+
+### GraphQL code-first 的兩種假綠燈：schema 缺欄位、拒絕來自錯誤層（VP-18050）
+- **繼承的 type 會 type-check 過但欄位沒進 schema**：NestJS code-first 下 `AccessionClaimStatus extends IsAccessionClaimablePayload` 這類繼承，tsc 全綠不代表欄位存在於 GraphQL schema。新 GraphQL type 一律配一個 wire spec：boot 真 Apollo schema、走 HTTP 打 query（範例 `accession-claim.graphql.spec.ts`），驗 schema 而不是驗 TypeScript。
+- **授權拒絕測試要確認拒絕來自受測那一層**：「rejects a patient token」原本綠，是因為 token 缺 `clinic_id`，`AuthGuard.validatePatient` 先丟「Missing required patient identifiers」——request 根本沒到 resolver 的 clinic-user gate，綠燈證明的是 guard 不是 gate。要造一個 guard 會放行的 token，讓 refusal 發生在受測層再算數。
 
 ### order_clients 無 updated_at 欄位
 `lis_emr.order_clients` schema **沒有 `updated_at` 欄位**（不像 `ehr_integrations` 有）。寫 raw `UPDATE order_clients SET ... updated_at=NOW()` 會 fail with `Unknown column 'updated_at' in 'field list'`。寫 SQL 前先驗 schema，或避開 updated_at。完整欄位：id, customer_name, customer_id, customer_provider_NPI, customer_practice_name, clinic_id, kits_options, emr_name, remote_folder_path, old_clinic_id。

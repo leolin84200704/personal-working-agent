@@ -28,6 +28,7 @@ links:
 - LBS-1656
 - LBS-1762
 - LIS-7716
+- PH-847
 - QH-1660
 - QH-2257
 - QH-2577
@@ -119,7 +120,7 @@ summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck pa
   Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
   team scope) — hand-off package given to Leo.'
 jira_status: n/a
-score: 0.3707
+score: 0.3745
 ---
 
 # hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap
