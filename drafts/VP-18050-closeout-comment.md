@@ -1,4 +1,4 @@
-# Draft Jira comment — VP-18050 (English, NOT posted)
+# Jira comment — VP-18050 (POSTED 2026-09-02 15:07 PT as comment 186523, per Leo)
 
 Shipped and live on both environments.
 
