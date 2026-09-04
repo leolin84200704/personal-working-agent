@@ -7,7 +7,7 @@ score: 1.361
 base_weight: 0.9
 urgency: 3
 created: 2026-08-16
-updated: 2026-08-31
+updated: 2026-09-03
 links:
 - INCIDENT-20260518
 - INCIDENT-20260528
@@ -18,6 +18,7 @@ links:
 - INCIDENT-2604156666
 - LBS-1541
 - LIS-7690
+- PH-847
 - PO-222
 - PO-256
 - QH-1104
@@ -104,6 +105,9 @@ links:
 - VP-18030
 - VP-18048
 - VP-18050
+- VP-18055
+- VP-18066
+- VP-18080
 - VP-9299
 - business-model
 - business-model-deep
@@ -118,25 +122,25 @@ tags:
 - failures
 - root-cause
 - auto-generated
-summary: Auto-aggregated failure index from 86 entries across STM
+summary: Auto-aggregated failure index from 98 entries across STM
 ---
 
 # Failure Index
 
 > 自動生成自 `storage/short_term_memory/*.md` 的 `## Failures` 區段。
 > 由 `scripts/extract-failures.py` 維護，手動編輯會被下次 run 覆蓋。
-> Last updated: 2026-08-31 — total 86 entries
+> Last updated: 2026-09-03 — total 98 entries
 
 ## Themes
 
-- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 25 entries
+- [Production side-effects (Kafka / email / SFTP)](#prod-side-effects) — 26 entries
+- [Build / TypeScript / Tooling](#build-tooling) — 16 entries
 - [Other / uncategorized](#other) — 14 entries
-- [Build / TypeScript / Tooling](#build-tooling) — 10 entries
+- [Deploy / commit / push coordination](#deploy-coordination) — 11 entries
 - [DB / migration / backfill](#db-migration) — 9 entries
-- [Deploy / commit / push coordination](#deploy-coordination) — 7 entries
+- [Scope / requirement / PM communication](#scope-communication) — 5 entries
 - [Redis / cache / pending list](#redis-cache) — 4 entries
 - [Auth / permission / role](#auth-permission) — 4 entries
-- [Scope / requirement / PM communication](#scope-communication) — 4 entries
 - [Error handling / throw vs log](#error-handling) — 3 entries
 - [Test / mock / spec](#test-mocking) — 2 entries
 - [gRPC / network / timeout](#grpc-network) — 2 entries
@@ -500,6 +504,25 @@ for (PatientAddress a : patient.getPatient_address())
   prisma/schema.prisma first. Known lesson (patterns.md order_clients updated_at) —
   check schema before writing raw SQL. Cost: 2 retry rounds, read-only, no harm.
 
+### **[[VP-18080]]** — `2026-09-02` — Follow-up: unknown-codes key mismatch root-caused + fixed (PR #399)
+
+- Leo directive: 跟著文件走 (docs are canon: unrecognized_test_codes); Rui
+  handoff draft NOT needed — deleted drafts/VP-18081-rui-fixture-comment-draft.md.
+- ROOT CAUSE of the E2E unsupported_test_codes surprise: pricing productMap
+  emits the unknown-code list as `unknownCodes` on the STAGING deployment but
+  `unknown_codes` on main/prod. Staging pricing runs GHOST image 69ce1dd4 —
+  a commit on NO branch of the repo (deployment is 2y old style); prod runs
+  207657e (main HEAD) and already conforms to docs. emr-v2 client parsed only
+  unknown_codes → staging fell through to unsupported_test_codes.
+- Fix: client accepts both spellings (unknown_codes ?? unknownCodes) →
+  documented unrecognized_test_codes on both envs. bugfix/leo/
+  VP-18080-unknown-codes-key, draft PR #399 → staging. Spec 10/10, build ok.
+- unsupported_test_codes remains reachable ONLY for genuinely unsupported
+  types (choose-bundle / shortcut / empty) — deliberate, undocumented in
+  mintlify (api-product side; note for closeout).
+- Pricing-team note (in PR body): staging pricing deployment matches no repo
+  commit — needs rebuild/redeploy from the real staging branch.
+
 ### **[[VP-16720]]** — `2026-06-01` — **
 
 **症狀**：我 INSERT 24 order_clients（per pair），但 Anna 43262 跨 4 clinic 同 customer_id → 4 個重複 oc rows（ids 2303/2306/2309/2312）。
@@ -511,86 +534,6 @@ for (PatientAddress a : patient.getPatient_address())
 **修法**：事後 deleteMany ids 2306/2309/2312，保留 2303。21 distinct customers / 21 oc rows ✓。
 
 **Preventable**：是。pre-check 階段應該偵測 PAIRS 內重複 customer_id + 對 INSERT 邏輯 dedupe by customer。
-
----
-
-## Other / uncategorized <a id='other'></a>
-
-### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
-
-Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
-
-預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
-
-### **[[LBS-1541]]**
-
-(none yet)
-
-### **[[PO-256]]**
-
-- az CLI MFA expired — could not inspect RBAC Container App directly; bounded diagnosis at the coresamples→container-app hop via error strings and timing.
-
-### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
-
-- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
-- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
-- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
-- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
-
-### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
-
-
-
-### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
-
-- endpoint no-auth → 401（route live + guard）。
-- 簽 JWT(staging JWT_SECRET, HS256, payload 需 userId + 未過期；JwtStrategy 不檢 issuer) 打 dry-run（`scripts/_vp16934-staging-test.js`）：
-  - 假 provider → `201 {rejected, customer_not_found}`（auth/dryrun/富化都跑）。
-  - 缺 testCodes → `400`。
-  - **真客戶 5794 → `201 {rejected, unrecognized_test_codes:[VACP1001]}`** = customer 解析成功 + 代碼分類有跑（VACP1001 是假 code 才被擋）。
-- **結論：order intake 在 staging dry-run 全程跑通**（auth/gating/validation/customer 查詢/代碼分類）。差「完整成功單(sampleId:-1)」需對 staging 客戶有效的真 test code。
-- staging order_intake 留了 2 筆 VP16934-TEST-* rejected 測試列（無害，可清）。
-
-### **[[VP-17120]]** — `2026-07-02 23:05` — ROOT CAUSE UPGRADED during replay (filed VP-17318, branch bugfix/leo/VP-17318 pushed)
-
-- emr-v2 generateSampleID NEVER worked: proto field is `sampleId` (camelCase in proto) but client reads `response.sample_id` with keepCase:true → undefined → `|| '0'` → always 0 since the VP-16463 port. Pre-5/28 nonzero patientPayLater ids were written by Java EMR-Backend.
-- sendOrder with sampleId=0 self-assigns a correct id (70/74 zero-id orders succeeded). The stuck rows are occasional sendOrder failures on that path.
-- coresamples v2 GenerateSampleID sequence is ~311k STALE: live probes returned ids 2277991-2278000, ALL existing patient samples in lis_core_v7.sample. A field-name-only fix would inject colliding ids → order path must NOT consume this RPC until their sequence is repaired (needs a coresamples-team ticket).
-- Fix on branch: finalizer skips pre-generation (sends 0 explicitly), client reads correct field + rejects invalid, [RETRY-EXHAUSTED] loud log, decrement floored. 21/21 targeted tests pass, build clean.
-
-### **[[VP-17217]]**
-
-- 首次 build TS2322：provider 陣列 union 型別 → 加 `Provider[]` 顯式型別修正。
-- spec 原以 class token 注入 → 改 inbound token 才能解析。
-
-### **[[VP-17283]]**
-
-(none yet)
-
-### **[[VP-17714]]**
-
-（none yet）
-
-### **[[VP-17748]]**
-
-(none yet)
-
-### **[[VP-17765]]**
-
-(none this run)
-
-### **[[VP-17827]]**
-
-None this session.
-
-### **[[VP-18030]]**
-
-- 2026-08-31: `echo ===` and a commit -m containing backtick-quoted `to`
-  both got mangled by zsh (=== → "== not found"; `to` command-substituted to
-  empty inside double quotes). One stray non-English word also slipped into
-  a commit message body. Fixed by amend before push. Rules: heredoc
-  (`git commit -F - <<'MSG'`) for any commit message with punctuation;
-  grep -P '[^\x00-\x7F]' the message and changed files before commit.
 
 ---
 
@@ -673,6 +616,94 @@ All three were green because the client is **mocked** in the specs — a mock ha
 whatever name the caller invents, so the specs asserted the wrong name and agreed with themselves.
 See the lesson extracted to `long-term-memory/patterns.md`.
 
+### **[[VP-18048]]**
+
+- First `tsc` run: `omitInternalEventFields` generic spread typed as `Record<string, unknown>` failed on `T extends object`; fixed with an explicit cast.
+- First jest run in the worktree: 3 suites failed to load — `Azure_kafka_general_events environment variable is not set`. Worktree had no `.env`; symlinked the main checkout's (gitignored). Worth adding to the worktree checklist next to node_modules.
+- `prisma/manual-migrations/20260522_add_v2_calendar_specialties.sql` and all `scripts/vp-*-apply-migration.js` are **untracked in origin/main** (only exist in Leo's main checkout). The "one apply script per ticket" convention I copied lives nowhere in git. This ticket's SQL + script ARE committed.
+
+### **[[VP-18055]]** — [2026-09-01 ~20:30Z] CI broke on PR #392 — my spec edit was incomplete (FIXED by PR #394)
+
+- Jenkins test stage (`npm run lint:ci` + `npx jest --ci`, NODE_ENV=test + test Prisma client) failed after #392/#393 merged: TS2554 "Expected 7 arguments, got 6" in kafka-report-finished-listener.service.spec.ts:878/946 — the VP-17559/VP-17595 describe blocks have LOCAL buildService() helpers that construct the service directly; I updated only the top-level beforeEach when adding the 7th constructor param. Suite failed to LOAD → test stage red → deploy stage never ran → both envs stuck on pre-#392 images.
+- Why local checks missed it: pre-push hook runs `nest build` (specs excluded from build tsconfig); my targeted local jest run tolerated the arg mismatch (different ts-jest diagnostics than CI). Reproduced exactly with `NODE_ENV=test TEST_DATABASE_URL=file:./test.db npx jest --ci`.
+- Fix: PR #394 (bugfix/leo/VP-18055-ci-spec-fix, 2-line, draft → staging) — pass mockScopeDropReporter in both helpers. Verified under CI env: listener suite 31/31, repo-wide no CI-relevant failures.
+- parser.service.spec 3 failures are LOCAL-ENV-ONLY (identical on main/a3596e5 which CI deployed at 18:0x) — do not chase them as CI blockers.
+- Jenkins access note: 192.168.60.9:9602 basic auth creds are NOT persisted anywhere (VP-17653 session had them ad hoc); diagnosed without Jenkins by reading Jenkinsfile stages + reproducing the test stage locally.
+
+### **[[VP-18066]]** — `2026-09-02` — PROD verified — FHIR envelope live on prod
+
+- Same promotion PR #400 / pod 76df6ddb6d-nvqrq / dist check (RATE_LIMITED
+  present in common/partner-api filter). Prod probes: no token → 401
+  UNAUTHORIZED envelope with x-request-id header == body requestId; HS256
+  token → 403 FORBIDDEN (RS256 required) envelope; caller x-request-id echoed.
+- emr-v2 part of VP-18066 is dev-complete + prod-verified. Ticket-level
+  closure blocked on the not-ours rows (patients/transformer, quote/pricing,
+  Cloudflare/gateway) — ownership note draft still awaiting Leo decision:
+  drafts/VP-18066-ownership-note-draft.md.
+
+### **[[VP-18080]]** — `2026-09-02` — Staging E2E — taxonomy proven live end-to-end; cleanup 100% verified
+
+- Deploy: staging image a3c93ee live ~10:41 PT; dist verified in-pod
+  (order-intake-failures.js present) before testing.
+- LIVE PROVEN (in-pod suite, customer 3194):
+  - rejected patient_not_found: 422 + failures[] with interpolated message
+    "patient 999999999 not found" — the ticket's exact example.
+  - rejected no_orderable_items: mapped message "no orderable items:
+    APOE_BLOOD could not be fulfilled".
+  - **ineligible Pascal→snake end-to-end**: patient 3148287 (staging, missing
+    dob/gender). Direct upstream probe returned {"code":"IncompletePatientInfo"}
+    (PascalCase confirmed live); /orders wire returned
+    {"code":"incomplete_patient_info", reason verbatim}; DB error column =
+    "incomplete_patient_info" (wire/row agree).
+  - No PascalCase leaked in any response.
+- FINDINGS (report to PM/Rui):
+  1. Unknown testCodes actually reject with reason **unsupported_test_codes**
+     (productMap resolve layer) — NOT the documented unrecognized_test_codes
+     (that fires only on resolved-but-unmappable, mapping-cache miss). An
+     intra-order same-fact divergence the docs miss; my failures[] fallback
+     handled it (humanized message). Rui's quote unknown-code outcome must
+     pick ONE of these codes — needs PM/doc alignment.
+  2. Staging eligibility-check does NOT enforce PatientNotInClinic
+     (clinic_id 99999 → eligible:true) — upstream staging gap, made the
+     clinic-mismatch test route impossible; switched to IncompletePatientInfo.
+  3. Patient 477769 resolves in eligibility-check but NOT in emr
+     getPatientByIdForOrder (different lookup paths) — staging data oddity.
+- Cleanup: 15 E2E rows total — 8 rejected/ineligible (nothing placed),
+  7 placed-then-cancelled (samples 2554199-2554205, refund 0). 100% verified
+  terminal-safe by reverse query on placer_id LIKE 'E2E-VP18080-%'. Pod
+  /app/temp scripts removed.
+- PROD DEPLOY PENDING: staging→main promotion PR (Leo). No prod E2E yet.
+
+### **[[VP-18080]]** — `2026-09-02` — PR #399 merged + retested on staging — docs-conformant, DONE on staging
+
+- Merge 0a04de1 deployed (pod 6b67dfb578-gbjp6, dist verified: both-key parse
+  present). Live retest, unknown code NOT_A_REAL_CODE_E2E:
+  422 {status:rejected, reason:"unrecognized_test_codes",
+  errorCodes:["NOT_A_REAL_CODE_E2E"], failures:[{code:
+  "unrecognized_test_codes", reason:"test codes not recognized:
+  NOT_A_REAL_CODE_E2E"}]} — exactly the documented code, with the mapped
+  failures[] message (fallback no longer involved). Row terminal (rejected).
+- Staging E2E for VP-18080 now fully green across all target paths:
+  patient_not_found (ticket example) / unrecognized_test_codes /
+  no_orderable_items / live ineligible Pascal→snake + DB parity.
+- Remaining: prod promotion (staging→main PR, Leo) → prod smoke (read-only +
+  one rejected probe), then closeout + retrospective/journal.
+
+### **[[VP-18080]]** — `2026-09-02` — PROD verified — 7/7 smoke pass; ticket dev-complete
+
+- Promotion PR #400 (staging→main) deployed; prod pod 76df6ddb6d-nvqrq runs
+  582c00d (= main HEAD); dist verified (converter + both-key parse present).
+- Prod smoke: rejected probe (patient 999999999, placer E2E-VP18080-PROD-*) →
+  422 patient_not_found + interpolated failures[]; row terminal rejected (DB
+  read-back). Direct prod eligibility-check probe confirms upstream emits
+  PascalCase PatientNotFound → converter is live-necessary and correct on
+  prod. No orders placed; nothing to clean.
+- Docs still owed by api-product (listed in closeout to PM): mintlify
+  concepts/orders canonical snake table; document unsupported_test_codes
+  (choose-bundle/shortcut class); quote-side updates are VP-18081 (Rui).
+  My Confluence page 2485977089 (Order Intake API) still shows PascalCase
+  eligibility list — needs manual edit (MCP has no page-update tool).
+
 ### **[[VP-16337]]** — `2026-04-27 23:38` — **
 
 **Root cause:** Two parallel proto trees exist in this repo:
@@ -687,95 +718,83 @@ See the lesson extracted to `long-term-memory/patterns.md`.
 
 ---
 
-## DB / migration / backfill <a id='db-migration'></a>
+## Other / uncategorized <a id='other'></a>
 
-### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04 22:00` — expect spawn syntax error with `{...}` jsonpath
+### **[[INCIDENT-20260528]]** — `2026-05-28` — 把 hang pod log 燒掉了
 
-- `kubectl get pods -o jsonpath='{.items[0].metadata.name}'` inside expect's `spawn` argument: expect interprets `{...}` as Tcl array.
-- Fixed by switching to `--no-headers -o custom-columns=NAME:.metadata.name`.
-- Lesson: avoid `jsonpath` with Tcl-significant chars in expect scripts; prefer custom-columns output for single-field extraction.
+Leo 授權「(1) restart + (2) code fix」、我直接 `kubectl rollout restart`、**舊 pod (`6cc4674b87-ccgbf`) 的 log 隨 pod GC 永久消失**。/var/log/pods 對應目錄 mtime 還在但 log file 已清。所以「哪個 folder 是 5/27 真正 hang 元凶」**現場證據燒掉了**。後來 21:45 tick log 出來的 id=260 反而是 transient = 不是同一個 hang。
 
-### **[[VP-16193]]** — `2026-04-17 18:30` — **insert-order-client.ts script bug: customer_id 設為 clinic_id 值**
+預防：destructive ops (rollout restart / pod delete) 前必須 `kubectl logs <pod> > /tmp/preserve.log` + `kubectl describe pod <pod> > /tmp/preserve_describe.txt`。已寫進 user memory feedback。
 
-- 問題: 執行 insert-order-client.ts 後，order_clients.customer_id = 6338（Practice ID）而非 5408（Provider ID）
-- Root cause: script 內部將 customer_id 參數映射到 clinic_id 值，已知 bug
-- 修正: 手動 SQL `UPDATE order_clients SET customer_id = 5408 WHERE id = 2278`
-- 可預防: 是。未來執行 insert-order-client.ts 後必須驗證 customer_id 是否正確
+### **[[LBS-1541]]**
 
-### **[[VP-16232]]** — `2026-04-20 14:30` — **Failure 1: 用 crm.contacts 而非 gRPC**
+(none yet)
 
-- Error: 4,480 筆在 crm.contacts 找不到
-- Assumption: crm.contacts 有所有 customer 資料
-- Root cause: crm.contacts 只有部分 customer（可能只有 sales contacts），不是權威資料源
-- Fix: 改用 gRPC GetCustomer
+### **[[PO-256]]**
 
-**Failure 2: 命名格式錯誤**
-- Error: 把 patient calendar 改成 "{name}'s Provider Calendar"
-- Assumption: 沒有確認現有命名慣例
-- Root cause: 沒有先查看已存在的 patient calendar 命名格式（應為 "{NAME}'s Patient Calendar"）
+- az CLI MFA expired — could not inspect RBAC Container App directly; bounded diagnosis at the coresamples→container-app hop via error strings and timing.
 
-**Failure 3: gRPC endpoint 錯誤**
-- Error: CORE_SAMPLE_V2_RPC (10.224.0.53:8084) → ECONNREFUSED
-- Assumption: .env 裡的值可以直接用
-- Root cause: 沒有先讀 lis-code-agent/knowledge/emr-integration.md，那裡明確記載 gRPC endpoint 是 192.168.60.6:30276
-- Fix: 用 knowledge 裡記載的 endpoint
+### **[[VP-16521]]** — `2026-05-28 17:52` — git stash push 把 MERGE_HEAD 弄丟
 
-**Failure 4: NestJS createApplicationContext + gRPC**
-- Error: gRPC @Client decorator 在 CLI 模式不初始化，且 PublicBookingService.onModuleInit crash
-- Assumption: 可以用 NestJS context 跑 gRPC migration
-- Root cause: createApplicationContext 不啟動 microservice transport
-- Fix: 改用 @grpc/grpc-js + proto-loader 直接建立 gRPC client
+- **症狀**：merge in-progress 時 `git stash push` → MERGE_HEAD 消失，stash pop 報 `event.service.ts: needs merge`
+- **修法**：`git merge origin/stage_test --no-commit --no-ff` 重觸發 merge state，再 `git checkout stash@{0} -- src/calendar/models/event/event.service.ts` 把 stash 內的 resolved 版本拉回，最後 `git stash drop`
+- **教訓**：merge in-progress 時禁用 `git stash`；要保存 in-flight diff 改用 `git diff > /tmp/wip.patch` + 該 file 個別 checkout
+- **更好做法**：根本不該為了 "比較 pre-merge lint baseline" 中斷 merge state — 直接看 origin/feature 上的 ESLint baseline 即可，或先 commit 中間態再分析
 
-**Failure 5: 沒有使用 lis-code-agent knowledge**
-- Error: 整個過程都沒有查 knowledge 目錄
-- Assumption: 可以靠 .env 和 codebase 自己找到答案
-- Root cause: 不知道/忽略了 lis-code-agent 的知識庫系統
-- Fix: 任何 gRPC/migration 任務先讀 knowledge/
+### **[[VP-16766]]** — `2026-05-27` — **Minor TS slip**：`_apply` 腳本初版用 `${ehr.created_at = now}`（賦值表達式）想偷塞欄位，TS2339 編譯失敗。改成直接 `${now}`。教訓：raw SQL 的 template binding 不要塞賦值/副作用，值先算好再代入。
 
-### **[[VP-16329]]** — `2026-04-27 23:00` — **Failure: 第二次重跑 36816 INSERT 觸發 duplicate constraint error。**
 
-Root cause: 第一次跑時我用 `tail -50` 截取 output，後段顯示 record 資料但沒看到「✅ Successfully inserted」字樣（卡在 record dump），誤判沒成功就重跑。
-影響: 無實質影響（script 在 unique check 時擋下，沒 partial insert）。
-教訓: 確認 INSERT 成敗應 grep `Successfully|Error|❌` 而非看 record dump。後續 4 個 INSERT 都用 grep 過濾，順利完成。
 
-### **[[VP-16734]]**
+### **[[VP-16934]]** — `2026-06-09` — #157 部署後 staging dry-run 驗證通過
 
-（無實作層失敗）
+- endpoint no-auth → 401（route live + guard）。
+- 簽 JWT(staging JWT_SECRET, HS256, payload 需 userId + 未過期；JwtStrategy 不檢 issuer) 打 dry-run（`scripts/_vp16934-staging-test.js`）：
+  - 假 provider → `201 {rejected, customer_not_found}`（auth/dryrun/富化都跑）。
+  - 缺 testCodes → `400`。
+  - **真客戶 5794 → `201 {rejected, unrecognized_test_codes:[VACP1001]}`** = customer 解析成功 + 代碼分類有跑（VACP1001 是假 code 才被擋）。
+- **結論：order intake 在 staging dry-run 全程跑通**（auth/gating/validation/customer 查詢/代碼分類）。差「完整成功單(sampleId:-1)」需對 staging 客戶有效的真 test code。
+- staging order_intake 留了 2 筆 VP16934-TEST-* rejected 測試列（無害，可清）。
 
-**Minor procedural slip**:
-- Probe script `_vp16734-check.ts` 初版查 `ehr_integration_status_history` 用 column `ehr_integration_id`（推測），實際是 `integration_id` — 一次 retry 後補上 information_schema 查欄位名再改。教訓：跨表的 FK column 命名不要憑猜，先 `SHOW COLUMNS` / information_schema 看 schema
+### **[[VP-17120]]** — `2026-07-02 23:05` — ROOT CAUSE UPGRADED during replay (filed VP-17318, branch bugfix/leo/VP-17318 pushed)
 
-### **[[VP-16934]]** — `2026-06-10` — 完整 happy-path + exactly-once 在 staging 驗證通過（Leo 提供值）
+- emr-v2 generateSampleID NEVER worked: proto field is `sampleId` (camelCase in proto) but client reads `response.sample_id` with keepCase:true → undefined → `|| '0'` → always 0 since the VP-16463 port. Pre-5/28 nonzero patientPayLater ids were written by Java EMR-Backend.
+- sendOrder with sampleId=0 self-assigns a correct id (70/74 zero-id orders succeeded). The stuck rows are occasional sendOrder failures on that path.
+- coresamples v2 GenerateSampleID sequence is ~311k STALE: live probes returned ids 2277991-2278000, ALL existing patient samples in lis_core_v7.sample. A field-name-only fix would inject colliding ids → order path must NOT consume this RPC until their sequence is repaired (needs a coresamples-team ticket).
+- Fix on branch: finalizer skips pre-generation (sends 0 explicitly), client reads correct field + rejects invalid, [RETRY-EXHAUSTED] loud log, decrement floored. 21/21 targeted tests pass, build clean.
 
-- 值：orderingProviderId=999997（→fetchById，clinic 10136 帶出）、testCodes=[VAREQUISTION463]、chargeIndicator=C、測試病患 Vptest Dryrun。
-- **happy path：`HTTP 201 {accepted, dryRun:true, sampleId:-1}`** = 全鏈路跑通（auth→customer 999997 解析→patient find/create→VAREQUISTION463 分類成功→定價/best-deal/lab-fee/kit 組裝→finalize dryRun）。沒刷卡/送單/email。
-- **exactly-once：** 同 placerId 兩次 → 1st accepted、2nd `duplicate:true` 短路。
-- ⚠️ dry-run 仍會跑 patient find/create（gRPC），staging 可能新增測試病患 Vptest Dryrun；order_intake 留了 HAPPY/DUP/TEST 測試列（皆 staging 測試資料，可清）。
-- **結論：order intake API 在 staging 可正常下單（dry-run）且 exactly-once 生效。**
+### **[[VP-17217]]**
 
-### **[[VP-17076]]** — `2026-06-22` — 重大查詢 bug — Prisma $queryRaw IN() 用 join 字串
+- 首次 build TS2322：provider 陣列 union 型別 → 加 `Provider[]` 顯式型別修正。
+- spec 原以 class token 注入 → 改 inbound token 才能解析。
 
-- 錯誤寫法 `WHERE clinic_id IN (${CLINICS.join(',') as any})` → Prisma 把整串當**單一 bound param** → SQL 變 `clinic_id IN (?)` param='2930,8003,...' → MySQL 字串轉 int 只取開頭 → **只比對到 2930**。
-- 後果: 兩支 check script (_vp17076-check.ts / _vp17076-exist.ts) 全程只看到 2930，誤判「19 clinic 都不存在 / 需新建」。Leo 自己跑 SELECT * 抓到一堆既有 row 才發現。
-- Root cause: 沿用 scripts/check-vp16329.ts 的 hardcode 單值模式，改成 array 時沒用 `Prisma.join()`。
-- 正解: `import { Prisma }` + `IN (${Prisma.join(CLINICS)})`，或對信任的整數陣列直接字串內插建 SQL。
-- 教訓: 多值 IN 查詢務必**先驗證回傳筆數合理**（20 clinic 只回 1 筆就該起疑），不能直接拿來下「不存在」結論。對應 [[feedback_batch_db_verify]] / [[feedback_join_scope_reverse_audit]]。
+### **[[VP-17283]]**
 
-### **[[VP-18050]]**
+(none yet)
 
-- GraphQL wire spec first asserted the resolver's clinic-user gate using a patient token that carried `patient_id` + `barcode` but no `clinic_id`. `AuthGuard.validatePatient` rejected it one layer earlier ("Missing required patient identifiers"), so the test proved nothing about the resolver. Fixed by giving the token the identifiers the guard requires, so the request actually reaches the gate under test. Cheap instance of a general trap: a rejection test that passes for the wrong reason looks identical to one that passes for the right reason.
+### **[[VP-17714]]**
 
-### **[[VP-16720]]** — `2026-06-01` — **
+（none yet）
 
-**症狀**：3 個新建 Anna pair (2930/8003/36290) customer_npi 寫 null（理由：ticket 表沒列 NPI 欄）。Leo 指出 144510 既有 Anna row 的 customer_npi=1073000691 — 同 customer 跨 clinic NPI 應一致，3 個新 row 該借這個值。
+### **[[VP-17748]]**
 
-**Root cause**：我的 sibling-borrow 邏輯只從 **same-clinic sibling** 取（borrow clinic_name / address / contact 等 clinic-level 欄位），沒考慮 **same-customer sibling**（不同 clinic 但同 customer_id）—— 那裡有 customer-level 欄位（customer_npi）。
+(none yet)
 
-**修法**：事後 `UPDATE customer_npi + effective_npi WHERE customer_id='43262' AND clinic_id IN (2930,8003,36290)`。3 row 補上。
+### **[[VP-17765]]**
 
-**Preventable**：是。INSERT new pair 前應該分兩個 sibling lookup：
-- same-clinic（任一）→ borrow clinic_name, address, contact_*
-- same-customer 任一 LIVE row → borrow customer_npi, clinic_npi, effective_npi（如果有）
+(none this run)
+
+### **[[VP-17827]]**
+
+None this session.
+
+### **[[VP-18030]]**
+
+- 2026-08-31: `echo ===` and a commit -m containing backtick-quoted `to`
+  both got mangled by zsh (=== → "== not found"; `to` command-substituted to
+  empty inside double quotes). One stray non-English word also slipped into
+  a commit message body. Fixed by amend before push. Rules: heredoc
+  (`git commit -F - <<'MSG'`) for any commit message with punctuation;
+  grep -P '[^\x00-\x7F]' the message and changed files before commit.
 
 ---
 
@@ -906,6 +925,181 @@ sample=2609199 retry=5 err="" code=""`
 **但這不證明 ticket 症狀修好** —— address 不在 emr-v2 送出的 payload 裡，元兇在
 billing（見上一節）。這是本次驗證的範圍上限，已在 PR #316 與此處明確標示。
 
+### **[[VP-18055]]** — [2026-09-01 ~20:50Z] Second failure (#285) diagnosed WITHOUT Jenkins access — transient prod-deploy connection, NOT code
+
+- Evidence chain: GitHub commit statuses (Jenkins reports there — the no-creds workaround): staging #218 (0ee5813, has the TS2554 fix) SUCCESS 19:47Z and staging pod rolled; main #284 (8acdc96) error at 1.9min = the TS2554 test failure; main #285 (a3aa493) error at 7.2min = PAST tests. Registry check: a3aa493 image present in BOTH 60.10:6004 and ACR → #285 completed test+build+push, died ~1min into the parallel deploy fan-out. On-prem cluster (via 60.5 kubectl): deployment still pinned a3596e5, no new RS after 18:13Z → the main-only deploy-on-prem branch (scp/ssh yuxuan@192.168.60.6, sshagent 'ssh-60-key') never landed its apply. main a3596e5..a3aa493 contains ONLY my 6 src files — deploy stages don't consume them. 60.6:22 probed healthy from sandbox + 20/20 from 60.5 → transient at 19:46Z. Matches Leo's observation "staging 可以連到但是 prod 不行".
+- Fix = re-run main build (needs Jenkins UI/auth — leo/abc123 does NOT work on Jenkins 60.9:9602 nor ssh 60.9/60.6; only 60.5).
+- Hardening candidate: retry(3) around the deploy-on-prem ssh/scp block in Jenkinsfile (needs Leo nod, separate PR).
+
+### **[[VP-18055]]** — [2026-09-01 ~21:00Z] Session closed by Leo ("done") — deploy verified, organic firing NOT yet observed
+
+- Both builds green on rerun (transient confirmed), 4 pods on post-fix images (AKS+on-prem, prod a3aa493 / staging 0ee5813), Sentry initialised production on both prod pods, consumers joined groups, no regression in result pipeline (0 new records post-deploy = normal quiet-hours baseline).
+- Organic scope-drop warn NOT observed as of ~20:55Z (expected: drops cluster in the 00:00Z report burst). All watches stopped per Leo. One-liner to check later:
+  `kubectl --context lisportalprod -n emr-v2 logs deploy/lis-emr-v2-deployment-prod -c lis-emr-v2-prod --since=24h | grep -F 'dropped by customer scope: sample_id='` (+ same via 60.5 SSH for on-prem). Expect ~10-15/day, mostly test clinic 10136.
+- OPEN handoffs: (1) follow-up Task ticket NOT created — draft at drafts/VP-18055-followup-ticket-draft.md awaiting Leo; (2) clinic 12212 Erin Leffel 48198 + clinic 102106 half-configured row awaiting Leo decision; (3) Jira status transition = Leo; (4) Jenkins creds still unpersisted; (5) Jenkinsfile retry(3) hardening un-decided.
+
+### **[[VP-18055]]** — [2026-09-01 ~21:30Z] Leo directives executed: VP-18095 created; 12212 FIXED; 102106 blocked on vendor-side confirmation
+
+- **VP-18095** created (Task, assigned Leo, P2, Relates→VP-18055) = the practice-wide preventive work + backfill audit. Leo himself immediately transitioned it Done + story points 3 + Sprint 28 (changelog-verified his account, NOT automation — do not "fix").
+- **Clinic 12212 Sanctuary / Erin Leffel 48198 REMEDIATED** (VP-16329 same-practice mirror pattern): ehr_integrations `cmmtj62jezalj7n6ddno9ud38` (FULL_INTEGRATION, LIVE, cloud, NPI 1194141424, msh06=12212, /sanctuary/results/ + /sanctuary/orders/, requested_by=VP-18095) + order_clients id 2334. Reverse audits clean (9 LIVE rows on clinic, NPI unique). Repush 7/7 TRANSMITTED 21:16-21:19Z via her new row (processed by post-deploy on-prem pod 7bf94d57c7 — doubles as new-build real-traffic proof) + all 7 files peer-verified on MDHQ vendor SFTP /sanctuary/results/.
+- **Clinic 102106 FMCOFNJ = HARD BLOCKED, not done**: vendor 9 OPTIMANTRA uses ONE shared drop folder /Prod/Input/ for all practices, routing entirely by MSH-6. The half-configured row (`cmobona3u00ht1007umovde34`, Practice Admin 518714, msh06/path/service all NULL, created 04-23 by user 100062) has no onboarding ticket, and the practice has ZERO inbound EMR traffic → no evidence Optimantra's side is configured, and no defensible MSH-6 value. Pushing 104 PHI reports with a guessed routing key risks delivering to the WRONG practice's inbox. Outreach draft: drafts/VP-18095-fmcofnj-102106-outreach-draft.md (asks: practice intent + MSH-6 value; internal shortcut: ask users 100062/2477).
+
+### **[[VP-18066]]** — `2026-09-02` — Staging E2E — FHIR envelope proven live (guard layer)
+
+- Same deploy/pod as VP-18080 E2E. LIVE PROVEN:
+  - no token → 401 {error:{code:UNAUTHORIZED, requestId}} and x-request-id
+    header === body requestId.
+  - HS256 token → 403 {error:{code:FORBIDDEN, message contains RS256}}.
+  - caller-supplied x-request-id echoed in header + body.
+- Controller-level 400/404/503 envelopes not live-tested (needs an RS256
+  vendor token + live OAuth session — not self-mintable by design, LIS-7690);
+  covered by the supertest boot spec instead. State this in any closeout.
+- PROCESS SLIP (lesson re-broken): an `env | grep` in-pod printed the full
+  ORDER_API_TOKEN_STAGING bearer into the session transcript — same class as
+  the LIS-7690 configmap-grep incident (select specific fields, never grep
+  whole env/configmaps). Staging-only long-lived token; flag to Leo.
+- PROD DEPLOY PENDING: staging→main promotion PR (Leo). No prod E2E yet.
+
+---
+
+## DB / migration / backfill <a id='db-migration'></a>
+
+### **[[INCIDENT-20260604-mdhq-stale-connections]]** — `2026-06-04 22:00` — expect spawn syntax error with `{...}` jsonpath
+
+- `kubectl get pods -o jsonpath='{.items[0].metadata.name}'` inside expect's `spawn` argument: expect interprets `{...}` as Tcl array.
+- Fixed by switching to `--no-headers -o custom-columns=NAME:.metadata.name`.
+- Lesson: avoid `jsonpath` with Tcl-significant chars in expect scripts; prefer custom-columns output for single-field extraction.
+
+### **[[VP-16193]]** — `2026-04-17 18:30` — **insert-order-client.ts script bug: customer_id 設為 clinic_id 值**
+
+- 問題: 執行 insert-order-client.ts 後，order_clients.customer_id = 6338（Practice ID）而非 5408（Provider ID）
+- Root cause: script 內部將 customer_id 參數映射到 clinic_id 值，已知 bug
+- 修正: 手動 SQL `UPDATE order_clients SET customer_id = 5408 WHERE id = 2278`
+- 可預防: 是。未來執行 insert-order-client.ts 後必須驗證 customer_id 是否正確
+
+### **[[VP-16232]]** — `2026-04-20 14:30` — **Failure 1: 用 crm.contacts 而非 gRPC**
+
+- Error: 4,480 筆在 crm.contacts 找不到
+- Assumption: crm.contacts 有所有 customer 資料
+- Root cause: crm.contacts 只有部分 customer（可能只有 sales contacts），不是權威資料源
+- Fix: 改用 gRPC GetCustomer
+
+**Failure 2: 命名格式錯誤**
+- Error: 把 patient calendar 改成 "{name}'s Provider Calendar"
+- Assumption: 沒有確認現有命名慣例
+- Root cause: 沒有先查看已存在的 patient calendar 命名格式（應為 "{NAME}'s Patient Calendar"）
+
+**Failure 3: gRPC endpoint 錯誤**
+- Error: CORE_SAMPLE_V2_RPC (10.224.0.53:8084) → ECONNREFUSED
+- Assumption: .env 裡的值可以直接用
+- Root cause: 沒有先讀 lis-code-agent/knowledge/emr-integration.md，那裡明確記載 gRPC endpoint 是 192.168.60.6:30276
+- Fix: 用 knowledge 裡記載的 endpoint
+
+**Failure 4: NestJS createApplicationContext + gRPC**
+- Error: gRPC @Client decorator 在 CLI 模式不初始化，且 PublicBookingService.onModuleInit crash
+- Assumption: 可以用 NestJS context 跑 gRPC migration
+- Root cause: createApplicationContext 不啟動 microservice transport
+- Fix: 改用 @grpc/grpc-js + proto-loader 直接建立 gRPC client
+
+**Failure 5: 沒有使用 lis-code-agent knowledge**
+- Error: 整個過程都沒有查 knowledge 目錄
+- Assumption: 可以靠 .env 和 codebase 自己找到答案
+- Root cause: 不知道/忽略了 lis-code-agent 的知識庫系統
+- Fix: 任何 gRPC/migration 任務先讀 knowledge/
+
+### **[[VP-16329]]** — `2026-04-27 23:00` — **Failure: 第二次重跑 36816 INSERT 觸發 duplicate constraint error。**
+
+Root cause: 第一次跑時我用 `tail -50` 截取 output，後段顯示 record 資料但沒看到「✅ Successfully inserted」字樣（卡在 record dump），誤判沒成功就重跑。
+影響: 無實質影響（script 在 unique check 時擋下，沒 partial insert）。
+教訓: 確認 INSERT 成敗應 grep `Successfully|Error|❌` 而非看 record dump。後續 4 個 INSERT 都用 grep 過濾，順利完成。
+
+### **[[VP-16734]]**
+
+（無實作層失敗）
+
+**Minor procedural slip**:
+- Probe script `_vp16734-check.ts` 初版查 `ehr_integration_status_history` 用 column `ehr_integration_id`（推測），實際是 `integration_id` — 一次 retry 後補上 information_schema 查欄位名再改。教訓：跨表的 FK column 命名不要憑猜，先 `SHOW COLUMNS` / information_schema 看 schema
+
+### **[[VP-16934]]** — `2026-06-10` — 完整 happy-path + exactly-once 在 staging 驗證通過（Leo 提供值）
+
+- 值：orderingProviderId=999997（→fetchById，clinic 10136 帶出）、testCodes=[VAREQUISTION463]、chargeIndicator=C、測試病患 Vptest Dryrun。
+- **happy path：`HTTP 201 {accepted, dryRun:true, sampleId:-1}`** = 全鏈路跑通（auth→customer 999997 解析→patient find/create→VAREQUISTION463 分類成功→定價/best-deal/lab-fee/kit 組裝→finalize dryRun）。沒刷卡/送單/email。
+- **exactly-once：** 同 placerId 兩次 → 1st accepted、2nd `duplicate:true` 短路。
+- ⚠️ dry-run 仍會跑 patient find/create（gRPC），staging 可能新增測試病患 Vptest Dryrun；order_intake 留了 HAPPY/DUP/TEST 測試列（皆 staging 測試資料，可清）。
+- **結論：order intake API 在 staging 可正常下單（dry-run）且 exactly-once 生效。**
+
+### **[[VP-17076]]** — `2026-06-22` — 重大查詢 bug — Prisma $queryRaw IN() 用 join 字串
+
+- 錯誤寫法 `WHERE clinic_id IN (${CLINICS.join(',') as any})` → Prisma 把整串當**單一 bound param** → SQL 變 `clinic_id IN (?)` param='2930,8003,...' → MySQL 字串轉 int 只取開頭 → **只比對到 2930**。
+- 後果: 兩支 check script (_vp17076-check.ts / _vp17076-exist.ts) 全程只看到 2930，誤判「19 clinic 都不存在 / 需新建」。Leo 自己跑 SELECT * 抓到一堆既有 row 才發現。
+- Root cause: 沿用 scripts/check-vp16329.ts 的 hardcode 單值模式，改成 array 時沒用 `Prisma.join()`。
+- 正解: `import { Prisma }` + `IN (${Prisma.join(CLINICS)})`，或對信任的整數陣列直接字串內插建 SQL。
+- 教訓: 多值 IN 查詢務必**先驗證回傳筆數合理**（20 clinic 只回 1 筆就該起疑），不能直接拿來下「不存在」結論。對應 [[feedback_batch_db_verify]] / [[feedback_join_scope_reverse_audit]]。
+
+### **[[VP-18050]]**
+
+- GraphQL wire spec first asserted the resolver's clinic-user gate using a patient token that carried `patient_id` + `barcode` but no `clinic_id`. `AuthGuard.validatePatient` rejected it one layer earlier ("Missing required patient identifiers"), so the test proved nothing about the resolver. Fixed by giving the token the identifiers the guard requires, so the request actually reaches the gate under test. Cheap instance of a general trap: a rejection test that passes for the wrong reason looks identical to one that passes for the right reason.
+
+### **[[VP-16720]]** — `2026-06-01` — **
+
+**症狀**：3 個新建 Anna pair (2930/8003/36290) customer_npi 寫 null（理由：ticket 表沒列 NPI 欄）。Leo 指出 144510 既有 Anna row 的 customer_npi=1073000691 — 同 customer 跨 clinic NPI 應一致，3 個新 row 該借這個值。
+
+**Root cause**：我的 sibling-borrow 邏輯只從 **same-clinic sibling** 取（borrow clinic_name / address / contact 等 clinic-level 欄位），沒考慮 **same-customer sibling**（不同 clinic 但同 customer_id）—— 那裡有 customer-level 欄位（customer_npi）。
+
+**修法**：事後 `UPDATE customer_npi + effective_npi WHERE customer_id='43262' AND clinic_id IN (2930,8003,36290)`。3 row 補上。
+
+**Preventable**：是。INSERT new pair 前應該分兩個 sibling lookup：
+- same-clinic（任一）→ borrow clinic_name, address, contact_*
+- same-customer 任一 LIVE row → borrow customer_npi, clinic_npi, effective_npi（如果有）
+
+---
+
+## Scope / requirement / PM communication <a id='scope-communication'></a>
+
+### **[[PH-847]]** — `2026-09-01` — PM accepted — implementation tickets created
+
+- Xiaoye Li (PM, api-product) responded to comment 186020 by creating the
+  implementation tickets same morning; PH-847 flipped Dev In Progress.
+- VP-18080 (Leo) = emr-v2/order half; VP-18081 (clone, Rui Chen) = pricing/
+  quote half; both descriptions open "Agreed as proposed — unify on snake_case
+  as you laid out." QA twin QH-6962.
+- The envelope scope extension (my point 4) was split out as PH-844 →
+  VP-18066 (Leo), QA twin QH-6947 — covers patients/quote/report + the
+  Cloudflare bearer page, target shape = order's envelope.
+- Work continues in VP-18080 / VP-18066 STMs; this file is closed out.
+
+### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
+
+- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
+- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
+- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
+- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
+
+### **[[VP-17497]]** — `2026-07-27` — SERIOUS MISS (Leo): defect known 14 days before external partner hit it
+
+- The exact bug was discovered during VP-17286 E2E (2026-07-13, scope item 7) and recorded ONLY as a "proposed follow-up" STM note — no ticket filed, nobody scheduled it. api-product hit it in sandbox 2026-07-22; fixed 2026-07-27.
+- Leo: "這也是一個嚴重的失誤(需要記下來 into both this agent and general agent)".
+- Recorded: agent memory feedback_defect_found_must_be_ticketed.md + factory lesson PR (process discipline). Rule: a defect surfaced by testing that won't be fixed in the current ticket gets a Jira ticket in the SAME session; the note references the ticket id, never the reverse.
+
+### **[[VP-17544]]** — `2026-08-03` — 用 awk 管線改 config yaml 把兩個檔案寫空
+
+`awk 'NR==FNR{next}1' /dev/null "$f"` 這個組合把所有行都跳過 → 兩個 copy 變 0 行。
+主 repo 原檔完好（gitignored、只有 worktree 的 copy 被毀），改用 python 逐行處理 +
+長度 assert 重建。**教訓：對既有檔案做原地插入時用會驗證的工具，不要湊 awk/sed 單行。**
+
+### **[[VP-17544]]** — `2026-08-03` — pre-commit guard 在 worktree 中必然誤報
+
+`config-yaml-coupling` guard 用 `git rev-parse --show-toplevel` 找兩個 gitignored 的
+ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktree 裡檔案不存在 →
+`yaml_has_key` 對所有變數都回 false → **連既有的 `env` 都被報缺失**。
+處置：把兩份快照 copy 進 worktree（gitignored，不會進 commit），guard 才真的在檢查
+真實 cluster 狀態。沒有用 `--no-verify`。
+第二次它報 `MY_POD_NAME` 缺失 —— 那是既有變數（7 處使用），只因為我複製了那一行。
+把空值塞進 ConfigMap 會讓 `process.env.MY_POD_NAME ?? null` 從 null 變成 `''`（行為變更），
+所以改成 `markTerminalFailure` 不覆寫 `last_update_pod_name`。
+**教訓：guard 抓到的不一定是新變數，可能只是既有變數的新使用點；用「塞空值進 config」
+去消除警告會偷偷改變 `??` 的語意。**
+
 ---
 
 ## Redis / cache / pending list <a id='redis-cache'></a>
@@ -990,42 +1184,6 @@ expect -re {[Pp]assword:} { send -- "$env(ONPREM_PW)\r" }
 
 ---
 
-## Scope / requirement / PM communication <a id='scope-communication'></a>
-
-### **[[VP-17076]]** — `2026-06-23` — 改用 shortcut_id 比對（commit 0ea3cbe，取代 name 比對）
-
-- Leo 定案：EMR 在 OBR-4 送 `VASC{shortcut_id}`（如 VASC727441），emr-v2 用 `shortcut_id` 比對（唯一），不再用 name。
-- shortcut.service: `parseShortcutCode`(VASC{id}) 取代 normalizeName；resolveShortcut 改 `s.shortcut_id === id`；非 VASC → null（不打 API）。is_practice 過濾移除（id 唯一無碰撞，a219f82 的考量被取代）。expand(tests/groups/bundles) 不變。candidatePairs(winner first + NPI fallback) 不變。
-- live 驗證 144510+40660：VASC727441→Total Baseline(MALE)[376+853]、VASC727440→(FEMALE)[853]、VASC999999→null、非VASC→null。109 tests pass。
-- **3 份 Confluence doc 現已過時**（它們寫 by-name；實際是 VASC{id}）：內部 2506326018 / 外部 2506457090 / 差異清單 2506653698。外部 vendor doc 尤其需改成「OBR-4 填 VASC{shortcut_id}」+ 提供 per-clinic shortcut_id 對照（xlsx）。待 Leo 決定如何對 vendor 呈現再更新。
-
-### **[[VP-17497]]** — `2026-07-27` — SERIOUS MISS (Leo): defect known 14 days before external partner hit it
-
-- The exact bug was discovered during VP-17286 E2E (2026-07-13, scope item 7) and recorded ONLY as a "proposed follow-up" STM note — no ticket filed, nobody scheduled it. api-product hit it in sandbox 2026-07-22; fixed 2026-07-27.
-- Leo: "這也是一個嚴重的失誤(需要記下來 into both this agent and general agent)".
-- Recorded: agent memory feedback_defect_found_must_be_ticketed.md + factory lesson PR (process discipline). Rule: a defect surfaced by testing that won't be fixed in the current ticket gets a Jira ticket in the SAME session; the note references the ticket id, never the reverse.
-
-### **[[VP-17544]]** — `2026-08-03` — 用 awk 管線改 config yaml 把兩個檔案寫空
-
-`awk 'NR==FNR{next}1' /dev/null "$f"` 這個組合把所有行都跳過 → 兩個 copy 變 0 行。
-主 repo 原檔完好（gitignored、只有 worktree 的 copy 被毀），改用 python 逐行處理 +
-長度 assert 重建。**教訓：對既有檔案做原地插入時用會驗證的工具，不要湊 awk/sed 單行。**
-
-### **[[VP-17544]]** — `2026-08-03` — pre-commit guard 在 worktree 中必然誤報
-
-`config-yaml-coupling` guard 用 `git rev-parse --show-toplevel` 找兩個 gitignored 的
-ConfigMap 快照，但那兩個檔只存在主 repo 工作目錄 → 在 worktree 裡檔案不存在 →
-`yaml_has_key` 對所有變數都回 false → **連既有的 `env` 都被報缺失**。
-處置：把兩份快照 copy 進 worktree（gitignored，不會進 commit），guard 才真的在檢查
-真實 cluster 狀態。沒有用 `--no-verify`。
-第二次它報 `MY_POD_NAME` 缺失 —— 那是既有變數（7 處使用），只因為我複製了那一行。
-把空值塞進 ConfigMap 會讓 `process.env.MY_POD_NAME ?? null` 從 null 變成 `''`（行為變更），
-所以改成 `markTerminalFailure` 不覆寫 `last_update_pod_name`。
-**教訓：guard 抓到的不一定是新變數，可能只是既有變數的新使用點；用「塞空值進 config」
-去消除警告會偷偷改變 `??` 的語意。**
-
----
-
 ## Error handling / throw vs log <a id='error-handling'></a>
 
 ### **[[VP-16987]]** — `2026-06-16 18:40` — — pipeline 設計脆弱點 (連帶發現)
@@ -1089,7 +1247,7 @@ None that cost rework. Two near-misses worth naming:
 - 試 2 次都 timeout，改跑 `npx eslint <file>` CLI 直接拿同樣結果
 - 教訓：WebStorm 抓 lint 等於 eslint + prettier；agent 端不要等 IDE diagnostics，CLI 更快更穩
 
-### **[[VP-17532]]**
+### **[[VP-17532]]** — **
 
 - (none blocking) setting_audit table in lis_frontend_service does not record the `timezone` setting; had to query core SettingService via gRPC (grpcurl + client-credentials OAuth token from transformer .env) — worked.
 
