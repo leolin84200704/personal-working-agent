@@ -20,12 +20,14 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260903-EVERSPAN
 - INCIDENT-20260808-critical-result-tnp
 - INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
 - LBS-1762
+- LBS-1773
 - LIS-7716
 - PH-847
 - QH-1660
@@ -103,6 +105,8 @@ links:
 - VP-17827
 - VP-17914
 - VP-18030
+- VP-18034
+- VP-18055
 - emr-integration
 - fhir-api
 - repos
@@ -125,7 +129,7 @@ summary: 'New EMR vendor BioInsights — first key-based (non-password) SFTP int
   unaffected; AKS pod egress to bioinsights:2022 OK. 2026-07-21 email sent to Thomas
   (perms + dir layout + sample HL7). STATUS: waiting on vendor reply.'
 jira_status: none
-score: 0.3503
+score: 0.3297
 ---
 
 # BioInsights EMR vendor onboarding (SFTP, key-based auth)

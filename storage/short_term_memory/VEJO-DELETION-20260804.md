@@ -19,12 +19,14 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260903-EVERSPAN
 - INCIDENT-20260808-critical-result-tnp
 - INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
 - LBS-1762
+- LBS-1773
 - LIS-7716
 - PH-847
 - QH-1660
@@ -99,6 +101,8 @@ links:
 - VP-17827
 - VP-17914
 - VP-18030
+- VP-18034
+- VP-18055
 - emr-integration
 - fhir-api
 tags:
@@ -106,7 +110,7 @@ tags:
 summary: 'Deleted all 3 VEJO integrations (vendors 17/18/43) from prod lis_emr: 41
   rows across 7 tables, transaction with count guards, full backup at ~/src/credential/vejo-deletion-backup-20260804.json.
   Zero activity ever (0 hl7, 0 results, 0 samples). Reverse-audit clean.'
-score: 0.4574
+score: 0.4304
 ---
 
 # VEJO integration deletion — 2026-08-04

@@ -21,12 +21,14 @@ links:
 - HL7-NPI-PRACTICE-MATCH-20260820
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260903-EVERSPAN
 - INCIDENT-20260808-critical-result-tnp
 - INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
 - LBS-1762
+- LBS-1773
 - LIS-7716
 - PH-847
 - QH-1660
@@ -103,6 +105,11 @@ links:
 - VP-17827
 - VP-17914
 - VP-18030
+- VP-18034
+- VP-18055
+- VP-18066
+- VP-18080
+- VP-18086
 - emr-integration
 - fhir-api
 tags:
@@ -120,7 +127,7 @@ summary: 'hl7_file_input 6735 (Plessen/MDHQ, patient FOGARTY SHANE, VI) stuck pa
   Self-heals via retry-rescan once order team adds the panels. NOT ticketed (other
   team scope) — hand-off package given to Leo.'
 jira_status: n/a
-score: 0.3745
+score: 0.3626
 ---
 
 # hl7_file_input 6735 — Plessen order stuck on BestDeal panel gap

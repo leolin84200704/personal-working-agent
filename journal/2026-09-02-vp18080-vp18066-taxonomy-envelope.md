@@ -1,3 +1,20 @@
+---
+date: 2026-09-02
+slug: vp18080-vp18066-taxonomy-envelope
+related:
+- PH-847
+- PH-844
+- VP-18080
+- VP-18081
+- VP-18066
+- QH-6962
+- QH-6947
+- VP-17691
+- VP-17760
+- LIS-7690
+distilled: true
+---
+
 # 2026-09-02 — VP-18080 taxonomy + VP-18066 envelope (PH-847/PH-844 arc)
 
 Related: PH-847, PH-844, VP-18080, VP-18081, VP-18066, QH-6962, QH-6947,

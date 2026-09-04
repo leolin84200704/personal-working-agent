@@ -3,7 +3,7 @@ id: emr-integration
 type: ltm
 category: emr_integration
 status: active
-score: 1.4479
+score: 1.5345
 base_weight: 1.0
 created: 2026-04-22
 updated: 2026-07-22
@@ -17,12 +17,14 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260903-EVERSPAN
 - INCIDENT-20260808-critical-result-tnp
 - INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
 - LBS-1762
+- LBS-1773
 - LIS-7716
 - PH-847
 - QH-1660
@@ -110,6 +112,11 @@ links:
 - VP-17827
 - VP-17914
 - VP-18030
+- VP-18034
+- VP-18055
+- VP-18066
+- VP-18080
+- VP-18086
 - fhir-api
 tags:
 - emr
@@ -1740,3 +1747,63 @@ new-vendor spec / PM 能力詢問，以下列為準（2026-08-19 對 origin/main
 - 同案發現的 recovery 先例：7 個 accession 的 main-group 檔案 finished 但 delivery trigger 落在
   on-prem consumer 停擺窗（08-17 已修的 incident）——已 event-replay repush、Cerbo 確認收取。
   「trigger 掉進已知 outage 窗」是查 missing-delivery 時該主動掃的一類。
+
+## 【蒸餾 2026-09-03】多 provider practice 的結果投遞缺口 + Athena MSH-6 慣例 + hl7 retry 機制事實（VP-18055 / VP-18095 / LBS-1773 / LBS-1772）
+
+### 自助整合出來的 practice，其他 provider 的結果會在 queue 之前被靜默丟掉（VP-18055，P1，19 天 6 份）
+- Result 解析（`kafka-report-finished-listener.service.ts findEligibleResultIntegrations`）只接受
+  **exact customer_id** 或 **clinic 級 `customer_id='-1'` catch-all**。Auto-integrate 自助流程只會建
+  requesting provider 的 provider-level row，沒有任何路徑建 `-1` row → 同 practice 其他 provider 的
+  report_finished 在 queue 之前 return，只剩 debug log。手動 repush（`findDistinctEligibleResultIntegrations`）
+  走同一套解析，所以補了 `-1` row 之後 repush 就通。
+- 修法配方：INSERT 一筆 `-1` RESULT_ONLY LIVE row，鏡射同 clinic 的 sibling（pipeline_location、msh06、
+  sftp_result_path、report_option、`legacy_emr_service`——後者是 dedup key 的一半）。dedup key =
+  `(legacy_emr_service, sftp_result_path)`，所以 requester 自己的結果不會因此雙送。然後對每個漏掉的 sample
+  打 GenerateResultHl7（192.168.60.6:31317，落在 on-prem pod），rtr + vendor SFTP 兩層驗證。
+- `lis_core_emr` 帳號對 `lis_emr` 有 ALL PRIVILEGES：直接 SQL INSERT 即可（id 自己產 cuid 風格），不必進 pod 用 Prisma。
+- 反向稽核要做：ticket 列 5 個 sample，反查同 clinic 非 requester 的 finished sample 多找到第 6 個。
+- 現在有告警了（PR #392/#393 + #394/#395 修 CI，2026-09-01 prod live）：whole-order 空解析路徑會探測
+  「同 clinic 有 LIVE result row 但 customer scope 不含本 event」→ warn `Result dropped by customer scope: sample_id=…`
+  + Sentry。**2026-09-03 dream 實測 AKS prod 48h 內 organic 觸發 4 次**（clinic 124365 / 3872 / 3143×2），
+  60 天 prod 簽名掃描 560 samples / 41 clinics / 73 (clinic, customer) pairs，多數是 2025 migration 的
+  provider-level 舊設定、加上內部測試 clinic 10136（126 筆）——告警響 ≠ 缺陷，先看 clinic。
+- 兩個真雙胞胎：clinic 12212 Sanctuary（Erin Leffel 48198 漏在 VP-16329 批次之外）→ 已用同 practice 鏡射補
+  row + 7/7 repush；clinic 102106 FMCOFNJ（Optimantra vendor 9）**卡死**：Optimantra 全 practice 共用一個
+  drop folder `/Prod/Input/`，路由全靠 MSH-6，半配置 row 的 msh06/path/service 全 NULL、practice 零 inbound
+  流量 → 猜 MSH-6 等於把 104 份 PHI 報告送進別家 inbox，必須先問 vendor/practice（outreach 草稿在 drafts/）。
+- 預防性工作（自助流程 practice-wide 選項 + regression test + backfill audit）= VP-18095，Leo 建票即關
+  （bookkeeping：parked backlog，AC 全未做是設計）。
+
+### Athena：MSH-6 先看同 practice peers，再談 2026-04-23 的 Practice-ID 預設（LBS-1773）
+- prod Athena practice 是混的：124546 Palm Health 15 rows 全 `msh06 = 自己的 customer_id`（Provider ID，
+  MIGRATION 來源）；LBS-1656 的 18299、154911、125563 用 Practice ID。Leo 先說「填 clinic id」，看到 14 個 peers
+  後改口「follow 那 14 個」→ 新 row msh06=53041，peers 不動。**決策清單裡把 peer 慣例放第一位，policy 放第二。**
+- Athena 是 result-push only（`sftp_ordering_path` NULL，vendor SFTP external.sftp.athena.io）、**沒有 ACK 通道**
+  （acknowledgment 永遠 PENDING）：TRANSMITTED 只證明上傳成功，改錯 MSH-6 只會以客訴形式浮現——所以動 peers 的
+  `--align-practice` 選項風險不對稱，沒 vendor 確認不要碰。
+- 新 provider 還沒有 sample 時，真實 round-trip 做不到；STM 要寫「第一份結果出來時查 rtr result_client_id=53041」
+  當 forward-looking 驗證點（2026-09-04 01:35Z dream 查：仍 0 筆，符合 0 samples）。
+
+### 被中斷的終端輸出 ≠ 被 rollback 的 transaction（LBS-1773）
+- `--commit` 跑到一半 Ctrl-C，Prisma 其實已 COMMIT（row created_at 22:36:25Z）。盲目重跑會撞 dup guard、盲目 UPDATE
+  在 row 不存在時是靜默 no-op——**先 re-SELECT 再決定 INSERT-or-UPDATE**。
+
+### hl7_file_input retry 的三個機制事實（LBS-1772 / HL7FAIL-20260903-EVERSPAN）
+- **retry 重讀的是 owning pod 的本地檔**（appserver04 `/mnt/storage/EMR_storage/HL7Message_prod/<vendor>/Prod/Order/`
+  = pod `/EMR_storage/...`，CIFS share `//10.0.0.101/storage`），不是 SFTP：fetch 用 `stfp_file_full_name` 去重且下載後刪
+  remote，所以改 SFTP 上的檔沒用，只能改 pod-local 檔。
+- **customer 解析先讀 ORC.12，OBR.16 只是 fallback**（`hl7-order.processor.ts:152` / `parser.service.ts:170`）。
+  ORC.12.1 長度 ≤7 → `fetchById(customerId)`（需要該 customer_id 有 LIVE ordering row，NPI 無關）；更長 → `fetchByNpi`
+  → core `getCustomerByNPINumber` → 多個 customerIds → `resolveOrderingIntegration` 取**最新 LIVE ordering row**。
+  一個 NPI 對多個 customer 時可能路由到別的 clinic（1649323791 → 50342/clinic 153585 而非 22376/66839）；
+  `ehr_integrations.customer_npi` 會跟 core 脫節（row 22376 存 1649323791，core 說 22376 = Ahmann 1720245806）。
+  要指定某 provider 最穩的寫法：ORC.12 與 OBR.16 都填 `<真 NPI>^LAST^FIRST^^^^^N`。
+- **BullMQ jobId 撞號**：rescan enqueue `hl7-{id}-r{retry_num}`，completed job 保留 24h，BullMQ 對已存在 jobId 的
+  `add()` 靜默忽略 → 把 retry_num 調回用過的值（如 5）會「re-enqueued 1」但永不 Processing。re-place 時把 retry_num
+  設成 24h 內沒用過的值（直接高過歷史最高，如 8）；診斷用 pod redis sidecar `redis-cli --scan --pattern
+  'bull:process-hl7-file:hl7-<id>*'`。候選 code fix：jobId 加 nonce / last_parse_time，或 re-place 時刪 completed job。
+- **CIFS delete-pending 陷阱**：任何 host 上開著的 pager/editor（`less`）握著 handle 時 `rm` 會讓檔案進 delete-pending
+  （Links: 0，舊 handle 可讀、新 open 全失敗）。規則：這個 share 上用 `cat new > file` 原地覆寫（不 rename），rm/mv 前
+  先 `lsof | grep <file>` / `/proc/fs/cifs/open_files`。
+- 結果：7012 於 2026-09-03 20:47Z parse_finished=1 → sample 2629319 / barcode 2609036689 / emr_order_id 0000008832。
+  `last_error` 欄位**不會被成功清掉**（仍顯示 customer_not_found=MARY JO ALLEN）——判斷成功看 parse_finished + sample_id。

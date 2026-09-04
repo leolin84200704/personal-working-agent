@@ -326,3 +326,32 @@ reconcile 的「local completed / Jira 未 done」manual-review 名單多半是�
 規則：**ticket 的 remediation 建議與前提描述都要當 hypothesis 對待**，Explore-as-critic（讀碼 + broker/
 平台限制 + prod 量測）是驗它的手段，翻案率高到不值得跳過。Routine 分類（跳過 debate）只適用「照既有
 pattern 的 config/integration 票」，任何「票面已給修法」的 code 票不因此變 Routine。
+
+## 「Done」有三種語意，結案稽核先分清是哪一種（cross-ticket review 2026-09-03；證據 VP-18030 / VP-18048 / VP-18050 / VP-18055 / VP-18066 / VP-18080 / LBS-1772 / LBS-1773 / VP-18095）
+
+本輪 9 張 Done 票，Jira 的 Done 對到三種不同的世界狀態：
+1. **驗證後關**（VP-18030 / VP-18066 / VP-18080 / VP-18048 / LBS-1772）：prod E2E 或 pod-level 證據在前，轉 Done 在後。
+2. **停車即關**（VP-18095）：agent 依 Leo 指示建的 follow-up Task（practice-wide 選項 + regression test + backfill audit），
+   Leo 建立後 1 分鐘轉 Done + 3 story points + Sprint 28。AC 一條都沒做是**設計**——Done 在這裡是「我知道了、先放著」，
+   不是「做完」。稽核時讀票 body 認出這型，不要 FLAG「AC 未達」；但被停車的工作要在某處有 owner（digest 提一次即可）。
+3. **提前關**（LBS-1773；VP-18050 半個）：LBS-1773 在 INSERT 前約 7 小時就轉 Done（15:41 PDT 關、22:36 PDT 才寫 DB）；
+   VP-18050 由 agent 依「完成了話直接改成 done」自轉，但 4 個 PM 問題還開著（屬 FE/PM，不是 BE 票的事）。
+   這型要靠 STM 的 dated section 對上 ground truth——dream 的 closeout audit 就是為它存在。
+
+規則：
+- agent 自己轉 Done 時，closeout comment 一定寫「**沒做的事屬於誰**」（PM 問題 → PM、FE 契約 → FE 票）——讓 (3) 型看起來
+  像 (1) 型而不是遺漏。
+- 稽核 (2) 型：PASS，但在 digest 註記「parked, owner=Leo」一次；連續三夜還是 parked 就變成問 Leo 的問題（同 2026-08-20 規則）。
+- 稽核 (3) 型：只要 ground truth 最終對上（row 存在、100% verify 在 STM），PASS + 一行「closed N h before apply」，不是 FLAG。
+
+### Live verification 的邊界要明講：證到哪一層、為何證不到下一層、什麼事件能補證（同一輪 4/9 票）
+- VP-18048 / VP-18050：transv2 沒有 clinic JWT → 只能 schema-presence probe（UNAUTHENTICATED vs GRAPHQL_VALIDATION_FAILED），
+  data path 靠同 commit 的 dist 對 prod DB 跑過。VP-18066：RS256 vendor token 不可自鑄 → guard 層 401/403 live 證明，controller 層
+  400/404/503 只有 supertest。LBS-1773：0 samples → 第一份結果出現前無 round-trip，補證點 = rtr result_client_id=53041。
+- 四張都把邊界寫進 STM，dream 因此能 PASS 而不升級成「fully verified」。把這三句當結案固定欄位：
+  「已證明到 X 層／Y 層拿不到是因為 Z／當 W 發生時可補證」。
+
+### BE/FE 拆票：先讀另一半再說「已經做完了」（VP-18050）
+- BE 票的 AC 自己看像已 live（VP-17868 早就送了 consultDate），真正的新需求藏在 FE 票 VP-18051（row-level label 需要整張
+  list 的 claim status）。拆票的一半常省略讓另一半成立的需求；AC 寫「在 search response 裡」是講 UI 面，不是講哪個 service——
+  先 grep FE 實際打哪個 endpoint 再設計。

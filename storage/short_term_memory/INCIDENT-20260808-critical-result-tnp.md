@@ -3,7 +3,7 @@ id: INCIDENT-20260808-critical-result-tnp
 type: stm
 category: emr_integration
 status: active
-score: 0.7093
+score: 0.661
 base_weight: 1.0
 created: 2026-08-08
 updated: '2026-08-14'
@@ -16,11 +16,13 @@ links:
 - HL7FAIL-20260722-MDHQ
 - HL7FAIL-20260729-PLESSEN
 - HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260903-EVERSPAN
 - INCIDENT-20260817-onprem-stale-deploy
 - INCIDENT-2604156666
 - LBS-1541
 - LBS-1656
 - LBS-1762
+- LBS-1773
 - LIS-7716
 - PH-847
 - QH-1660
@@ -96,6 +98,7 @@ links:
 - VP-17827
 - VP-17914
 - VP-18030
+- VP-18055
 - emr-integration
 - fhir-api
 relations:

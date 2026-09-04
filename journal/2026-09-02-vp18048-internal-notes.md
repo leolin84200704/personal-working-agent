@@ -1,7 +1,10 @@
 ---
 date: 2026-09-02
+slug: vp18048-internal-notes
 tickets: [VP-18048]
+related: [VP-18048, VP-18049, VP-17359, PH-822, QH-6934]
 type: journal
+distilled: true
 summary: "VI appointment Internal Notes — BE done on a worktree branch, local commits, awaiting Leo's review before push; migration not yet applied."
 ---
 # 2026-09-02 — VP-18048 Internal Notes (transv2 calendar)

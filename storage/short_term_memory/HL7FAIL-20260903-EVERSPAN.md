@@ -1,15 +1,110 @@
 ---
 id: HL7FAIL-20260903-EVERSPAN
-title: LBS-1772 / Everspan (MDHQ) customer_not_found=MARY JO ALLEN — transfer order to Dr. Michael Ahmann by editing pod-local HL7 (no new integration)
+title: LBS-1772 / Everspan (MDHQ) customer_not_found=MARY JO ALLEN — transfer order
+  to Dr. Michael Ahmann by editing pod-local HL7 (no new integration)
 category: emr_integration
-status: done
+status: completed
 created: 2026-09-03
 updated: 2026-09-03
 related:
-  - LBS-1772
-  - HL7FAIL-20260730-TURNPAUGH
-  - HL7FAIL-20260722-MDHQ
-  - VP-17120
+- LBS-1772
+- HL7FAIL-20260730-TURNPAUGH
+- HL7FAIL-20260722-MDHQ
+- VP-17120
+links:
+- BETA-E2E-20260729
+- BIOINSIGHTS-SFTP-KEY
+- BIOINSIGHTS-onboarding
+- FHIR-ONDEMAND-RESULT
+- HL7-NPI-PRACTICE-MATCH-20260820
+- HL7FAIL-20260722-MDHQ
+- HL7FAIL-20260729-PLESSEN
+- HL7FAIL-20260730-TURNPAUGH
+- INCIDENT-20260808-critical-result-tnp
+- INCIDENT-20260817-onprem-stale-deploy
+- INCIDENT-2604156666
+- LBS-1541
+- LBS-1656
+- LBS-1762
+- LBS-1773
+- LIS-7716
+- PH-847
+- QH-1660
+- QH-2257
+- QH-2577
+- QH-3752
+- QH-4350
+- QH-4352
+- QH-4608
+- QH-5840
+- RESULTCHECK-20260819-RCODE-2608186060
+- VEJO-DELETION-20260804
+- VP-14787
+- VP-15279
+- VP-15952
+- VP-16014
+- VP-16166
+- VP-16175
+- VP-16186
+- VP-16193
+- VP-16251
+- VP-16271
+- VP-16280
+- VP-16329
+- VP-16685
+- VP-16734
+- VP-16765
+- VP-16766
+- VP-16832
+- VP-16881
+- VP-16885
+- VP-16934
+- VP-16987
+- VP-17076
+- VP-17117
+- VP-17120
+- VP-17136
+- VP-17283
+- VP-17286
+- VP-17344
+- VP-17411
+- VP-17460
+- VP-17466
+- VP-17474
+- VP-17475
+- VP-17493
+- VP-17497
+- VP-17499
+- VP-17503
+- VP-17517
+- VP-17524
+- VP-17537
+- VP-17538
+- VP-17539
+- VP-17544
+- VP-17584
+- VP-17589
+- VP-17591
+- VP-17628
+- VP-17631
+- VP-17685
+- VP-17686
+- VP-17691
+- VP-17715
+- VP-17734
+- VP-17748
+- VP-17752
+- VP-17760
+- VP-17810
+- VP-17812
+- VP-17827
+- VP-17914
+- VP-18030
+- VP-18034
+- VP-18055
+- emr-integration
+- fhir-api
+score: 1.1475
 ---
 
 # HL7FAIL-20260903 — Everspan customer_not_found (Mary Jo Allen)
@@ -58,3 +153,11 @@ related:
 - Core-verified (lis_core_v7): sample 2629319 / accession 2609036689 -> order 11476195, customer 22376 (sample AND order), clinic 66839, isActive=1, order_status order_received, patient THERESA BERNER (patient_id 3279045), sample_order_method EMR. Exactly ONE sample for that patient — no duplicate.
 - `hl7_file_input.last_error` still says customer_not_found=MARY JO ALLEN (stale text, known from TURNPAUGH); customer_not_found column cleared; order_input now populated.
 - `quarantined_orders` id 2 still status=OPEN (expires 2026-09-09). Left for Leo: no reprocess/resolve API was used, so the quarantine row does not know the order landed. Flagged in report.
+
+### [2026-09-03] Dream closeout audit — outcome verified on prod (read-only)
+- hl7_file_input 7012: `parse_finished=1`, `last_parse_time=2026-09-03 20:47:34Z`, `retry_num=8`, `sample_id=2629319`,
+  `julien_barcode=2609036689`, payment_id af3620ee-…; emr_sample 2629319 → emr_order_id 0000008832. The retry_num=8 re-place
+  worked on its first fresh jobId (r8). `last_error` still reads `customer_not_found=MARY JO ALLEN` — the column is not cleared on
+  success; success = parse_finished + sample_id.
+- LBS-1772 Jira Done 2026-09-03 15:11 PDT (Leo). No other unfinished MDHQ rows except 7006 (MARK MASCARI, unrelated, retry_num 0).
+- Status normalized `done` → `completed` for the scoring engine.

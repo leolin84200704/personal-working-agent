@@ -2454,3 +2454,68 @@ Atlassian MCP 斷線時的 fallback：`~/src/credential/atlassian-api-token.md`�
 - prisma 風格 URL 的 query params（`sslaccept`、`sslmode`、`connection_limit`）mysql2 不認；DB 端
   `require_secure_transport=ON` 會拒非 TLS 連線。正解：`new URL(raw)` 手動拆，傳
   `ssl:{rejectUnauthorized:false}`。ssh2-sftp-client / mysql2 都可直接用 emr-v2 的 node_modules。
+
+## 【蒸餾 2026-09-03】VP-18030 / VP-18048 / VP-18050 / VP-18055 / VP-18066 / VP-18080 一輪蒸餾
+
+### 先查依賴服務「實際部署的版本」再怪自己這層（VP-18080：staging pricing 是幽靈 image）
+- staging pricing 跑 image `69ce1dd4`——repo 任何 branch 都沒有這個 commit——productMap 吐 `unknownCodes`；prod（207657e = main HEAD）
+  吐 `unknown_codes` 且早就符合文件。emr-v2 client 只認 snake → staging 上 fall through 成 `unsupported_test_codes`，
+  看起來像自己的 taxonomy 缺洞。修法：client 兩種 key 都收（PR #399）；pricing 端需從真 staging branch 重 build。
+- 家族：spec-page≠deployed-service / stale-deploy。E2E 結果跟預期不符時，第一步是拿依賴服務 pod 的 image SHA 對 repo。
+
+### 改 constructor 簽名 → grep spec 裡**每個**建構點，pre-push 的 `nest build` 不 type-check spec（VP-18055 CI 事故）
+- 只改 top-level `beforeEach`，漏了兩個 describe 內的 local `buildService()` helper → TS2554 → 整個 suite 載入失敗 →
+  Jenkins test stage 紅 → deploy 沒跑，兩環境卡在舊 image。本機沒抓到：pre-push 只跑 `nest build`（spec 不在 build tsconfig），
+  targeted jest 的 ts-jest diagnostics 比 CI 寬鬆。**重現 CI 的正確指令**：`NODE_ENV=test TEST_DATABASE_URL=file:./test.db npx jest --ci`。
+- 候選 enforcement：pre-push 加 `tsc --noEmit -p tsconfig.spec` 或對 touched suites 跑 `jest --ci`。
+- `parser.service.spec` 3 個失敗是本機環境限定（main 上同樣紅、CI 綠）——不要當 CI blocker 追。
+
+### emr-v2 的 Jenkins 狀態不需要 Jenkins 帳號：讀 GitHub commit status
+- `gh api repos/Vibrant-America/lis-backend-emr-v2/commits/<sha>/status` → `continuous-integration/jenkins/branch` success/error
+  + 時間（GitHub Actions 在這個 repo 沒有 push run——deploy 全在 Jenkins）。Jenkins 60.9:9602 的 basic auth 沒有人存下來。
+- error 在 ~2 min = test stage；error 在 ~7 min 且 image 已在 60.10:6004 與 ACR = 過了 test+build+push、死在 parallel deploy
+  fan-out（deploy-on-prem 那支 ssh/scp 60.6 transient）→ 重跑 main build 即可（需 Jenkins UI）。硬化候選：Jenkinsfile
+  deploy-on-prem block 包 `retry(3)`。
+- AKS 與 on-prem 的 deployment **同名**（`lis-emr-v2-deployment-prod`），用 replicaset hash / node 區分；gRPC 192.168.60.6:31317
+  落在 on-prem pod。Jenkins 每波 deploy 延遲約 50–60 分。
+
+### transv2 沒 JWT 也能證明「新 schema 已部署」：GraphQL validation 跑在 auth guard 之前（VP-18050 / VP-18048）
+- 兩個雲環境 introspection 關閉，agent 沒有 clinic JWT。未帶 token POST 新 query/field：回 `UNAUTHENTICATED` = 欄位存在且
+  request 到了 guard；打假欄位回 `GRAPHQL_VALIDATION_FAILED` 當 negative control。prod `/v2/portal/trans-service/graphql`、
+  staging `/trans-service-st/graphql`。這是 schema-presence proof，不是 data round-trip——STM/結案要寫清楚，dream 不會升級它。
+- sandbox 內 curl api.vibrant-america.com 回 HTTP 000，probe 要 `dangerouslyDisableSandbox`。
+
+### transv2 worktree / migration 三個坑（VP-18048）
+- worktree 除了 `node_modules` 還要 symlink `.env`：缺 `Azure_kafka_general_events` 時 3 個 suite **載入就失敗**。
+- 手動 migration 的 apply-script 慣例（`scripts/vp-*-apply-migration.js`）與 `prisma/manual-migrations/20260522_*.sql`
+  只存在 Leo 主 checkout 的 untracked 檔——慣例不在 git 裡；自己這張票的 SQL + script 要 commit。順序：calendar_dev_new →
+  calendar_prod 各自 psql 獨立 readback（information_schema.columns），**在 merge 前**做完（舊 code 的 Prisma 只 select 認識的欄位，加欄位安全）。
+- 乾淨 origin/main 上就有 4 個 calendar suite 紅（live DB + practice-event-type GraphQL）——`git stash -u` 驗過再說是不是你弄的。
+
+### GraphQL 敏感欄位：用 `@ResolveField` 當唯一出口，並 grep `...row` spread（VP-18048）
+- ObjectType 被 N 個 query 回傳、觀眾混雜（clinic / patient）時，敏感欄位**不要**開 `@Field`，只經 type resolver 的
+  `@ResolveField` 依 request context 放行——忘記帶 flag 的 mapper 呼叫點是隱形的，缺 field resolver 不是。配 schema-building wire spec。
+- 加欄位前 grep 整個 Prisma row 的 spread：transv2 的 GraphQL/email/sync 都是顯式挑欄位，但兩個 Kafka payload builder 直接
+  spread 整列——新欄位預設就漏出去。
+
+### Partner API 的 eligibility 碼：文件不是 enum（VP-18080）
+- 真 enum 在 Confluence 2517139459 v9：15 個碼，mintlify 只列 8 個；`PFSAMaleOnly`（legacy 拼法）vs `PSAMaleOnly`。
+  機械式 Pascal→snake converter + fallback 比查表穩：未文件化的 `unsupported_test_codes` 也能給 partner 一個有碼的 failure。
+- staging 現實：病人全在 clinic 3194；staging eligibility-check **不 enforce** PatientNotInClinic（clinic 99999 → eligible）；
+  patient 477769 在 eligibility 查得到、emr getPatientByIdForOrder 查不到。**先唯讀打上游挑出會失敗的受試者**（IncompletePatientInfo 3148287），
+  再下 E2E 單——猜受試者花了 3 輪、留下 6 筆要清的 staging 單。
+- Portal API 的兩層錯誤各有歸屬：envelope（request error, VP-18066）不碰 422 business outcome 的形狀（VP-18080）。
+  FHIR 面 401/403/404/429 形狀改 envelope 對 vendor 是 breaking；404 訊息刻意一致（anti sample-existence leak）envelope 不得加 detail。
+
+### 小抄（VP-18030 / VP-18080）
+- 加新上游依賴前先讀完**已在消費**的 RPC 的完整 response schema——ListSamples 的 order block 早就有 order_status/kit/report/cancel_time。
+- E2E FAIL 先分「code 錯」vs「測試資料假設錯」再動手（VP-18030 兩個 FAIL 都是後者）。
+- `gh pr create` 前先 `gh pr list --head <branch>`——Leo 可能已經開了（#390 空 body → edit 補，不重開）。
+- `env | grep` 在 pod 內把 staging bearer 印進 transcript（LIS-7690 教訓再犯）：只 `printenv <NAME>` / kubectl 選特定 key。候選 hook。
+
+### dream pipeline：unquoted `summary:` 含 `": "` 會讓 frontmatter 整個蒸發（2026-09-03 LBS-1773）
+- `memory_scoring.read_frontmatter` 遇 YAMLError 回傳 `{}`；`reconcile-jira.py --apply` 在 `{}` 上設 status/jira_status/updated
+  再 `write_frontmatter` → 只剩 3 個 key，id/category/links/tags/summary 全沒了，`updated` 還被倒退。觸發字串：
+  `summary: … APPLIED 2026-09-04: ehr_integrations …`（plain scalar 內的 `: `）。
+- 規則：STM `summary:` 一律單引號包；dream 跑 scoring 前用 `yaml.safe_load` 掃全部 frontmatter（本次 267 檔全過後才跑）。
+  修復 = `git show HEAD:<file>` 取回 frontmatter 再套 flip。腳本層修法（parse 失敗要 raise / skip，不能 `{}`）屬 automation 變更，要走 PR。

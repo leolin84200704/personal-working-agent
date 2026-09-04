@@ -64,12 +64,13 @@ links:
 - VP-17754
 - VP-17825
 - VP-17870
+- VP-18048
 - VP-9299
 - business-model
 - failures
 - repo-catalog
 - repos
-score: 0.3846
+score: 0.3548
 ---
 
 # INCIDENT 2026-08-17 — on-prem emr-v2 deploy freeze
