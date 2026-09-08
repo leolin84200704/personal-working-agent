@@ -61,6 +61,20 @@ distilled: false
 - "方案 A 同意，加 ehr_vendors 欄位，檔名用 {accession}_ordersummary.pdf，開始 Step 5"
 - "commit + create pr"
 
+## Deploy + canary (22:10-22:30Z, same day)
+- Leo merged #403 -> staging and staging -> main (#405) and said deploy should be done. It was
+  not: GitHub Actions on main is CodeQL only; Jenkins built/deployed 03637bc at 22:22Z.
+- Near-miss: code merged, DDL nowhere. Applied migration.sql to prod + staging at 22:16Z (6 min
+  before the image landed), verified via information_schema. Zero traffic in the window. Told Leo
+  explicitly that I ran a prod change and why.
+- Prod canary on the internal test vendor ZYMEBALANZ (only customer 999997 test integrations):
+  flag on -> repush 2624618 -> 3/3 HL7 + 3/3 `2608276600_ordersummary.pdf` (130576 B, `%PDF-1.4`)
+  peer-verified on 45.24.217.155 via paramiko, 3 DELIVERED rows, logs consistent -> flag off.
+- Lesson candidates: (1) "merged" != "deployed" — check registry tag + pod image SHA, not CI
+  badge; (2) the DDL-before-deploy prerequisite in a PR body is not a mechanism — the merge
+  happened without it. A pre-merge check (migration folder present in diff => require a
+  `ddl-applied:` label or a DB probe) is the enforcement-ladder step.
+
 ## Open after this session
 - DDL on staging + prod before deploy; staging round-trip; vendor 44 enablement after PM/Prospera
   answers; DailyJob result_fail query for `result_attachment_records` (separate personal-repo PR).
