@@ -72,3 +72,14 @@ related:
   defaults, k8s yaml, template).
 - No alert fired for a 100% result-generation failure lasting hours: result_fail DailyJob only reports next morning.
   A Sentry alert on GENERATION_ERROR rate (or on `14 UNAVAILABLE`) is the gap.
+
+## Outcome (19:45Z)
+- Organic pipeline healthy after restart: 2/2 non-manual pushes TRANSMITTED (first 2606688 at 19:11Z), 0 new ETIMEDOUT since 19:07Z.
+- Re-drive complete: 58/58 stuck samples now have a TRANSMITTED row for every integration (37 permanent + 21 whose
+  auto-retries had exhausted on the dead IP). 5 transient Power2Practice SFTP handshake failures during the 10s-paced
+  batches all succeeded on retry with 20-30s spacing (labftp.power2practice.net:22 was OPEN throughout — burst-sensitive).
+- Manual re-drive UPDATES the existing rtr row and leaves the stale error_message text in place (rows show
+  TRANSMITTED + old "PERMANENT FAILURE ... 10.224.0.199" text). Cosmetic, but any error-text-based query must
+  filter on transmission_status, not on error_message alone. 2617279 (ATHENA) instead got a NEW row; its old
+  TRANSMISSION_ERROR row stays as history.
+- Staging pods on both clusters restarted onto the new ConfigMaps as well.
