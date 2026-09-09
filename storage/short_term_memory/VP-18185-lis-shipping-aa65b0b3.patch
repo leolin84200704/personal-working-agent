@@ -1,0 +1,436 @@
+From aa65b0b394a767df4e4f1dc79fb9500c3d07b70a Mon Sep 17 00:00:00 2001
+From: LIS Code Agent <leolin84200704@gmail.com>
+Date: Wed, 9 Sep 2026 16:41:00 -0700
+Subject: [PATCH] [VP-18185] validateSampleId: report upstream gRPC outage as
+ 503, not "Sample not found"
+
+A dead EMR/core gRPC target used to surface to accessioning as HTTP 404
+"Sample not found with input id", so a service outage was worked as if the
+clinic had never placed the order (Zendesk 754019).
+
+- validateSampleId: map upstream-unreachable errors (grpc UNAVAILABLE /
+  DEADLINE_EXCEEDED, or the wrapped message forms) to 503 with an explicit
+  "not confirmation the sample is missing" message; genuine misses keep 404.
+- getSampleIdByEmrOrderId: retry only transport failures (bail on a
+  deterministic found=false instead of 3 pointless retries) and keep the
+  grpc status code on the wrapped error.
+- New spec covering the 503/404 split on both the sample_id and
+  emr_order_id paths, including the 10-digit id reroute.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ src/orders/orders.service.ts                  | 110 ++++++--
+ .../orders.validate-sample-id.vp18185.spec.ts | 251 ++++++++++++++++++
+ 2 files changed, 332 insertions(+), 29 deletions(-)
+ create mode 100644 test/unit/orders/orders.validate-sample-id.vp18185.spec.ts
+
+diff --git a/src/orders/orders.service.ts b/src/orders/orders.service.ts
+index 584bc6fc..f6830961 100644
+--- a/src/orders/orders.service.ts
++++ b/src/orders/orders.service.ts
+@@ -402,7 +402,7 @@ import {
+   PostKitsAddressCheckReqBody,
+   PostKitsAddressCheckRes,
+ } from './dto/samples/orders.samples.kits.shipping-address.check.create.dto';
+-import { Metadata } from '@grpc/grpc-js';
++import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
+ import { ONLINE_ORDER } from '../clients/clients.constants';
+ import {
+   AddressDetails,
+@@ -13812,6 +13812,19 @@ export class OrdersService implements OnModuleInit {
+       throw new Error('Input id is empty');
+     } catch (e) {
+       this.logger.error(e);
++      // VP-18185: a lookup that never reached the upstream service is not a
++      // miss. Before this, a dead EMR/core gRPC target surfaced to accessioning
++      // as "Sample not found", and a real outage was worked as if the clinic
++      // had never placed the order. Say what actually happened instead.
++      if (this.isUpstreamUnavailableError(e)) {
++        throw new HttpException(
++          {
++            code: HttpStatus.SERVICE_UNAVAILABLE,
++            message: `Sample lookup is temporarily unavailable: the upstream sample/EMR lookup service could not be reached. This is not confirmation that the sample is missing. Please retry shortly.`,
++          },
++          HttpStatus.SERVICE_UNAVAILABLE,
++        );
++      }
+       throw new HttpException(
+         {
+           code: HttpStatus.NOT_FOUND,
+@@ -13822,39 +13835,72 @@ export class OrdersService implements OnModuleInit {
+     }
+   }
+ 
++  /**
++   * VP-18185: is this error "the upstream gRPC service was unreachable" rather
++   * than "the upstream answered and had nothing"? Checks the grpc-js status
++   * code first; falls back to the message because our own wrappers (and
++   * async-retry) sometimes re-throw a plain Error and drop the code.
++   */
++  isUpstreamUnavailableError(e: any): boolean {
++    const code = e?.code ?? e?.cause?.code;
++    if (
++      code === GrpcStatus.UNAVAILABLE ||
++      code === GrpcStatus.DEADLINE_EXCEEDED
++    ) {
++      return true;
++    }
++    const msg = String(e?.message ?? '');
++    return /\bUNAVAILABLE\b|DEADLINE_EXCEEDED|No connection established|ECONNREFUSED|ETIMEDOUT/.test(
++      msg,
++    );
++  }
++
+   async getSampleIdByEmrOrderId(emrOrderId: string): Promise<string> {
+     try {
+       return await retry(
+-        async () => {
+-          // const emrTrackingDataRes =
+-          //   await this.prisma3.emr_tracking_data.findFirst({
+-          //     where: {
+-          //       emr_order_id: emrOrderId,
+-          //     },
+-          //     orderBy: {
+-          //       sample_id: 'desc',
+-          //     },
+-          //   });
+-
+-          const emrTrackingDataRes =
+-            await this.EMRGrpcService.getSampleIdByEmrOrderId(
+-              { emrOrderId: [emrOrderId] },
+-              this.metadata,
+-            ).toPromise();
++        async (bail) => {
++          try {
++            // const emrTrackingDataRes =
++            //   await this.prisma3.emr_tracking_data.findFirst({
++            //     where: {
++            //       emr_order_id: emrOrderId,
++            //     },
++            //     orderBy: {
++            //       sample_id: 'desc',
++            //     },
++            //   });
++
++            const emrTrackingDataRes =
++              await this.EMRGrpcService.getSampleIdByEmrOrderId(
++                { emrOrderId: [emrOrderId] },
++                this.metadata,
++              ).toPromise();
+ 
+-          if (!emrTrackingDataRes) {
+-            throw new Error(
+-              `Sample not found with emr_order_id: ${emrOrderId}`,
+-            );
+-          }
++            if (!emrTrackingDataRes) {
++              throw new Error(
++                `Sample not found with emr_order_id: ${emrOrderId}`,
++              );
++            }
+ 
+-          if (!emrTrackingDataRes.found) {
+-            throw new Error(
+-              `Sample not found with emr_order_id: ${emrOrderId}`,
+-            );
+-          }
++            if (!emrTrackingDataRes.found) {
++              throw new Error(
++                `Sample not found with emr_order_id: ${emrOrderId}`,
++              );
++            }
+ 
+-          return emrTrackingDataRes.sampleId.toString();
++            return emrTrackingDataRes.sampleId.toString();
++          } catch (error) {
++            // VP-18185: only transport failures deserve another attempt. A
++            // "not found" answer is deterministic; retrying it three times
++            // just delayed the 404. Same pattern as
++            // orders.tubes.service.ts GetSampleReceiveRecordsBatch: bail()
++            // and RETURN, because a throw after bail() still schedules the
++            // next attempt in async-retry.
++            if (!this.isUpstreamUnavailableError(error)) {
++              return bail(error) as never;
++            }
++            throw error;
++          }
+         },
+         {
+           retries: 3,
+@@ -13862,9 +13908,15 @@ export class OrdersService implements OnModuleInit {
+         },
+       );
+     } catch (e) {
+-      throw new Error(
++      const wrapped: any = new Error(
+         `Failed to get sample id by EMR order id ${emrOrderId}: ${e.message}`,
+       );
++      // Keep the grpc status code so validateSampleId can tell an outage
++      // from a miss without parsing our message.
++      if (e?.code !== undefined) {
++        wrapped.code = e.code;
++      }
++      throw wrapped;
+     }
+   }
+ 
+diff --git a/test/unit/orders/orders.validate-sample-id.vp18185.spec.ts b/test/unit/orders/orders.validate-sample-id.vp18185.spec.ts
+new file mode 100644
+index 00000000..290cbf0f
+--- /dev/null
++++ b/test/unit/orders/orders.validate-sample-id.vp18185.spec.ts
+@@ -0,0 +1,251 @@
++import { Test, TestingModule } from '@nestjs/testing';
++import { CACHE_MANAGER, HttpException, HttpStatus } from '@nestjs/common';
++import { ClientGrpc } from '@nestjs/microservices';
++import { EventEmitterModule } from '@nestjs/event-emitter';
++import { status as GrpcStatus } from '@grpc/grpc-js';
++import { of, throwError } from 'rxjs';
++import { OrdersService } from '../../../src/orders/orders.service';
++import { OrdersUtils } from '../../../src/orders/orders.utils';
++import { PrismaService } from '../../../src/prisma.service';
++import { PrismaService2 } from '../../../src/prisma2.service';
++import { PrismaService3 } from '../../../src/prisma3.service';
++import { PrismaService5 } from '../../../src/prisma5.service';
++import { PrismaService6 } from '../../../src/prisma6.service';
++import { PrismaService7 } from '../../../src/prisma7.service';
++import { PrismaService8 } from '../../../src/prisma8.service';
++import { UsersService } from '../../../src/users/users.service';
++import { UtilsService } from '../../../src/utils/utils.service';
++import { FedexService } from '../../../src/fedex/fedex.service';
++import { IssuesService } from '../../../src/issues/issues.service';
++import { ClientsService } from '../../../src/clients/clients.service';
++import { DhlService } from '../../../src/dhl/dhl.service';
++import { PackingService } from '../../../src/utils/packing/packing.service';
++
++/**
++ * VP-18185 — validateSampleId must not report an upstream outage as a miss.
++ *
++ * Accessioning searches by EMR order id / accession id through this method.
++ * When the EMR or core gRPC target is unreachable (14 UNAVAILABLE, connect
++ * ETIMEDOUT), the old catch-all turned that into HTTP 404 "Sample not found",
++ * and a service outage was worked as if the clinic had never placed the order.
++ * The contract pinned here:
++ *
++ *   - upstream unreachable  -> 503 SERVICE_UNAVAILABLE, says so explicitly
++ *   - upstream answered "no" -> 404 NOT_FOUND, unchanged wording
++ *   - a deterministic "not found" from the EMR lookup is NOT retried;
++ *     only transport failures consume the retry budget.
++ */
++describe('VP-18185 validateSampleId upstream-unavailable vs not-found', () => {
++  let service: OrdersService;
++
++  const sampleGrpc = {
++    ListSamples: jest.fn(),
++    ListSampleMininumInfo: jest.fn(),
++  };
++  const emrGrpc = { getSampleIdByEmrOrderId: jest.fn() };
++  const mockCoreClient = {
++    getService: jest.fn().mockReturnValue(sampleGrpc),
++    getClientByServiceName: jest.fn(),
++  };
++  const mockEMRClient = {
++    getService: jest.fn().mockReturnValue(emrGrpc),
++    getClientByServiceName: jest.fn(),
++  };
++  const mockCacheManager = { get: jest.fn(), set: jest.fn() };
++
++  const grpcError = (code: number, message: string) => {
++    const e: any = new Error(`${code} ${GrpcStatus[code]}: ${message}`);
++    e.code = code;
++    return e;
++  };
++
++  beforeEach(async () => {
++    jest.clearAllMocks();
++    mockCacheManager.get.mockResolvedValue(undefined);
++
++    const module: TestingModule = await Test.createTestingModule({
++      imports: [EventEmitterModule.forRoot()],
++      providers: [
++        OrdersService,
++        OrdersUtils,
++        { provide: CACHE_MANAGER, useValue: mockCacheManager },
++        { provide: PrismaService, useValue: {} },
++        { provide: PrismaService2, useValue: {} },
++        { provide: PrismaService3, useValue: {} },
++        { provide: PrismaService5, useValue: {} },
++        { provide: PrismaService6, useValue: {} },
++        { provide: PrismaService7, useValue: {} },
++        { provide: PrismaService8, useValue: {} },
++        { provide: UsersService, useValue: { getUserName: jest.fn() } },
++        {
++          provide: UtilsService,
++          useValue: { findDescriptionByTubeType: jest.fn() },
++        },
++        { provide: FedexService, useValue: {} },
++        { provide: IssuesService, useValue: {} },
++        { provide: DhlService, useValue: {} },
++        { provide: PackingService, useValue: {} },
++        { provide: ClientsService, useValue: {} },
++        { provide: 'LIS_CORE_GRPC', useValue: mockCoreClient as ClientGrpc },
++        { provide: 'LIS_TEST_RESULT_GRPC', useValue: {} as ClientGrpc },
++        { provide: 'LIS_AUDIT_LOG_GRPC', useValue: {} as ClientGrpc },
++        { provide: 'ISSUE_SYSTEM_GRPC', useValue: {} as ClientGrpc },
++        { provide: 'EMR_GRPC', useValue: mockEMRClient as ClientGrpc },
++        { provide: 'BullQueue_orders', useValue: {} },
++        { provide: 'AUTH_JWT_SECRET', useValue: 'test-jwt-secret' },
++      ],
++    }).compile();
++
++    service = module.get<OrdersService>(OrdersService);
++    // onModuleInit wires the gRPC stubs; skip the redis/redlock part.
++    (service as any).sampleGrpcService = sampleGrpc;
++    (service as any).EMRGrpcService = emrGrpc;
++  });
++
++  const expectHttp = async (p: Promise<unknown>, statusCode: number) => {
++    let caught: any;
++    try {
++      await p;
++    } catch (e) {
++      caught = e;
++    }
++    expect(caught).toBeInstanceOf(HttpException);
++    expect(caught.getStatus()).toBe(statusCode);
++    expect(caught.getResponse().code).toBe(statusCode);
++    return caught;
++  };
++
++  describe('emr_order_id path', () => {
++    it('maps an unreachable EMR gRPC target to 503 and mentions the outage', async () => {
++      emrGrpc.getSampleIdByEmrOrderId.mockReturnValue(
++        throwError(() =>
++          grpcError(
++            GrpcStatus.UNAVAILABLE,
++            'No connection established. Last error: connect ETIMEDOUT 10.224.0.199:32100',
++          ),
++        ),
++      );
++
++      const err = await expectHttp(
++        service.validateSampleId('', '', '12830'),
++        HttpStatus.SERVICE_UNAVAILABLE,
++      );
++      expect(err.getResponse().message).toMatch(/temporarily unavailable/i);
++      expect(err.getResponse().message).not.toMatch(/Sample not found/i);
++      // 1 attempt + 3 retries: transport failures still use the retry budget.
++      expect(emrGrpc.getSampleIdByEmrOrderId).toHaveBeenCalledTimes(4);
++    }, 15000);
++
++    it('keeps 404 when the EMR service answers found=false, without retrying', async () => {
++      emrGrpc.getSampleIdByEmrOrderId.mockReturnValue(
++        of({ found: false, sampleId: 0 }),
++      );
++
++      const err = await expectHttp(
++        service.validateSampleId('', '', '12830'),
++        HttpStatus.NOT_FOUND,
++      );
++      expect(err.getResponse().message).toMatch(
++        /Sample not found with input id/,
++      );
++      // A deterministic miss must not burn the retry budget (was 4 calls).
++      expect(emrGrpc.getSampleIdByEmrOrderId).toHaveBeenCalledTimes(1);
++    });
++
++    it('10-digit id (ticket input 0000128300): falls from accession lookup to the EMR lookup and reports 503 when that target is unreachable', async () => {
++      // validateSampleId treats a 10-digit emr_order_id as an accession id
++      // first; when core has no such accession it retries the same value as
++      // an EMR order id. That second hop is the one that was dead in prod.
++      sampleGrpc.ListSampleMininumInfo.mockReturnValue(of({ sample: [] }));
++      emrGrpc.getSampleIdByEmrOrderId.mockReturnValue(
++        throwError(() =>
++          grpcError(GrpcStatus.UNAVAILABLE, 'No connection established'),
++        ),
++      );
++
++      await expectHttp(
++        service.validateSampleId('', '', '0000128300'),
++        HttpStatus.SERVICE_UNAVAILABLE,
++      );
++      expect(sampleGrpc.ListSampleMininumInfo).toHaveBeenCalledTimes(1);
++      expect(emrGrpc.getSampleIdByEmrOrderId).toHaveBeenCalledTimes(4);
++    }, 15000);
++
++    it('resolves the sample id when the EMR service finds it', async () => {
++      emrGrpc.getSampleIdByEmrOrderId.mockReturnValue(
++        of({ found: true, sampleId: 2631507 }),
++      );
++      await expect(service.validateSampleId('', '', '12836')).resolves.toBe(
++        '2631507',
++      );
++    });
++  });
++
++  describe('sample_id path (core gRPC)', () => {
++    it('maps an unreachable core gRPC target to 503', async () => {
++      sampleGrpc.ListSamples.mockReturnValue(
++        throwError(() =>
++          grpcError(GrpcStatus.UNAVAILABLE, 'No connection established'),
++        ),
++      );
++      await expectHttp(
++        service.validateSampleId('2631507', '', ''),
++        HttpStatus.SERVICE_UNAVAILABLE,
++      );
++    });
++
++    it('maps a deadline-exceeded core gRPC call to 503', async () => {
++      sampleGrpc.ListSamples.mockReturnValue(
++        throwError(() =>
++          grpcError(GrpcStatus.DEADLINE_EXCEEDED, 'Deadline exceeded'),
++        ),
++      );
++      await expectHttp(
++        service.validateSampleId('2631507', '', ''),
++        HttpStatus.SERVICE_UNAVAILABLE,
++      );
++    });
++
++    it('keeps 404 when core answers with an empty sample list', async () => {
++      sampleGrpc.ListSamples.mockReturnValue(of({ sample: [] }));
++      await expectHttp(
++        service.validateSampleId('2631507', '', ''),
++        HttpStatus.NOT_FOUND,
++      );
++    });
++  });
++
++  describe('isUpstreamUnavailableError', () => {
++    it.each([
++      ['grpc code UNAVAILABLE', grpcError(GrpcStatus.UNAVAILABLE, 'x')],
++      [
++        'grpc code DEADLINE_EXCEEDED',
++        grpcError(GrpcStatus.DEADLINE_EXCEEDED, 'x'),
++      ],
++      [
++        'plain Error wrapping the grpc text',
++        new Error(
++          'Failed to get sample id by EMR order id 1: 14 UNAVAILABLE: No connection established',
++        ),
++      ],
++      [
++        'ECONNREFUSED text',
++        new Error('connect ECONNREFUSED 192.168.60.6:31316'),
++      ],
++    ])('true for %s', (_label, err) => {
++      expect(service.isUpstreamUnavailableError(err)).toBe(true);
++    });
++
++    it.each([
++      ['not found text', new Error('Sample not found with emr_order_id: 1')],
++      [
++        'grpc code NOT_FOUND',
++        grpcError(GrpcStatus.NOT_FOUND, 'no such sample'),
++      ],
++      ['empty input', new Error('Input id is empty')],
++      ['undefined', undefined],
++    ])('false for %s', (_label, err) => {
++      expect(service.isUpstreamUnavailableError(err)).toBe(false);
++    });
++  });
++});
+-- 
+2.39.2 (Apple Git-143)
+
